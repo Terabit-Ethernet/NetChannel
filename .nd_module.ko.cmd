@@ -1,1 +1,0 @@
-cmd_/home/qizhe/net_driver_impl/nd_module.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000  --build-id  -T ./scripts/module-common.lds -o /home/qizhe/net_driver_impl/nd_module.ko /home/qizhe/net_driver_impl/nd_module.o /home/qizhe/net_driver_impl/nd_module.mod.o;  true
