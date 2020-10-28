@@ -158,15 +158,15 @@ static inline void nd_free_skbs(struct sk_buff *head)
 // 	unsigned int		log;
 // };
 
-static inline bool inet_exact_dif_match(struct net *net, struct sk_buff *skb)
-{
-#if IS_ENABLED(CONFIG_NET_L3_MASTER_DEV)
-	if (!net->ipv4.sysctl_tcp_l3mdev_accept &&
-	    skb && ipv4_l3mdev_skb(IPCB(skb)->flags))
-		return true;
-#endif
-	return false;
-}
+// static inline bool inet_exact_dif_match(struct net *net, struct sk_buff *skb)
+// {
+// #if IS_ENABLED(CONFIG_NET_L3_MASTER_DEV)
+// 	if (!net->ipv4.sysctl_tcp_l3mdev_accept &&
+// 	    skb && ipv4_l3mdev_skb(IPCB(skb)->flags))
+// 		return true;
+// #endif
+// 	return false;
+// }
 /* ND write queue and rtx queue management. Copied from TCP */
 void nd_rbtree_insert(struct rb_root *root, struct sk_buff *skb);
 
@@ -202,12 +202,12 @@ static inline void nd_rtx_queue_unlink_and_free(struct sk_buff *skb, struct sock
 }
 
 /* ND compartor */
-static inline bool before(__u32 seq1, __u32 seq2)
-{
-        return (__s32)(seq1-seq2) < 0;
-}
+// static inline bool before(__u32 seq1, __u32 seq2)
+// {
+//         return (__s32)(seq1-seq2) < 0;
+// }
 
-#define after(seq2, seq1) 	before(seq1, seq2)
+// #define after(seq2, seq1) 	before(seq1, seq2)
 
 static inline struct sk_buff *nd_write_queue_head(const struct sock *sk)
 {

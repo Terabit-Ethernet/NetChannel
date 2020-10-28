@@ -44,6 +44,7 @@
 #include <net/inet_hashtables.h>
 #include <net/ip_tunnels.h>
 #include <net/route.h>
+#include <net/tcp.h>
 #include <net/checksum.h>
 #include <net/xfrm.h>
 #include <trace/events/udp.h>

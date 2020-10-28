@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef _UDP4_IMPL_H
-#define _UDP4_IMPL_H
+#ifndef _ND_IMPL_H
+#define _ND_IMPL_H
 #include <net/udp.h>
 #include <net/udplite.h>
 #include <net/protocol.h>

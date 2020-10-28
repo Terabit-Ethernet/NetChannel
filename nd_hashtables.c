@@ -22,7 +22,7 @@
 #include <net/inet_hashtables.h>
 #include <net/secure_seq.h>
 #include <net/ip.h>
-// #include <net/tcp.h>
+#include <net/tcp.h>
 #include <net/sock_reuseport.h>
 #include "nd_hashtables.h"
 #include "linux_nd.h"

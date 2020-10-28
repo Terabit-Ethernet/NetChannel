@@ -8,6 +8,7 @@
 #include <net/sock.h>
 #include <net/udp.h>
 #include "nd_impl.h"
+#include "nd_target.h"
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Qizhe");
 MODULE_DESCRIPTION("ND transport protocol");
@@ -368,11 +369,18 @@ static int __init nd_load(void) {
         // hrtimer_start(&hrtimer, tick_interval, HRTIMER_MODE_REL);
         
         // tt_init("timetrace");
+        /* load the nd connection target side */
+        status = ndt_conn_init();
+        if (status != 0) {
+             pr_err("failed to allocate target side\n");
+             goto out_cleanup;
+        }
         return 0;
 
 out_cleanup:
         // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
+        
         if (ndv4_offload_end() != 0)
             printk(KERN_ERR "ND couldn't stop offloads\n");
         // nd_epoch_destroy(&nd_epoch);

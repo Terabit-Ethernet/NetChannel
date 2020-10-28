@@ -11,6 +11,7 @@ nd_module-y = nd_sock.o\
 				 nd.o \
 				 nd_scheduling.o\
 				 nd_offload.o\
+				 nd_target.o\
 				 nd_plumbing.o
 
 # nd.o \
