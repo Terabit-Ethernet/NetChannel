@@ -1,7 +1,8 @@
 # Makefile to build ND as a Linux module.
 
 obj-m += nd_module.o
-nd_module-y = nd_sock.o\
+nd_module-y = 	 nd_host.o\
+				 nd_sock.o\
 				 nd_hashtables.o \
 				 nd_pq.o \
 				 nd_message.o\

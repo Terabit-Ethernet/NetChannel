@@ -9,6 +9,7 @@
 #include <net/udp.h>
 #include "nd_impl.h"
 #include "nd_target.h"
+#include "nd_host.h"
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Qizhe");
 MODULE_DESCRIPTION("ND transport protocol");
@@ -375,12 +376,17 @@ static int __init nd_load(void) {
              pr_err("failed to allocate target side\n");
              goto out_cleanup;
         }
+        status = nd_conn_init_module();
+        if (status != 0) {
+                pr_err("failed to allocate host side\n");
+                goto out_cleanup;
+        }
         return 0;
 
 out_cleanup:
         // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
-        
+
         if (ndv4_offload_end() != 0)
             printk(KERN_ERR "ND couldn't stop offloads\n");
         // nd_epoch_destroy(&nd_epoch);
@@ -422,6 +428,12 @@ static void __exit nd_unload(void) {
         //         printk(KERN_ERR "Homa couldn't stop offloads\n");
         // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
+        
+        /* clean up the target side logic */
+        ndt_conn_exit();
+        /* clean up the host side logic */
+        nd_conn_cleanup_module();
+
         if (ndv4_offload_end() != 0)
             printk(KERN_ERR "ND couldn't stop offloads\n");
         printk("start to unload\n");

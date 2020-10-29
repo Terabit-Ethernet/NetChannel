@@ -4,6 +4,7 @@ static LIST_HEAD(ndt_conn_queue_list);
 static DEFINE_MUTEX(ndt_conn_queue_mutex);
 
 static struct workqueue_struct *ndt_conn_wq;
+static struct ndt_conn_port * ndt_port;
 
 #define NDT_CONN_RECV_BUDGET		8
 #define NDT_CONN_SEND_BUDGET		8
@@ -62,7 +63,7 @@ out:
 }
 
 /* assign */
-int ndt_init_tcp_port(struct ndt_conn_port *port)
+int ndt_init_conn_port(struct ndt_conn_port *port)
 {
 	// struct ndt_conn_port *port;
 	char* local_ip = port->local_ip;
@@ -427,14 +428,18 @@ int __init ndt_conn_init(void)
 	ndt_conn_wq = alloc_workqueue("ndt_conn_wq", WQ_HIGHPRI, 0);
 	if (!ndt_conn_wq)
 		return -ENOMEM;
-
+	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
+	ndt_port->local_ip = "192.168.10.116";
+	ndt_port->local_port = "9000";
+	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);
-	// if (ret)
-	// 	goto err;
+	if (ret)
+	 	goto err;
 
 	return 0;
-// err:
+err:
 	destroy_workqueue(ndt_conn_wq);
+	ndt_conn_remove_port(ndt_port);
 	return ret;
 }
 
@@ -452,4 +457,5 @@ void __exit ndt_conn_exit(void)
 	flush_scheduled_work();
 
 	destroy_workqueue(ndt_conn_wq);
+	ndt_conn_remove_port(ndt_port);
 }

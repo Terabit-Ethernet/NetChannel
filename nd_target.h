@@ -94,7 +94,7 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue);
 void ndt_conn_state_change(struct sock *sk);
 void ndt_conn_write_space(struct sock *sk);
 void ndt_conn_data_ready(struct sock *sk);
-int ndt_init_tcp_port(struct ndt_conn_port *port);
+int ndt_init_conn_port(struct ndt_conn_port *port);
 void ndt_conn_listen_data_ready(struct sock *sk);
 void ndt_conn_accept_work(struct work_struct *w);
 void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue);
