@@ -12,7 +12,8 @@
 #include <linux/inet.h>
 #include <linux/llist.h>
 #include <crypto/hash.h>
-
+#include "uapi_linux_nd.h"
+// #include "nd_host.h"
 /* ND Connection Listerning Port */
 struct ndt_conn_port {
 	struct socket		*sock;
@@ -26,16 +27,16 @@ struct ndt_conn_port {
 };
 
 enum ndt_conn_queue_state {
-	NDT_TCP_Q_CONNECTING,
-	NDT_TCP_Q_LIVE,
-	NDT_TCP_Q_DISCONNECTING,
+	NDT_CONN_Q_CONNECTING,
+	NDT_CONN_Q_LIVE,
+	NDT_CONN_Q_DISCONNECTING,
 };
 
 enum ndt_conn_recv_state {
-	NDT_TCP_RECV_PDU,
-	NDT_TCP_RECV_DATA,
-	NDT_TCP_RECV_DDGST,
-	NDT_TCP_RECV_ERR,
+	NDT_CONN_RECV_PDU,
+	NDT_CONN_RECV_DATA,
+	NDT_CONN_RECV_DDGST,
+	NDT_CONN_RECV_ERR,
 };
 
 struct ndt_conn_queue {
@@ -60,7 +61,7 @@ struct ndt_conn_queue {
 	enum ndt_conn_recv_state rcv_state;
 	// struct nvmet_tcp_cmd	*cmd;
 	// union nvme_tcp_pdu	pdu;
-
+	struct vs_hdr vs_hdr;
 	/* digest state */
 	bool			hdr_digest;
 	bool			data_digest;

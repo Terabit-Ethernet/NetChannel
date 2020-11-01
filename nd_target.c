@@ -18,8 +18,8 @@ static inline int queue_cpu(struct ndt_conn_queue *queue)
 void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
 {
 	spin_lock(&queue->state_lock);
-	if (queue->state != NDT_TCP_Q_DISCONNECTING) {
-		queue->state = NDT_TCP_Q_DISCONNECTING;
+	if (queue->state != NDT_CONN_Q_DISCONNECTING) {
+		queue->state = NDT_CONN_Q_DISCONNECTING;
 		schedule_work(&queue->release_work);
 	}
 	spin_unlock(&queue->state_lock);
@@ -214,7 +214,7 @@ void ndt_conn_write_space(struct sock *sk)
 	if (unlikely(!queue))
 		goto out;
 
-	if (unlikely(queue->state == NDT_TCP_Q_CONNECTING)) {
+	if (unlikely(queue->state == NDT_CONN_Q_CONNECTING)) {
 		queue->write_space(sk);
 		goto out;
 	}
@@ -258,7 +258,7 @@ void ndt_prepare_receive_pkts(struct ndt_conn_queue *queue)
 	// this part needed to be modified
 	// queue->left = sizeof(struct tcp_hdr);
 	// queue->cmd = NULL;
-	queue->rcv_state = NDT_TCP_RECV_PDU;
+	queue->rcv_state = NDT_CONN_RECV_PDU;
 }
 
 
@@ -315,29 +315,135 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	return 0;
 }
 
+static int ndt_conn_try_recv_pdu(struct ndt_conn_queue *queue)
+{
+	struct vs_hdr *hdr = &queue->vs_hdr;
+	int len;
+	struct kvec iov;
+	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
+
+recv:
+	iov.iov_base = (void *)&queue->vs_hdr + queue->offset;
+	iov.iov_len = queue->left;
+	len = kernel_recvmsg(queue->sock, &msg, &iov, 1,
+			iov.iov_len, msg.msg_flags);
+	if (unlikely(len < 0))
+		return len;
+
+	queue->offset += len;
+	queue->left -= len;
+	if (queue->left)
+		return -EAGAIN;
+
+	if (queue->offset == sizeof(struct vs_hdr)) {
+		// u8 hdgst = nvmet_tcp_hdgst_len(queue);
+		pr_info("vs_hdr.src port \n", hdr->source);
+		// if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
+		// 	pr_err("unexpected pdu type %d\n", hdr->type);
+		// 	nvmet_tcp_fatal_error(queue);
+		// 	return -EIO;
+		// }
+
+		// if (unlikely(hdr->hlen != nvmet_tcp_pdu_size(hdr->type))) {
+		// 	pr_err("pdu %d bad hlenf %d\n", hdr->type, hdr->hlen);
+		// 	return -EIO;
+		// }
+
+		// queue->left = hdr->len - queue->offset + hdgst;
+		goto recv;
+	}
+
+	// if (queue->hdr_digest &&
+	//     nvmet_tcp_verify_hdgst(queue, &queue->pdu, queue->offset)) {
+	// 	nvmet_tcp_fatal_error(queue); /* fatal */
+	// 	return -EPROTO;
+	// }
+
+	// if (queue->data_digest &&
+	//     nvmet_tcp_check_ddgst(queue, &queue->pdu)) {
+	// 	nvmet_tcp_fatal_error(queue); /* fatal */
+	// 	return -EPROTO;
+	// }
+	return 0;
+	// return nvmet_tcp_done_recv_pdu(queue);
+}
+
+static int ndt_conn_try_recv_one(struct ndt_conn_queue *queue)
+{
+	int result = 0;
+
+	if (unlikely(queue->rcv_state == NDT_CONN_RECV_ERR))
+		return 0;
+
+	if (queue->rcv_state == NDT_CONN_RECV_PDU) {
+		result = ndt_conn_try_recv_pdu(queue);
+		if (result != 0)
+			goto done_recv;
+	}
+
+	// if (queue->rcv_state == NVMET_CONN_RECV_DATA) {
+	// 	result = nvmet_tcp_try_recv_data(queue);
+	// 	if (result != 0)
+	// 		goto done_recv;
+	// }
+
+	// if (queue->rcv_state == NVMET_COONN_RECV_DDGST) {
+	// 	result = nvmet_tcp_try_recv_ddgst(queue);
+	// 	if (result != 0)
+	// 		goto done_recv;
+	// }
+
+done_recv:
+	if (result < 0) {
+		if (result == -EAGAIN)
+			return 0;
+		return result;
+	}
+	return 1;
+}
+
+int ndt_conn_try_recv(struct ndt_conn_queue *queue,
+		int budget, int *recvs)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < budget; i++) {
+		ret = ndt_conn_try_recv_one(queue);
+		if (unlikely(ret < 0)) {
+			// ndt_conn_socket_error(queue, ret);
+			goto done;
+		} else if (ret == 0) {
+			break;
+		}
+		(*recvs)++;
+	}
+done:
+	return ret;
+}
+
 void ndt_conn_io_work(struct work_struct *w)
 {
-	// struct ndt_conn_queue *queue =
-	// 	container_of(w, struct ndt_conn_queue, io_work);
-	// bool pending;
-	// int ret, ops = 0;
+	struct ndt_conn_queue *queue =
+		container_of(w, struct ndt_conn_queue, io_work);
+	bool pending;
+	int ret, ops = 0;
 
-	// do {
-	// 	pending = false;
+	do {
+		pending = false;
 
-	// 	ret = nvmet_tcp_try_recv(queue, NDT_CONN_RECV_BUDGET, &ops);
-	// 	if (ret > 0)
-	// 		pending = true;
-	// 	else if (ret < 0)
-	// 		return;
+		ret = ndt_conn_try_recv(queue, NDT_CONN_RECV_BUDGET, &ops);
+		if (ret > 0)
+			pending = true;
+		else if (ret < 0)
+			return;
 
-	// 	ret = nvmet_tcp_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
-	// 	if (ret > 0)
-	// 		pending = true;
-	// 	else if (ret < 0)
-	// 		return;
+		// ret = nvmet_tcp_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
+		// if (ret > 0)
+		// 	pending = true;
+		// else if (ret < 0)
+			// return;
 
-	// } while (pending && ops < NDT_CONN_IO_WORK_BUDGET);
+	} while (pending && ops < NDT_CONN_IO_WORK_BUDGET);
 
 	// /*
 	//  * We exahusted our budget, requeue our selves
@@ -362,7 +468,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	queue->port = port;
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);
-	queue->state = NDT_TCP_Q_CONNECTING;
+	queue->state = NDT_CONN_Q_CONNECTING;
 	INIT_LIST_HEAD(&queue->free_list);
 	init_llist_head(&queue->resp_list);
 	INIT_LIST_HEAD(&queue->resp_send_list);
@@ -429,7 +535,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.116";
+	ndt_port->local_ip = "192.168.10.117";
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);
