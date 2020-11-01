@@ -55,6 +55,7 @@
 #include <net/tcp.h>
 #include <net/udp_tunnel.h>
 
+#include "nd_host.h"
 // #include "linux_nd.h"
  #include "net_nd.h"
 // #include "net_ndlite.h"
@@ -155,26 +156,36 @@ struct sk_buff* __construct_control_skb(struct sock* sk, int size) {
 	return skb;
 }
 
-struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
-	uint32_t message_size, __u64 start_time) {
+struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	// int extra_bytes = 0;
-	struct sk_buff* skb = __construct_control_skb(sk, 0);
-	struct nd_flow_sync_hdr* fh;
+	struct inet_sock *inet = inet_sk(sk);
+	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
+	struct vs_sync_hdr* sync =  kzalloc(sizeof(struct vs_sync_hdr), GFP_KERNEL);
+	req->state = ND_CONN_SEND_CMD_PDU;
+	req->pdu = sync;
+	req->data_len = sizeof(struct vs_sync_hdr);
+	// struct sk_buff* skb = __construct_control_skb(sk, 0);
+	// struct nd_flow_sync_hdr* fh;
 	struct ndhdr* dh; 
-	if(unlikely(!skb)) {
+	if(unlikely(!req || !sync)) {
 		return NULL;
 	}
-	fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
-	dh = (struct ndhdr*) (&fh->common);
-	dh->len = htons(sizeof(struct nd_flow_sync_hdr));
-	dh->type = NOTIFICATION;
-	fh->flow_id = message_id;
-	fh->flow_size = htonl(message_size);
-	fh->start_time = start_time;
+	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
+	
+	dh = (struct ndhdr*) (&sync->common);
+	dh->len = htons(sizeof(struct vs_sync_hdr));
+	dh->type = SYNC;
+	dh->source = inet->inet_sport;
+	dh->dest = inet->inet_dport;
+	dh->check = 0;
+	dh->doff = (sizeof(struct vs_hdr)) << 2;
+	// fh->flow_id = message_id;
+	// fh->flow_size = htonl(message_size);
+	// fh->start_time = start_time;
 	// extra_bytes = ND_HEADER_MAX_SIZE - length;
 	// if (extra_bytes > 0)
 	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
-	return skb;
+	return req;
 }
 
 struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,

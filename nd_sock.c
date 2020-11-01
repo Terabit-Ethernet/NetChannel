@@ -22,7 +22,7 @@
 // #include <net/tcp.h>
 #include <net/sock_reuseport.h>
 #include <net/addrconf.h>
-
+#include "nd_host.h"
 // #include "linux_nd.h"
 #include "nd_impl.h"
 #include "nd_hashtables.h"
@@ -595,8 +595,8 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// send notification pkt
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
-
-	nd_xmit_control(construct_flow_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
+    nd_conn_queue_request(construct_sync_req(sk), true, true);
+	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
 	dsk->total_length = flow_len;
 
 	if (err)

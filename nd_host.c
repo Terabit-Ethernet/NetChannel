@@ -3,6 +3,7 @@
 static LIST_HEAD(nd_conn_ctrl_list);
 static DEFINE_MUTEX(nd_conn_ctrl_mutex);
 static struct workqueue_struct *nd_conn_wq;
+struct nd_conn_ctrl* nd_ctrl;
 // static struct blk_mq_ops nvme_tcp_mq_ops;
 // static struct blk_mq_ops nvme_tcp_admin_mq_ops;
 
@@ -11,6 +12,20 @@ static inline int nd_conn_queue_id(struct nd_conn_queue *queue)
 {
 	return queue - queue->ctrl->queues;
 }
+
+static inline void nd_conn_done_send_req(struct nd_conn_queue *queue)
+{
+	kfree(queue->request->pdu);
+	kfree(queue->request);
+	queue->request = NULL;
+}
+
+static inline bool nd_conn_queue_more(struct nd_conn_queue *queue)
+{
+	return !list_empty(&queue->send_list) ||
+		!llist_empty(&queue->req_list) || queue->more_requests;
+}
+
 
 void nd_conn_restore_sock_calls(struct nd_conn_queue *queue)
 {
@@ -215,7 +230,7 @@ void nd_conn_state_change(struct sock *sk)
 	case TCP_FIN_WAIT1:
 	case TCP_FIN_WAIT2:
         // this part might have issue
-        printk("TCP close\n");
+        printk("TCP state change:%d\n", sk->sk_state);
 		// nd_conn_error_recovery(&ctrl);
 		break;
 	default:
@@ -226,6 +241,37 @@ void nd_conn_state_change(struct sock *sk)
 	queue->state_change(sk);
 done:
 	read_unlock(&sk->sk_callback_lock);
+}
+
+void nd_conn_queue_request(struct nd_conn_request *req,
+		bool sync, bool last)
+{
+	struct nd_conn_queue *queue = req->queue;
+	bool empty;
+	int ret;
+	if(queue == NULL) {
+		/* hard code forr now */
+		req->queue = &nd_ctrl->queues[1];
+		queue = req->queue;
+	}
+	empty = llist_add(&req->lentry, &queue->req_list) &&
+		list_empty(&queue->send_list) && !queue->request;
+
+	/*
+	 * if we're the first on the send_list and we can try to send
+	 * directly, otherwise queue io_work. Also, only do that if we
+	 * are on the same cpu, so we don't introduce contention.
+	 */
+	if (queue->io_cpu == smp_processor_id() &&
+	    sync && empty && mutex_trylock(&queue->send_mutex)) {
+		queue->more_requests = !last;
+		ret = nd_conn_try_send(queue);
+		if(ret == -EAGAIN)
+		queue->more_requests = false;
+		mutex_unlock(&queue->send_mutex);
+	} else if (last) {
+		queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	}
 }
 
 // void nd_conn_error_recovery(struct nd_conn_ctrl *ctrl)
@@ -464,37 +510,179 @@ int nd_conn_configure_io_queues(struct nd_conn_ctrl *ctrl, bool new)
 	return ret;
 }
 
+void nd_conn_process_req_list(struct nd_conn_queue *queue)
+{
+	struct nd_conn_request *req;
+	struct llist_node *node;
+
+	for (node = llist_del_all(&queue->req_list); node; node = node->next) {
+		req = llist_entry(node, struct nd_conn_request, lentry);
+		list_add(&req->entry, &queue->send_list);
+	}
+}
+
+static inline struct nd_conn_request *
+nd_conn_fetch_request(struct nd_conn_queue *queue)
+{
+	struct nd_conn_request *req;
+
+	req = list_first_entry_or_null(&queue->send_list,
+			struct nd_conn_request, entry);
+	if (!req) {
+		nd_conn_process_req_list(queue);
+		req = list_first_entry_or_null(&queue->send_list,
+				struct nd_conn_request, entry);
+		if (unlikely(!req))
+			return NULL;
+	}
+
+	list_del(&req->entry);
+	return req;
+}
+
+int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
+{
+	struct nd_conn_queue *queue = req->queue;
+	struct nvme_tcp_cmd_pdu *pdu = req->pdu;
+	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
+	struct kvec iov = {
+		.iov_base = &req->pdu + req->offset,
+		.iov_len = req->data_len - req->offset
+	};
+	// bool inline_data = nvme_tcp_has_inline_data(req);
+	// u8 hdgst = nvme_tcp_hdgst_len(queue);
+	// int len = sizeof(*pdu) + hdgst - req->offset;
+	// int flags = MSG_DONTWAIT;
+	int ret;
+
+	if (nd_conn_queue_more(queue))
+		msg.msg_flags |= MSG_MORE;
+	else
+		msg.msg_flags |= MSG_EOR;
+
+	// if (queue->hdr_digest && !req->offset)
+	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
+
+	ret = kernel_sendmsg(queue->sock, &msg, &iov, 1, iov.iov_len);
+	if (unlikely(ret <= 0))
+		return ret;
+
+	if (req->offset + ret == req->data_len) {
+		nd_conn_done_send_req(queue);
+		return 1;
+	}
+	req->offset += ret;
+	return -EAGAIN;
+}
+
+int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
+{
+	struct nd_conn_queue *queue = req->queue;
+	struct nd_conn_data_pdu *pdu = req->pdu;
+	// u8 hdgst = nd_tcp_hdgst_len(queue);
+	// int len = sizeof(*pdu) - req->offset + hdgst;
+	// int ret;
+
+	// if (queue->hdr_digest && !req->offset)
+	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
+
+	// ret = kernel_sendpage(queue->sock, virt_to_page(pdu),
+	// 		offset_in_page(pdu) + req->offset, len,
+	// 		MSG_DONTWAIT | MSG_MORE | MSG_SENDPAGE_NOTLAST);
+	// if (unlikely(ret <= 0))
+	// 	return ret;
+
+	// len -= ret;
+	// if (!len) {
+	// 	req->state = NVME_TCP_SEND_DATA;
+	// 	if (queue->data_digest)
+	// 		crypto_ahash_init(queue->snd_hash);
+	// 	if (!req->data_sent)
+	// 		nvme_tcp_init_iter(req, WRITE);
+	// 	return 1;
+	// }
+	// req->offset += ret;
+
+	return -EAGAIN;
+}
+
+int nd_conn_try_send(struct nd_conn_queue *queue)
+{
+	struct nd_conn_request *req;
+	int ret = 1;
+
+	if (!queue->request) {
+		queue->request = nd_conn_fetch_request(queue);
+		if (!queue->request)
+			return 0;
+	}
+	req = queue->request;
+
+	if (req->state == ND_CONN_SEND_CMD_PDU) {
+		ret = nd_conn_try_send_cmd_pdu(req);
+		if (ret <= 0)
+			goto done;
+		// if (!nvme_tcp_has_inline_data(req))
+		// 	return ret;
+	}
+
+	if (req->state == ND_CONN_SEND_H2C_PDU) {
+		ret = nd_conn_try_send_data_pdu(req);
+		if (ret <= 0)
+			goto done;
+	}
+
+	// if (req->state == NVME_TCP_SEND_DATA) {
+	// 	ret = nvme_tcp_try_send_data(req);
+	// 	if (ret <= 0)
+	// 		goto done;
+	// }
+
+	// if (req->state == NVME_TCP_SEND_DDGST)
+	// 	ret = nvme_tcp_try_send_ddgst(req);
+done:
+	if (ret == -EAGAIN) {
+		ret = 0;
+	} else if (ret < 0) {
+		pr_err("failed to send request %d\n", ret);
+		// if (ret != -EPIPE && ret != -ECONNRESET)
+		// 	nvme_tcp_fail_request(queue->request);
+		nd_conn_done_send_req(queue);
+	}
+	return ret;
+}
+
 void nd_conn_io_work(struct work_struct *w)
 {
-	// struct nvme_tcp_queue *queue =
-	// 	container_of(w, struct nvme_tcp_queue, io_work);
-	// unsigned long deadline = jiffies + msecs_to_jiffies(1);
+	struct nd_conn_queue *queue =
+		container_of(w, struct nd_conn_queue, io_work);
+	unsigned long deadline = jiffies + msecs_to_jiffies(1);
 
-	// do {
-	// 	bool pending = false;
-	// 	int result;
+	do {
+		bool pending = false;
+		int result;
 
-	// 	if (mutex_trylock(&queue->send_mutex)) {
-	// 		result = nvme_tcp_try_send(queue);
-	// 		mutex_unlock(&queue->send_mutex);
-	// 		if (result > 0)
-	// 			pending = true;
-	// 		else if (unlikely(result < 0))
-	// 			break;
-	// 	}
+		if (mutex_trylock(&queue->send_mutex)) {
+			result = nd_conn_try_send(queue);
+			mutex_unlock(&queue->send_mutex);
+			if (result > 0)
+				pending = true;
+			else if (unlikely(result < 0))
+				break;
+		}
 
-	// 	result = nvme_tcp_try_recv(queue);
-	// 	if (result > 0)
-	// 		pending = true;
-	// 	else if (unlikely(result < 0))
-	// 		return;
+		// result = nvme_tcp_try_recv(queue);
+		// if (result > 0)
+		// 	pending = true;
+		// else if (unlikely(result < 0))
+		// 	return;
 
-	// 	if (!pending)
-	// 		return;
+		if (!pending)
+			return;
 
-	// } while (!time_after(jiffies, deadline)); /* quota is exhausted */
+	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
 
-	// queue_work_on(queue->io_cpu, nvme_tcp_wq, &queue->io_work);
+	queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 }
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid, size_t queue_size)
@@ -837,7 +1025,7 @@ int __init nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.116";
+    opts->traddr = "192.168.10.117";
     opts->trsvcid = "9000";
     /* src address */
     opts->host_traddr = "192.168.10.116";
@@ -846,7 +1034,7 @@ int __init nd_conn_init_module(void)
     opts->queue_size = 1000;
     opts->tos = 0;
     pr_info("create the ctrl \n");
-    nd_conn_create_ctrl(opts);
+    nd_ctrl = nd_conn_create_ctrl(opts);
 	// nvmf_register_transport(&nvme_tcp_transport);
 	return 0;
 }

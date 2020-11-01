@@ -35,12 +35,39 @@ enum nd_packet_type {
 	TOKEN              = 21,
 	NOTIFICATION	   = 22,
 	ACK  			   = 23,
+	SYNC               = 24,
 	//For PIM
-	RTS                = 24,
-	GRANT			   = 25,
-	ACCEPT			   = 26,
+	RTS                = 25,
+	GRANT			   = 26,
+	ACCEPT			   = 27,
 
-	FIN              = 27,
+	FIN              = 28,
+};
+
+struct vs_hdr {
+	/** @type: One of the values of &enum packet_type. */
+	__u8 type;
+	/**
+	 * @doff: High order 4 bits holds the number of 4-byte chunks in a
+	 * data_header (low-order bits unused). Used only for DATA packets;
+	 * must be in the same position as the data offset in a TCP header.
+	 */
+	__u8 doff;
+	__be16	source;
+	__be16	dest;
+	/**
+	 * @unused1: corresponds to the sequence number field in TCP headers;
+	 * must not be used by ND, in case it gets incremented during TCP
+	 * offload.
+	 */
+	__be16 len;
+	__be32 seq;
+};
+struct vs_sync_hdr {
+	struct vs_hdr common;
+	// __be64 flow_id;
+	// __be32 flow_size;
+	// __be64 start_time;
 };
 
 struct ndhdr {

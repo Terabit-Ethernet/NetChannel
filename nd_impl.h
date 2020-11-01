@@ -128,8 +128,9 @@ int nd_clean_rtx_queue(struct sock *sk);
 enum hrtimer_restart nd_flow_wait_event(struct hrtimer *timer);
 void nd_flow_wait_handler(struct sock *sk);
 /*ND outgoing function*/
-struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
-	uint32_t message_size, __u64 start_time);
+struct nd_conn_request* construct_sync_req(struct sock* sk);
+// struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
+// 	uint32_t message_size, __u64 start_time);
 struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority, __u32 prev_grant_nxt,
 	 __u32 grant_nxt, bool handle_rtx);
 struct sk_buff* construct_fin_pkt(struct sock* sk);

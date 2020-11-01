@@ -13,6 +13,8 @@
 #include <crypto/hash.h>
 #include <net/busy_poll.h>
 
+extern struct nd_conn_ctrl* nd_ctrl;
+
 #define ND_CONN_AQ_DEPTH		32
 enum hctx_type {
 	HCTX_TYPE_DEFAULT,
@@ -142,7 +144,9 @@ struct nd_conn_queue {
 	void (*data_ready)(struct sock *);
 	void (*write_space)(struct sock *);
 };
-
+int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req); 
+int nd_conn_try_send_data_pdu(struct nd_conn_request *req);
+int nd_conn_try_send(struct nd_conn_queue *queue);
 void nd_conn_restore_sock_calls(struct nd_conn_queue *queue);
 void __nd_conn_stop_queue(struct nd_conn_queue *queue);
 void nd_conn_stop_queue(struct nd_conn_ctrl *ctrl, int qid);
@@ -161,7 +165,8 @@ void nd_conn_state_change(struct sock *sk);
 void nd_conn_data_ready(struct sock *sk);
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid, size_t queue_size);
-
+void nd_conn_queue_request(struct nd_conn_request *req,
+		bool sync, bool last);
 // void nd_conn_error_recovery_work(struct work_struct *work);
 void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown);
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl);
