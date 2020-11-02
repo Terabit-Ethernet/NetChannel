@@ -916,7 +916,10 @@ int nd_rcv(struct sk_buff *skb)
 		return nd_handle_fin_pkt(skb);
 	} else if (dh->type == ACK) {
 		return nd_handle_ack_pkt(skb);
-	} 
+	}
+	//  else if (dh->type == SYNC_ACK) {
+	// 	return nd_handle_sync_ack_pkt(skb);
+	// }
 	// else if (dh->type == RTS) {
 	// 	return nd_handle_rts(skb, &nd_match_table, &nd_epoch);
 	// } else if (dh->type == GRANT) {
@@ -934,6 +937,7 @@ drop:
 	return 0;
 	// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
 }
+
 
 void nd_destroy_sock(struct sock *sk)
 {

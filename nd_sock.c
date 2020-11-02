@@ -460,6 +460,32 @@ fail_unlock:
 }
 EXPORT_SYMBOL_GPL(nd_sk_get_port);
 
+
+/* this function is copied from inet_wait_for_connect */
+static long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
+{
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+
+	add_wait_queue(sk_sleep(sk), &wait);
+	sk->sk_write_pending += writebias;
+
+	/* Basic assumption: if someone sets sk->sk_err, he _must_
+	 * change state of the socket from TCP_SYN_*.
+	 * Connect() does not allow to get error notifications
+	 * without closing the socket.
+	 */
+	while ((1 << sk->sk_state) & (NDF_SYNC_SENT)) {
+		release_sock(sk);
+		timeo = wait_woken(&wait, TASK_INTERRUPTIBLE, timeo);
+		lock_sock(sk);
+		if (signal_pending(current) || !timeo)
+			break;
+	}
+	remove_wait_queue(sk_sleep(sk), &wait);
+	sk->sk_write_pending -= writebias;
+	return timeo;
+}
+
 /* This will initiate an outgoing connection. */
 int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
@@ -545,7 +571,6 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 * lock select source port, enter ourselves into the hash tables and
 	 * complete initialization after this.
 	 */
-	nd_set_state(sk, ND_SENDER);
 	// source port is decided by bind; if not, set in hash_connect
 	err = nd_hash_connect(sk);
 	if (err)
@@ -595,12 +620,20 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// send notification pkt
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
+	/* send sync request */
     nd_conn_queue_request(construct_sync_req(sk), true, true);
-	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
-	dsk->total_length = flow_len;
+	nd_set_state(sk, ND_SYNC_SENT);
 
-	if (err)
+	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
+	// dsk->total_length = flow_len;
+	nd_wait_for_connect(sk, 1000000000, 0);
+	if(sk->sk_state != ND_SENDER) {
+		err = -ENOTCONN;
 		goto failure;
+	}
+
+	// if (err)
+	// 	goto failure;
 
 	return 0;
 
@@ -613,6 +646,7 @@ failure:
 	ip_rt_put(rt);
 	sk->sk_route_caps = 0;
 	inet->inet_dport = 0;
+	// inet->inet_sport = 0;
 	return err;
 }
 EXPORT_SYMBOL(nd_v4_connect);

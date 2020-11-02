@@ -315,29 +315,42 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	return 0;
 }
 
+static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
+		     unsigned int orig_offset, size_t orig_len)
+{
+	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
+	struct sk_buff *skb;
+	skb = skb_clone(orig_skb, GFP_ATOMIC);
+	pr_info("get new skb\n");
+	__skb_queue_tail(&queue->receive_queue, skb);
+	return 0;
+}
+
 static int ndt_conn_try_recv_pdu(struct ndt_conn_queue *queue)
 {
 	struct vs_hdr *hdr = &queue->vs_hdr;
+	struct socket *sock = queue->sock;
 	int len;
-	struct kvec iov;
-	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
+	read_descriptor_t desc;
 
+	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
+		return -EBUSY;
+
+	desc.arg.data = queue;
+	desc.error = 0;
+	desc.count = 1; /* give more than one skb per call */
 recv:
-	iov.iov_base = (void *)&queue->vs_hdr + queue->offset;
-	iov.iov_len = queue->left;
-	len = kernel_recvmsg(queue->sock, &msg, &iov, 1,
-			iov.iov_len, msg.msg_flags);
-	if (unlikely(len < 0))
-		return len;
+	lock_sock(sock->sk);
+	/* sk should be locked here, so okay to do read_sock */
+	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
+	release_sock(sock->sk);
 
-	queue->offset += len;
-	queue->left -= len;
 	if (queue->left)
 		return -EAGAIN;
 
 	if (queue->offset == sizeof(struct vs_hdr)) {
 		// u8 hdgst = nvmet_tcp_hdgst_len(queue);
-		pr_info("vs_hdr.src port \n", hdr->source);
+		pr_info("vs_hdr.src port:%d \n", hdr->source);
 		// if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
 		// 	pr_err("unexpected pdu type %d\n", hdr->type);
 		// 	nvmet_tcp_fatal_error(queue);
@@ -472,7 +485,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	INIT_LIST_HEAD(&queue->free_list);
 	init_llist_head(&queue->resp_list);
 	INIT_LIST_HEAD(&queue->resp_send_list);
-
+	skb_queue_head_init(&queue->receive_queue);
 	queue->idx = ida_simple_get(&ndt_conn_queue_ida, 0, 0, GFP_KERNEL);
 	if (queue->idx < 0) {
 		ret = queue->idx;

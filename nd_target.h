@@ -45,7 +45,7 @@ struct ndt_conn_queue {
 	struct work_struct	io_work;
 	// struct nvmet_cq		nvme_cq;
 	// struct nvmet_sq		nvme_sq;
-
+	struct sk_buff_head	receive_queue;
 	/* send state */
 	// struct nvmet_tcp_cmd	*cmds;
 	unsigned int		nr_cmds;

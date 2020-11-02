@@ -44,6 +44,7 @@ enum {
 	ND_RECEIVER = 1,
 	ND_SENDER,
 	ND_LISTEN,
+	ND_SYNC_SENT,
 	/* use TCP_CLOSE because of inet_bind use TCP_CLOSE to
 	 check whether the port should be assigned TCP CLOSE = 7;*/ 
 	// RCP_CLOSE,
@@ -54,6 +55,7 @@ enum {
 	NDF_SENDER = (1 << ND_SENDER),
 	NDF_RECEIVER = (1 << ND_RECEIVER),
 	NDF_LISTEN	 = (1 << ND_LISTEN),
+	NDF_SYNC_SENT = (1 << ND_SYNC_SENT),
 };
 
 enum ndcsq_enum {

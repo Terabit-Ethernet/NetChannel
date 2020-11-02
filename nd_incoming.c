@@ -1037,6 +1037,38 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	return 0;
 }
 
+
+// int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
+// 	struct nd_sock *dsk;
+// 	// struct inet_sock *inet;
+// 	// struct nd_peer *peer;
+// 	// struct iphdr *iph;
+// 	// struct ndhdr *dh;
+// 	struct vs_hdr *ah;
+// 	struct sock *sk;
+// 	int sdif = inet_sdif(skb);
+// 	bool refcounted = false;
+
+// 	if (!pskb_may_pull(skb, sizeof(struct vs_hdr))) {
+// 		kfree_skb(skb);		/* No space for header. */
+// 		return 0;
+// 	}
+// 	ah = vs_hdr(skb);
+// 	// sk = skb_steal_sock(skb);
+// 	// if(!sk) {
+// 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&ah), ah->source,
+//             ah->dest, sdif, &refcounted);
+//     // }
+
+//     if (refcounted) {
+//         sock_put(sk);
+//     }
+// 	sk->sk_state = ND_SENDER;
+// 	sk->sk_data_ready(sk);
+//  	kfree_skb(skb);
+// 	return 0;
+// }
+
 int nd_handle_fin_pkt(struct sk_buff *skb) {
 	struct nd_sock *dsk;
 	// struct inet_sock *inet;

@@ -36,12 +36,13 @@ enum nd_packet_type {
 	NOTIFICATION	   = 22,
 	ACK  			   = 23,
 	SYNC               = 24,
+	SYNC_ACK		   = 25,
 	//For PIM
-	RTS                = 25,
-	GRANT			   = 26,
-	ACCEPT			   = 27,
+	RTS                = 26,
+	GRANT			   = 27,
+	ACCEPT			   = 28,
 
-	FIN              = 28,
+	FIN              = 29,
 };
 
 struct vs_hdr {
