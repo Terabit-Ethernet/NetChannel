@@ -321,9 +321,10 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb;
 	skb = skb_clone(orig_skb, GFP_ATOMIC);
-	pr_info("get new skb\n");
+	
+	pr_info("get new skb:%p\n", orig_skb);
 	__skb_queue_tail(&queue->receive_queue, skb);
-	return 0;
+	return orig_len;
 }
 
 static int ndt_conn_try_recv_pdu(struct ndt_conn_queue *queue)
@@ -548,7 +549,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.117";
+	ndt_port->local_ip = "192.168.10.116";
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);
