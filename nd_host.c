@@ -6,7 +6,7 @@ static struct workqueue_struct *nd_conn_wq;
 struct nd_conn_ctrl* nd_ctrl;
 // static struct blk_mq_ops nvme_tcp_mq_ops;
 // static struct blk_mq_ops nvme_tcp_admin_mq_ops;
-
+#include "uapi_linux_nd.h"
 
 static inline int nd_conn_queue_id(struct nd_conn_queue *queue)
 {
@@ -543,10 +543,10 @@ nd_conn_fetch_request(struct nd_conn_queue *queue)
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 {
 	struct nd_conn_queue *queue = req->queue;
-	struct nvme_tcp_cmd_pdu *pdu = req->pdu;
+	struct ndhdr *pdu = req->pdu;
 	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
 	struct kvec iov = {
-		.iov_base = &req->pdu + req->offset,
+		.iov_base = req->pdu + req->offset,
 		.iov_len = req->data_len - req->offset
 	};
 	// bool inline_data = nvme_tcp_has_inline_data(req);
@@ -562,12 +562,15 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 
 	// if (queue->hdr_digest && !req->offset)
 	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
-
+	printk("sendmsg\n");
+	printk("pdu offset:%lu\n", req->offset);
+	printk("pdu source:%u\n", ntohs(pdu->source));
 	ret = kernel_sendmsg(queue->sock, &msg, &iov, 1, iov.iov_len);
 	if (unlikely(ret <= 0))
 		return ret;
-
+	return 1;
 	if (req->offset + ret == req->data_len) {
+		printk("conn done send req\n");
 		nd_conn_done_send_req(queue);
 		return 1;
 	}
