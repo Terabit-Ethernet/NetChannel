@@ -10,6 +10,7 @@
 #include "nd_impl.h"
 #include "nd_target.h"
 #include "nd_host.h"
+#include "nd_unittest.h"
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Qizhe");
 MODULE_DESCRIPTION("ND transport protocol");
@@ -381,6 +382,7 @@ static int __init nd_load(void) {
                 pr_err("failed to allocate host side\n");
                 goto out_cleanup;
         }
+        nd_test_start();
         return 0;
 
 out_cleanup:

@@ -321,51 +321,51 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb;
 	skb = skb_clone(orig_skb, GFP_ATOMIC);
-	
-	pr_info("get new skb:%p\n", orig_skb);
 	__skb_queue_tail(&queue->receive_queue, skb);
+	desc->count -= 1;
 	return orig_len;
 }
 
 static int ndt_conn_try_recv_pdu(struct ndt_conn_queue *queue)
 {
-	struct vs_hdr *hdr = &queue->vs_hdr;
-	struct socket *sock = queue->sock;
-	int len;
-	read_descriptor_t desc;
+	// struct vs_hdr *hdr = &queue->vs_hdr;
+// 	struct socket *sock = queue->sock;
+// 	int len;
+// 	read_descriptor_t desc;
 
-	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
-		return -EBUSY;
+// 	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
+// 		return -EBUSY;
 
-	desc.arg.data = queue;
-	desc.error = 0;
-	desc.count = 1; /* give more than one skb per call */
-recv:
-	lock_sock(sock->sk);
-	/* sk should be locked here, so okay to do read_sock */
-	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
-	release_sock(sock->sk);
+// 	desc.arg.data = queue;
+// 	desc.error = 0;
+// 	desc.count = 1; /* give more than one skb per call */
+// recv:
+// 	lock_sock(sock->sk);
+// 	/* sk should be locked here, so okay to do read_sock */
+// 	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
+// 	release_sock(sock->sk);
 
-	if (queue->left)
-		return -EAGAIN;
+	
+	// if (queue->left)
+	// 	return -EAGAIN;
 
-	if (queue->offset == sizeof(struct vs_hdr)) {
-		// u8 hdgst = nvmet_tcp_hdgst_len(queue);
-		pr_info("vs_hdr.src port:%d \n", hdr->source);
-		// if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
-		// 	pr_err("unexpected pdu type %d\n", hdr->type);
-		// 	nvmet_tcp_fatal_error(queue);
-		// 	return -EIO;
-		// }
+	// if (queue->offset == sizeof(struct vs_hdr)) {
+	// 	// u8 hdgst = nvmet_tcp_hdgst_len(queue);
+	// 	pr_info("vs_hdr.src port:%d \n", hdr->source);
+	// 	// if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
+	// 	// 	pr_err("unexpected pdu type %d\n", hdr->type);
+	// 	// 	nvmet_tcp_fatal_error(queue);
+	// 	// 	return -EIO;
+	// 	// }
 
-		// if (unlikely(hdr->hlen != nvmet_tcp_pdu_size(hdr->type))) {
-		// 	pr_err("pdu %d bad hlenf %d\n", hdr->type, hdr->hlen);
-		// 	return -EIO;
-		// }
+	// 	// if (unlikely(hdr->hlen != nvmet_tcp_pdu_size(hdr->type))) {
+	// 	// 	pr_err("pdu %d bad hlenf %d\n", hdr->type, hdr->hlen);
+	// 	// 	return -EIO;
+	// 	// }
 
-		// queue->left = hdr->len - queue->offset + hdgst;
-		goto recv;
-	}
+	// 	// queue->left = hdr->len - queue->offset + hdgst;
+	// 	goto recv;
+	// }
 
 	// if (queue->hdr_digest &&
 	//     nvmet_tcp_verify_hdgst(queue, &queue->pdu, queue->offset)) {
@@ -386,14 +386,14 @@ static int ndt_conn_try_recv_one(struct ndt_conn_queue *queue)
 {
 	int result = 0;
 
-	if (unlikely(queue->rcv_state == NDT_CONN_RECV_ERR))
-		return 0;
+	// if (unlikely(queue->rcv_state == NDT_CONN_RECV_ERR))
+	// 	return 0;
 
-	if (queue->rcv_state == NDT_CONN_RECV_PDU) {
+	// if (queue->rcv_state == NDT_CONN_RECV_PDU) {
 		result = ndt_conn_try_recv_pdu(queue);
-		if (result != 0)
-			goto done_recv;
-	}
+		// if (result != 0)
+		// 	goto done_recv;
+	// }
 
 	// if (queue->rcv_state == NVMET_CONN_RECV_DATA) {
 	// 	result = nvmet_tcp_try_recv_data(queue);
@@ -420,17 +420,32 @@ int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 		int budget, int *recvs)
 {
 	int i, ret = 0;
+	struct socket *sock = queue->sock;
+	read_descriptor_t desc;
 
-	for (i = 0; i < budget; i++) {
-		ret = ndt_conn_try_recv_one(queue);
-		if (unlikely(ret < 0)) {
-			// ndt_conn_socket_error(queue, ret);
-			goto done;
-		} else if (ret == 0) {
-			break;
-		}
-		(*recvs)++;
-	}
+	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
+		return -EBUSY;
+
+	desc.arg.data = queue;
+	desc.error = 0;
+	desc.count = budget; /* give more than one skb per call */
+recv:
+	lock_sock(sock->sk);
+	/* sk should be locked here, so okay to do read_sock */
+	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
+	release_sock(sock->sk);
+
+	(*recvs) += budget - desc.count;
+	// for (i = 0; i < budget; i++) {
+	// 	ret = ndt_conn_try_recv_one(queue);
+	// 	if (unlikely(ret < 0)) {
+	// 		// ndt_conn_socket_error(queue, ret);
+	// 		goto done;
+	// 	} else if (ret == 0) {
+	// 		break;
+	// 	}
+	// 	(*recvs)++;
+	// }
 done:
 	return ret;
 }
@@ -450,7 +465,8 @@ void ndt_conn_io_work(struct work_struct *w)
 			pending = true;
 		else if (ret < 0)
 			return;
-
+		/* parsing packet; not sure if it should includes in while loop when accounting budget */
+		// pass_to_vs_layer(&queue->receive_queue);
 		// ret = nvmet_tcp_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
 		// 	pending = true;

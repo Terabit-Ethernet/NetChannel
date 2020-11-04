@@ -127,6 +127,8 @@ int nd_clean_rtx_queue(struct sock *sk);
 
 enum hrtimer_restart nd_flow_wait_event(struct hrtimer *timer);
 void nd_flow_wait_handler(struct sock *sk);
+void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue);
+
 /*ND outgoing function*/
 struct nd_conn_request* construct_sync_req(struct sock* sk);
 // struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
@@ -176,3 +178,4 @@ void nd_destroy_sock(struct sock *sk);
 int udp4_seq_show(struct seq_file *seq, void *v);
 #endif
 #endif	/* _UDP4_IMPL_H */
+

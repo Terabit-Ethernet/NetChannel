@@ -1471,3 +1471,172 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	kfree_skb(skb);
 	return 0;
 }
+
+
+/*
+ if skb.len < len(ndhdr),
+	need_bytes = len(ndhdr) - skb.len;
+	goto splitAndMerge;
+if skb.pktType != Data:
+	if skb.len > ln(ndhdr):
+		skb_split(skb, newskb, len)
+		skb_queue.push_front(newskb)
+	goto findskb
+if skb.segmentLen > len(skb):
+	need_bytes = skb.segmentLen - skb.len;
+    goto splitAndMerge;
+
+if(skb.segmentLen < len(skb)):
+	skb_split(skb, newskb, sizeof(ndhdr) + segment_length);
+	skb_queue.push_front(newskb);
+
+goto findskb;
+	passtovslayer(skb);
+	removefromqueue(skb);
+splitAndMerge:
+	while(need_bytes > 0) {
+		newskb = skb;
+		newskb = newskb->next;
+		if(skb == null)
+			break;
+		if(len(newskb) >= need_bytes):
+			if >:
+				skb_split(new_skb, nnew_skb, need_bytes);
+			skb_merge(skb,new_skb);
+			break;
+		else:
+			skb_merge(skb, new_skb) ;
+			need_bytes -= len(new_skb);
+	}
+
+
+
+*/
+
+/* split skb and push back the new skb into head of the queue */
+int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
+	struct sk_buff* new_skb;
+	int bytes = ND_HEADER_MAX_SIZE;
+	if(skb->len < need_bytes)
+		return -ENOMEM;
+	if(skb->len == need_bytes)
+		return 0;
+	/* first split new skb */
+	/* this part might need to be changed */
+	if(skb_headlen(skb) > need_bytes) {
+		bytes +=  skb_headlen(skb) - need_bytes;
+		printk("need bytes:%d\n", need_bytes);
+	}
+	new_skb = alloc_skb(bytes, GFP_ATOMIC);
+	/* set the network header, but not tcp header */
+	skb_put(new_skb, sizeof(struct iphdr));
+	skb_reset_network_header(new_skb);
+	memcpy(skb_network_header(new_skb), skb_network_header(skb), sizeof(struct iphdr));
+	skb_pull(new_skb, sizeof(struct iphdr));
+	skb_split(skb, new_skb, need_bytes);
+	skb_queue_head(queue, new_skb);
+	return 0; 
+}
+
+int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
+	struct sk_buff* new_skb;
+	int delta = 0;
+ 	bool fragstolen = false;
+
+	while(need_bytes > 0) {
+		/* skb_split only handles non-header part */
+		fragstolen = false;
+		delta = 0;
+		new_skb =  skb_dequeue(queue);
+		if(!new_skb)
+			return -ENOMEM;
+		if(new_skb->len <= need_bytes) {
+			if (!skb_try_coalesce(skb, new_skb, &fragstolen, &delta)) {
+				pr_info("Coalesce fails:%d\n", __LINE__);
+			} else {
+				kfree_skb_partial(new_skb, fragstolen);
+			}
+			need_bytes -= new_skb->len;
+		} else {
+			pr_info("split first: %d \n", need_bytes);
+			nd_split(queue, new_skb, need_bytes);
+			/* then coalesce */
+			if(!skb_try_coalesce(skb, new_skb,&fragstolen, &delta)) {
+				pr_info("Coalesce fails:%d\n", __LINE__);
+			} else {
+				kfree_skb_partial(new_skb, fragstolen);
+			}
+			need_bytes = 0;
+		}
+	}
+	if(need_bytes > 0)
+		return -ENOMEM;
+	return 0;
+}
+void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
+	struct sk_buff *skb;
+	struct ndhdr* nh;
+	int need_bytes = 0;
+	int ret;
+	struct iphdr* iph;
+	while ((skb = skb_dequeue(queue)) != NULL) {
+		if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
+			need_bytes = sizeof(struct ndhdr) - skb->len;
+			ret = nd_split_and_merge(queue, skb, need_bytes);
+			/* No space for header . */
+			if(ret == -ENOMEM) {
+				goto push_back;
+				return;
+			}
+		}
+		/* reset the transport layer header as nd header; and ignore TCP header */
+		skb_set_transport_header(skb, 0);
+		nh = nd_hdr(skb);
+		/* this layer could do sort of GRO stuff later */
+		if(nh->type == DATA) {
+			need_bytes = nh->segment_length + sizeof(struct ndhdr) - skb->len;
+			if(need_bytes > 0) {
+				printk("reach here:%d\n", __LINE__);
+				printk("need bytes:%d\n", need_bytes);
+				printk("skb len:%d\n" , skb->len);
+				ret = nd_split_and_merge(queue, skb, need_bytes);
+				if(ret == -ENOMEM) {
+					goto push_back;
+					return;
+				}
+			}
+			if(need_bytes < 0) {
+				// printk("reach here:%d\n", __LINE__);
+				// printk("need bytes:%d\n", need_bytes);
+				// printk("skb len:%d\n" , skb->len);
+				nd_split(queue, skb, nh->segment_length + sizeof(struct ndhdr));
+			}
+		}else {
+			/* this split should always be suceessful */
+			nd_split(queue, skb, sizeof(struct ndhdr));
+		}
+		/* pass to the vs layer; local irq should be disabled */
+		// printk("get skb");
+		// iph = ip_hdr(skb);
+		// nh = nd_hdr(skb);
+		// printk("skb: ip src:%d\n", iph->saddr);
+		// printk("skb: ip dst:%d\n", iph->daddr);
+		// printk("skb: nh type:%d\n", nh->type);
+		// printk("skb: nh source:%d\n", nh->source);
+		// printk("skb: nh dst:%d\n", nh->dest);
+		// if(nh->type == DATA) {
+		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
+
+		// }
+		/* disable irq since it is in the process context */
+		local_bh_disable();
+		/* pass to the virutal socket layer */
+		nd_rcv(skb);
+		local_bh_enable();
+		// kfree_skb(skb);
+	}
+	return;
+push_back:
+	printk("push back skb\n");
+	skb_queue_head(queue, skb);
+}
