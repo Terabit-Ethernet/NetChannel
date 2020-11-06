@@ -1,4 +1,5 @@
 #include "nd_target.h"
+#include "nd_impl.h"
 static DEFINE_IDA(ndt_conn_queue_ida);
 static LIST_HEAD(ndt_conn_queue_list);
 static DEFINE_MUTEX(ndt_conn_queue_mutex);
@@ -320,7 +321,7 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 {
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb;
-	skb = skb_clone(orig_skb, GFP_ATOMIC);
+	skb = skb_clone(orig_skb, GFP_KERNEL);
 	__skb_queue_tail(&queue->receive_queue, skb);
 	desc->count -= 1;
 	return orig_len;
@@ -450,6 +451,113 @@ done:
 	return ret;
 }
 
+// static void ndt_conn_process_resp_list(struct ndt_conn_queue *queue)
+// {
+// 	struct llist_node *node;
+// 	struct nd_conn_request *cmd;
+
+// 	for (node = llist_del_all(&queue->resp_list); node; node = node->next) {
+// 		cmd = llist_entry(node, struct nd_conn_request, lentry);
+// 		list_add(&cmd->entry, &queue->resp_send_list);
+// 		queue->send_list_len++;
+// 	}
+// }
+
+// static struct nd_conn_request *ndt_conn_fetch_req(struct ndt_conn_queue *queue)
+// {
+// 	queue->snd_request = list_first_entry_or_null(&queue->resp_send_list,
+// 				struct nd_conn_request, entry);
+// 	if (!queue->snd_request) {
+// 		ndt_conn_process_resp_list(queue);
+// 		queue->snd_request =
+// 			list_first_entry_or_null(&queue->resp_send_list,
+// 					struct ndt_conn_req, entry);
+// 		if (unlikely(!queue->snd_request))
+// 			return NULL;
+// 	}
+
+// 	list_del_init(&queue->snd_request->entry);
+// 	queue->send_list_len--;
+
+// 	// if (nvmet_tcp_need_data_out(queue->snd_cmd))
+// 	// 	nvmet_setup_c2h_data_pdu(queue->snd_cmd);
+// 	// else if (nvmet_tcp_need_data_in(queue->snd_cmd))
+// 	// 	nvmet_setup_r2t_pdu(queue->snd_cmd);
+// 	// else
+// 	// 	nvmet_setup_response_pdu(queue->snd_cmd);
+
+// 	return queue->snd_request;
+// }
+
+// static int nvmet_conn_try_send_one(struct nvmet_tcp_queue *queue,
+// 		bool last_in_batch)
+// {
+// // 	struct nd_conn_request *req = queue->snd_request;
+// // 	int ret = 0;
+
+// // 	if (!cmd || queue->state == NDT_CONN_Q_DISCONNECTING) {
+// // 		cmd = ndt_conn_fetch_request(queue);
+// // 		if (unlikely(!cmd))
+// // 			return 0;
+// // 	}
+
+// // 	if (cmd->state == NVMET_TCP_SEND_DATA_PDU) {
+// // 		ret = nvmet_try_send_data_pdu(cmd);
+// // 		if (ret <= 0)
+// // 			goto done_send;
+// // 	}
+
+// // 	if (cmd->state == NVMET_TCP_SEND_DATA) {
+// // 		ret = nvmet_try_send_data(cmd, last_in_batch);
+// // 		if (ret <= 0)
+// // 			goto done_send;
+// // 	}
+
+// // 	if (cmd->state == NVMET_TCP_SEND_DDGST) {
+// // 		ret = nvmet_try_send_ddgst(cmd, last_in_batch);
+// // 		if (ret <= 0)
+// // 			goto done_send;
+// // 	}
+
+// // 	if (cmd->state == NVMET_TCP_SEND_R2T) {
+// // 		ret = nvmet_try_send_r2t(cmd, last_in_batch);
+// // 		if (ret <= 0)
+// // 			goto done_send;
+// // 	}
+
+// // 	if (cmd->state == NVMET_TCP_SEND_RESPONSE)
+// // 		ret = nvmet_try_send_response(cmd, last_in_batch);
+
+// // done_send:
+// // 	if (ret < 0) {
+// // 		if (ret == -EAGAIN)
+// // 			return 0;
+// // 		return ret;
+// // 	}
+
+// // 	return 1;
+// 	return 1;
+// }
+
+// static int ndt_conn_try_send(struct nvmet_tcp_queue *queue,
+// 		int budget, int *sends)
+// {
+// 	int i, ret = 0;
+
+// 	for (i = 0; i < budget; i++) {
+// 		ret = ndt_conn_try_send_one(queue, i == budget - 1);
+// 		// if (unlikely(ret < 0)) {
+// 		// 	ndt_tcp_socket_error(queue, ret);
+// 		// 	goto done;
+// 		// } else if (ret == 0) {
+// 		// 	break;
+// 		// }
+// 		(*sends)++;
+// 	}
+// done:
+// 	return ret;
+// }
+
 void ndt_conn_io_work(struct work_struct *w)
 {
 	struct ndt_conn_queue *queue =
@@ -466,8 +574,8 @@ void ndt_conn_io_work(struct work_struct *w)
 		else if (ret < 0)
 			return;
 		/* parsing packet; not sure if it should includes in while loop when accounting budget */
-		// pass_to_vs_layer(&queue->receive_queue);
-		// ret = nvmet_tcp_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
+		pass_to_vs_layer(queue->sock->sk, &queue->receive_queue);
+		// ret = ndt_conn_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
 		// 	pending = true;
 		// else if (ret < 0)
@@ -496,6 +604,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	INIT_WORK(&queue->io_work, ndt_conn_io_work);
 	queue->sock = newsock;
 	queue->port = port;
+	queue->snd_request = NULL;
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);
 	queue->state = NDT_CONN_Q_CONNECTING;

@@ -489,7 +489,7 @@ static long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
 /* This will initiate an outgoing connection. */
 int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
-	struct nd_sock *dsk = nd_sk(sk);
+	// struct nd_sock *dsk = nd_sk(sk);
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	struct inet_sock *inet = inet_sk(sk);
 	// struct nd_sock *tp = nd_sk(sk);
@@ -631,7 +631,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		err = -ENOTCONN;
 		goto failure;
 	}
-
+	printk("connected!\n");
 	// if (err)
 	// 	goto failure;
 
@@ -1086,7 +1086,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	struct sock *newsk;
 	struct nd_sock *dsk;
 	struct ip_options_rcu *inet_opt;
-	struct nd_flow_sync_hdr *fhdr = nd_flow_sync_hdr(skb);
+	// struct ndhdr *fhdr = nd_hdr(skb);
 	if (sk_acceptq_is_full(sk))
 		goto exit_overflow;
 
@@ -1119,7 +1119,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	dsk = nd_sk(newsk);
 	// dsk->flow_id = fhdr->flow_id;
 	dsk->core_id = nd_sk(sk)->core_id;
-	dsk->total_length = ntohl(fhdr->flow_size);
+	dsk->total_length = 1000000000;
 	set_max_grant_batch(dst, dsk);
 	/* set up max gso segment */
 	sk_setup_caps(newsk, dst);

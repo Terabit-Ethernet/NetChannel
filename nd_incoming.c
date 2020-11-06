@@ -61,6 +61,7 @@
 // #include "net_ndlite.h"
 #include "uapi_linux_nd.h"
 #include "nd_impl.h"
+#include "nd_host.h"
 // #include "nd_hashtables.h"
 
 // static inline struct sock *__nd4_lib_lookup_skb(struct sk_buff *skb,
@@ -855,48 +856,55 @@ static void nd_ofo_queue(struct sock *sk)
 	}
 }
 
-void nd_data_ready(struct sock *sk)
-{
-        const struct nd_sock *dsk = nd_sk(sk);
-        int avail = dsk->receiver.rcv_nxt - dsk->receiver.copied_seq;
+// void nd_data_ready(struct sock *sk)
+// {
+//         const struct nd_sock *dsk = nd_sk(sk);
+//         int avail = dsk->receiver.rcv_nxt - dsk->receiver.copied_seq;
 
-        if ((avail < sk->sk_rcvlowat && dsk->receiver.rcv_nxt != dsk->total_length) && !sock_flag(sk, SOCK_DONE)) {
-        	return;
-        }
-        sk->sk_data_ready(sk);
-}
+//         if ((avail < sk->sk_rcvlowat && dsk->receiver.rcv_nxt != dsk->total_length) && !sock_flag(sk, SOCK_DONE)) {
+//         	return;
+//         }
+//         sk->sk_data_ready(sk);
+// }
 
-int nd_handle_flow_sync_pkt(struct sk_buff *skb) {
+int nd_handle_sync_pkt(struct sk_buff *skb) {
 	// struct nd_sock *dsk;
 	// struct inet_sock *inet;
 	// struct nd_peer *peer;
 	// struct iphdr *iph;
 	// struct message_hslot* slot;
-	struct nd_flow_sync_hdr *fh;
+	struct ndhdr *fh;
 	struct sock *sk, *child;
 	int sdif = inet_sdif(skb);
 	bool refcounted = false;
-	if (!pskb_may_pull(skb, sizeof(struct nd_flow_sync_hdr))) {
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 		goto drop;		/* No space for header. */
 	}
-	fh =  nd_flow_sync_hdr(skb);
-	// sk = skb_steal_sock(skb);
-	// if(!sk) {
-	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&fh->common), fh->common.source,
-            fh->common.dest, sdif, &refcounted);
+	fh =  nd_hdr(skb);
+	sk = skb_steal_sock(skb);
+	if(!sk) {
+	// printk("fh->source:%d\n", fh->source);
+	// printk("fh->dest:%d\n", fh->dest);
+	// printk ("dev_net(skb_dst(skb)->dev): %d \n",(skb_dst(skb) == NULL));
+	// printk("sdif:%d\n", sdif);
+		sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(fh), fh->source,
+				fh->dest, sdif, &refcounted);
 		// sk = __nd4_lib_lookup_skb(skb, fh->common.source, fh->common.dest, &nd_table);
-	// }
+	}
 	if(sk) {
 		child = nd_conn_request(sk, skb);
 		if(child) {
-			struct nd_sock *dsk = nd_sk(child);
-			if(dsk->total_length >= nd_params.short_flow_size) {
-				rcv_handle_new_flow(dsk);
-			} else {
-				/* set short flow timer */
-				hrtimer_start(&dsk->receiver.flow_wait_timer, ns_to_ktime(nd_params.rtt * 1000), 
-				HRTIMER_MODE_REL_PINNED_SOFT);
-			}
+			// struct nd_sock *dsk = nd_sk(child);
+			// if(dsk->total_length >= nd_params.short_flow_size) {
+			// 	rcv_handle_new_flow(dsk);
+			// } else {
+			// 	/* set short flow timer */
+			// 	hrtimer_start(&dsk->receiver.flow_wait_timer, ns_to_ktime(nd_params.rtt * 1000), 
+			// 	HRTIMER_MODE_REL_PINNED_SOFT);
+			// }
+			/* currently assume at the target side */
+			/* ToDo: sync can be true; */
+			nd_conn_queue_request(construct_sync_ack_req(child), false, true);
 		}
 		// dsk = nd_sk(sk);
 		// inet = inet_sk(sk);
@@ -927,6 +935,7 @@ drop:
 
 	return 0;
 }
+
 // ktime_t start, end;
 // __u32 backlog_time = 0;
 int nd_handle_token_pkt(struct sk_buff *skb) {
@@ -1038,36 +1047,40 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 }
 
 
-// int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
-// 	struct nd_sock *dsk;
-// 	// struct inet_sock *inet;
-// 	// struct nd_peer *peer;
-// 	// struct iphdr *iph;
-// 	// struct ndhdr *dh;
-// 	struct vs_hdr *ah;
-// 	struct sock *sk;
-// 	int sdif = inet_sdif(skb);
-// 	bool refcounted = false;
-
-// 	if (!pskb_may_pull(skb, sizeof(struct vs_hdr))) {
-// 		kfree_skb(skb);		/* No space for header. */
-// 		return 0;
-// 	}
-// 	ah = vs_hdr(skb);
-// 	// sk = skb_steal_sock(skb);
-// 	// if(!sk) {
-// 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&ah), ah->source,
-//             ah->dest, sdif, &refcounted);
-//     // }
-
-//     if (refcounted) {
-//         sock_put(sk);
-//     }
-// 	sk->sk_state = ND_SENDER;
-// 	sk->sk_data_ready(sk);
-//  	kfree_skb(skb);
-// 	return 0;
-// }
+int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
+	// struct nd_sock *dsk;
+	// struct inet_sock *inet;
+	// struct nd_peer *peer;
+	// struct iphdr *iph;
+	// struct ndhdr *dh;
+	struct ndhdr *nh;
+	struct sock *sk;
+	int sdif = inet_sdif(skb);
+	bool refcounted = false;
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
+		kfree_skb(skb);		/* No space for header. */
+		return 0;
+	}
+	nh = nd_hdr(skb);
+	// sk = skb_steal_sock(skb);
+	// if(!sk) {
+	pr_info("read src port:%d\n", ntohs(nh->source));
+	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(nh), nh->source,
+            nh->dest, sdif, &refcounted);
+    // }
+	if(sk) {
+		if (refcounted) {
+			sock_put(sk);
+		}
+		sk->sk_state = ND_SENDER;
+		sk->sk_data_ready(sk);
+		kfree_skb(skb);
+		return 0;
+	} else {
+		printk("didn't find the socket\n");
+	}
+	return 0;
+}
 
 int nd_handle_fin_pkt(struct sk_buff *skb) {
 	struct nd_sock *dsk;
@@ -1199,7 +1212,7 @@ queue_and_out:
 		if (eaten > 0)
 			kfree_skb_partial(skb, fragstolen);
 		if (!sock_flag(sk, SOCK_DEAD)) {
-			nd_data_ready(sk);
+			sk->sk_data_ready(sk);
 		}
 		return 0;
 	}
@@ -1596,9 +1609,9 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		if(nh->type == DATA) {
 			need_bytes = nh->segment_length + sizeof(struct ndhdr) - skb->len;
 			if(need_bytes > 0) {
-				printk("reach here:%d\n", __LINE__);
-				printk("need bytes:%d\n", need_bytes);
-				printk("skb len:%d\n" , skb->len);
+				// printk("reach here:%d\n", __LINE__);
+				// printk("need bytes:%d\n", need_bytes);
+				// printk("skb len:%d\n" , skb->len);
 				ret = nd_split_and_merge(queue, skb, need_bytes);
 				if(ret == -ENOMEM) {
 					goto push_back;
@@ -1616,14 +1629,10 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 			nd_split(queue, skb, sizeof(struct ndhdr));
 		}
 		/* pass to the vs layer; local irq should be disabled */
-		// printk("get skb");
-		// iph = ip_hdr(skb);
-		// nh = nd_hdr(skb);
-		// printk("skb: ip src:%d\n", iph->saddr);
-		// printk("skb: ip dst:%d\n", iph->daddr);
-		// printk("skb: nh type:%d\n", nh->type);
-		// printk("skb: nh source:%d\n", nh->source);
-		// printk("skb: nh dst:%d\n", nh->dest);
+		// skb_dump(KERN_WARNING, skb, false);
+		iph = ip_hdr(skb);
+		nh = nd_hdr(skb);
+		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
 
@@ -1637,6 +1646,6 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 	}
 	return;
 push_back:
-	printk("push back skb\n");
+	// printk("push back skb\n");
 	skb_queue_head(queue, skb);
 }

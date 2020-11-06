@@ -196,8 +196,10 @@ void nd_conn_data_ready(struct sock *sk)
 	read_lock_bh(&sk->sk_callback_lock);
 	queue = sk->sk_user_data;
 	if (likely(queue && queue->rd_enabled) &&
-	    !test_bit(ND_CONN_Q_POLLING, &queue->flags))
-		queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	    !test_bit(ND_CONN_Q_POLLING, &queue->flags)) {
+			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+
+		}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
 
@@ -209,7 +211,7 @@ void nd_conn_write_space(struct sock *sk)
 	queue = sk->sk_user_data;
 	if (likely(queue && sk_stream_is_writeable(sk))) {
 		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
-		queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
@@ -230,7 +232,7 @@ void nd_conn_state_change(struct sock *sk)
 	case TCP_FIN_WAIT1:
 	case TCP_FIN_WAIT2:
         // this part might have issue
-        printk("TCP state change:%d\n", sk->sk_state);
+        pr_info("TCP state change:%d\n", sk->sk_state);
 		// nd_conn_error_recovery(&ctrl);
 		break;
 	default:
@@ -267,10 +269,10 @@ void nd_conn_queue_request(struct nd_conn_request *req,
 		queue->more_requests = !last;
 		ret = nd_conn_try_send(queue);
 		if(ret == -EAGAIN)
-		queue->more_requests = false;
+			queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
-	} else if (last) {
-		queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	} else if (last) {	
+		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	}
 }
 
@@ -543,7 +545,8 @@ nd_conn_fetch_request(struct nd_conn_queue *queue)
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 {
 	struct nd_conn_queue *queue = req->queue;
-	struct ndhdr *pdu = req->pdu;
+	// struct ndhdr *pdu = req->pdu;
+	/* it should be non-block */
 	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
 	struct kvec iov = {
 		.iov_base = req->pdu + req->offset,
@@ -562,15 +565,11 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 
 	// if (queue->hdr_digest && !req->offset)
 	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
-	printk("sendmsg\n");
-	printk("pdu offset:%lu\n", req->offset);
-	printk("pdu source:%u\n", ntohs(pdu->source));
 	ret = kernel_sendmsg(queue->sock, &msg, &iov, 1, iov.iov_len);
+
 	if (unlikely(ret <= 0))
 		return ret;
-	return 1;
 	if (req->offset + ret == req->data_len) {
-		printk("conn done send req\n");
 		nd_conn_done_send_req(queue);
 		return 1;
 	}
@@ -580,8 +579,8 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 
 int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 {
-	struct nd_conn_queue *queue = req->queue;
-	struct nd_conn_data_pdu *pdu = req->pdu;
+	// struct nd_conn_queue *queue = req->queue;
+	// struct nd_conn_data_pdu *pdu = req->pdu;
 	// u8 hdgst = nd_tcp_hdgst_len(queue);
 	// int len = sizeof(*pdu) - req->offset + hdgst;
 	// int ret;
@@ -620,7 +619,6 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 			return 0;
 	}
 	req = queue->request;
-
 	if (req->state == ND_CONN_SEND_CMD_PDU) {
 		ret = nd_conn_try_send_cmd_pdu(req);
 		if (ret <= 0)
@@ -660,32 +658,29 @@ void nd_conn_io_work(struct work_struct *w)
 	struct nd_conn_queue *queue =
 		container_of(w, struct nd_conn_queue, io_work);
 	unsigned long deadline = jiffies + msecs_to_jiffies(1);
-
+	int ret;
 	do {
 		bool pending = false;
 		int result;
-
-		if (mutex_trylock(&queue->send_mutex)) {
-			result = nd_conn_try_send(queue);
-			mutex_unlock(&queue->send_mutex);
-			if (result > 0)
-				pending = true;
-			else if (unlikely(result < 0))
-				break;
-		}
+		mutex_lock(&queue->send_mutex);
+		result = nd_conn_try_send(queue);
+		mutex_unlock(&queue->send_mutex);
+		if (result > 0)
+			pending = true;
+		else if (unlikely(result < 0))
+			break;
+		
 
 		// result = nvme_tcp_try_recv(queue);
 		// if (result > 0)
 		// 	pending = true;
 		// else if (unlikely(result < 0))
 		// 	return;
-
 		if (!pending)
 			return;
 
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
-
-	queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 }
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid, size_t queue_size)

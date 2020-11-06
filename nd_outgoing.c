@@ -160,25 +160,60 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	// int extra_bytes = 0;
 	struct inet_sock *inet = inet_sk(sk);
 	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
-	struct vs_sync_hdr* sync =  kzalloc(sizeof(struct vs_sync_hdr), GFP_KERNEL);
+	struct ndhdr* sync =  kzalloc(sizeof(struct ndhdr), GFP_KERNEL);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	req->pdu = sync;
-	req->data_len = sizeof(struct vs_sync_hdr);
+	req->data_len = sizeof(struct ndhdr);
+	req->offset = 0;
+	req->data_sent = 0;
 	// struct sk_buff* skb = __construct_control_skb(sk, 0);
 	// struct nd_flow_sync_hdr* fh;
-	struct ndhdr* dh; 
+	// struct ndhdr* dh; 
 	if(unlikely(!req || !sync)) {
 		return NULL;
 	}
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
-	dh = (struct ndhdr*) (&sync->common);
-	dh->len = htons(sizeof(struct vs_sync_hdr));
-	dh->type = SYNC;
-	dh->source = inet->inet_sport;
-	dh->dest = inet->inet_dport;
-	dh->check = 0;
-	dh->doff = (sizeof(struct vs_hdr)) << 2;
+	// dh = (struct ndhdr*) (&sync->common);
+	sync->len = htons(sizeof(struct ndhdr));
+	sync->type = SYNC;
+	sync->source = inet->inet_sport;
+	sync->dest = inet->inet_dport;
+	sync->check = 0;
+	sync->doff = (sizeof(struct ndhdr)) << 2;
+
+	// fh->flow_id = message_id;
+	// fh->flow_size = htonl(message_size);
+	// fh->start_time = start_time;
+	// extra_bytes = ND_HEADER_MAX_SIZE - length;
+	// if (extra_bytes > 0)
+	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
+	return req;
+}
+
+struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
+	// int extra_bytes = 0;
+	struct inet_sock *inet = inet_sk(sk);
+	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
+	struct ndhdr* sync =  kzalloc(sizeof(struct ndhdr), GFP_KERNEL);
+	req->state = ND_CONN_SEND_CMD_PDU;
+	req->pdu = sync;
+	req->data_len = sizeof(struct ndhdr);
+	// struct sk_buff* skb = __construct_control_skb(sk, 0);
+	// struct nd_flow_sync_hdr* fh;
+	// struct ndhdr* dh; 
+	if(unlikely(!req || !sync)) {
+		return NULL;
+	}
+	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
+	
+	// dh = (struct ndhdr*) (&sync->common);
+	sync->len = htons(sizeof(struct ndhdr));
+	sync->type = SYNC_ACK;
+	sync->source = inet->inet_sport;
+	sync->dest = inet->inet_dport;
+	sync->check = 0;
+	sync->doff = (sizeof(struct ndhdr)) << 2;
 	// fh->flow_id = message_id;
 	// fh->flow_size = htonl(message_size);
 	// fh->start_time = start_time;

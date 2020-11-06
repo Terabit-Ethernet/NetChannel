@@ -53,7 +53,7 @@ struct ndt_conn_queue {
 	struct llist_head	resp_list;
 	struct list_head	resp_send_list;
 	int			send_list_len;
-	struct nvmet_tcp_cmd	*snd_cmd;
+	struct nd_conn_request	*snd_request;
 
 	/* recv state */
 	int			offset;
@@ -61,7 +61,7 @@ struct ndt_conn_queue {
 	enum ndt_conn_recv_state rcv_state;
 	// struct nvmet_tcp_cmd	*cmd;
 	// union nvme_tcp_pdu	pdu;
-	struct vs_hdr vs_hdr;
+	// struct vs_hdr vs_hdr;
 	/* digest state */
 	bool			hdr_digest;
 	bool			data_digest;

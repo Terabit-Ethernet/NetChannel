@@ -108,15 +108,20 @@ struct nd_peer *nd_peer_find(struct nd_peertab *peertab, __be32 addr,
 	struct inet_sock *inet);
 
 /*ND incoming function*/
+void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue);
 bool nd_try_send_token(struct sock *sk);
 void nd_get_sack_info(struct sock *sk, struct sk_buff *skb);
 enum hrtimer_restart nd_new_epoch(struct hrtimer *timer);
 
 int nd_handle_data_pkt(struct sk_buff *skb);
-int nd_handle_flow_sync_pkt(struct sk_buff *skb);
+// int nd_handle_flow_sync_pkt(struct sk_buff *skb);
+int nd_handle_sync_pkt(struct sk_buff *skb);
+// int nd_handle_sync_pkt(struct sk_buff *skb);
 int nd_handle_token_pkt(struct sk_buff *skb);
 int nd_handle_fin_pkt(struct sk_buff *skb);
 int nd_handle_ack_pkt(struct sk_buff *skb);
+int nd_handle_sync_ack_pkt(struct sk_buff *skb);
+
 int nd_data_queue(struct sock *sk, struct sk_buff *skb);
 bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check);
 int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb);
@@ -127,10 +132,10 @@ int nd_clean_rtx_queue(struct sock *sk);
 
 enum hrtimer_restart nd_flow_wait_event(struct hrtimer *timer);
 void nd_flow_wait_handler(struct sock *sk);
-void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue);
 
 /*ND outgoing function*/
 struct nd_conn_request* construct_sync_req(struct sock* sk);
+struct nd_conn_request* construct_sync_ack_req(struct sock* sk);
 // struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
 // 	uint32_t message_size, __u64 start_time);
 struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority, __u32 prev_grant_nxt,

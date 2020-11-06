@@ -252,10 +252,10 @@ int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len) {
 
 int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
-	int ret;
+	int ret = 0;
 	lock_sock(sk);
 	nd_rps_record_flow(sk);
-	ret = nd_sendmsg_locked(sk, msg, len);
+	// ret = nd_sendmsg_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
 }
@@ -484,7 +484,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 
 bool nd_try_send_token(struct sock *sk) {
 	if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
-		struct nd_sock *dsk = nd_sk(sk);
+		// struct nd_sock *dsk = nd_sk(sk);
 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
 		// int available_space = nd_space(sk);
 		// if(grant_len > available_space || grant_len < )
@@ -850,46 +850,47 @@ int nd_v4_early_demux(struct sk_buff *skb)
 {
 	// struct net *net = dev_net(skb->dev);
 	// struct in_device *in_dev = NULL;
-	const struct iphdr *iph;
-	const struct ndhdr *uh;
-	struct sock *sk = NULL;
+	// const struct iphdr *iph;
+	// const struct ndhdr *uh;
+	// struct sock *sk = NULL;
 	// struct dst_entry *dst;
 	// int dif = skb->dev->ifindex;
-	int sdif = inet_sdif(skb);
+	// int sdif = inet_sdif(skb);
 	// int ours;
 
 	/* validate the packet */
 	// printk("early demux");
-	if(skb->pkt_type != PACKET_HOST) {
-		return 0;
-	}
-	if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct ndhdr)))
-		return 0;
+	return 0; 
+	// if(skb->pkt_type != PACKET_HOST) {
+	// 	return 0;
+	// }
+	// if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct ndhdr)))
+	// 	return 0;
 
-	iph = ip_hdr(skb);
-	uh = nd_hdr(skb);
+	// iph = ip_hdr(skb);
+	// uh = nd_hdr(skb);
 
-    // if (th->doff < sizeof(struct tcphdr) / 4)
-    //             return 0;
-    sk = __nd_lookup_established(dev_net(skb->dev), &nd_hashinfo,
-                                   iph->saddr, uh->source,
-                                   iph->daddr, ntohs(uh->dest),
-                                   skb->skb_iif, sdif);
+    // // if (th->doff < sizeof(struct tcphdr) / 4)
+    // //             return 0;
+    // sk = __nd_lookup_established(dev_net(skb->dev), &nd_hashinfo,
+    //                                iph->saddr, uh->source,
+    //                                iph->daddr, ntohs(uh->dest),
+    //                                skb->skb_iif, sdif);
 
-    if (sk) {
-            skb->sk = sk;
-            skb->destructor = sock_edemux;
-            if (sk_fullsock(sk)) {
-                    struct dst_entry *dst = READ_ONCE(sk->sk_rx_dst);
+    // if (sk) {
+    //         skb->sk = sk;
+    //         skb->destructor = sock_edemux;
+    //         if (sk_fullsock(sk)) {
+    //                 struct dst_entry *dst = READ_ONCE(sk->sk_rx_dst);
 
-                    if (dst)
-                            dst = dst_check(dst, 0);
-                    if (dst &&
-                        inet_sk(sk)->rx_dst_ifindex == skb->skb_iif)
-                            skb_dst_set_noref(skb, dst);
-            }
-    }
-	return 0;
+    //                 if (dst)
+    //                         dst = dst_check(dst, 0);
+    //                 if (dst &&
+    //                     inet_sk(sk)->rx_dst_ifindex == skb->skb_iif)
+    //                         skb_dst_set_noref(skb, dst);
+    //         }
+    // }
+	// return 0;
 }
 
 
@@ -908,14 +909,16 @@ int nd_rcv(struct sk_buff *skb)
 	if(dh->type == DATA) {
 		return nd_handle_data_pkt(skb);
 		// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
-	} else if (dh->type == NOTIFICATION) {
-		return nd_handle_flow_sync_pkt(skb);
+	} else if (dh->type == SYNC) {
+		return nd_handle_sync_pkt(skb);
 	} else if (dh->type == TOKEN) {
 		return nd_handle_token_pkt(skb);
 	} else if (dh->type == FIN) {
 		return nd_handle_fin_pkt(skb);
 	} else if (dh->type == ACK) {
 		return nd_handle_ack_pkt(skb);
+	} else if (dh->type == SYNC_ACK) {
+		return nd_handle_sync_ack_pkt(skb);
 	}
 	//  else if (dh->type == SYNC_ACK) {
 	// 	return nd_handle_sync_ack_pkt(skb);
@@ -952,8 +955,8 @@ void nd_destroy_sock(struct sock *sk)
 	test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_SENDER || sk->sk_state == ND_RECEIVER) {
-		printk("send ack pkt\n");
-		nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
+		printk("send fin pkt\n");
+		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}
 	printk("reach here:%d", __LINE__);
 	nd_set_state(sk, TCP_CLOSE);
