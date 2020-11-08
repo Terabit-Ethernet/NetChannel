@@ -164,7 +164,6 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
-	nd_conn_init_request(req, -1);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
 	req->pdu_len = sizeof(struct ndhdr);
