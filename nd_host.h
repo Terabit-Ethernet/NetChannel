@@ -12,6 +12,7 @@
 // #include <linux/blk-mq.h>
 #include <crypto/hash.h>
 #include <net/busy_poll.h>
+#include "uapi_linux_nd.h"
 
 extern struct nd_conn_ctrl* nd_ctrl;
 
@@ -29,6 +30,7 @@ enum nd_conn_send_state {
 	ND_CONN_SEND_H2C_PDU,
 	ND_CONN_SEND_DATA,
 	ND_CONN_SEND_DDGST,
+	ND_CONN_PDU_DONE,
 };
 
 enum nd_conn_queue_flags {
@@ -64,7 +66,8 @@ struct nd_conn_ctrl_options {
 
 struct nd_conn_request {
 	// struct nvme_request	req;
-	void			*pdu;
+	struct ndhdr	*hdr;
+	struct sk_buff	*skb;
 	struct nd_conn_queue	*queue;
 	u32			data_len;
 	u32			pdu_len;
@@ -138,12 +141,19 @@ struct nd_conn_queue {
 	// __le32			exp_ddgst;
 	// __le32			recv_ddgst;
 
-	// struct page_frag_cache	pf_cache;
+	struct page_frag_cache	pf_cache;
 
 	void (*state_change)(struct sock *);
 	void (*data_ready)(struct sock *);
 	void (*write_space)(struct sock *);
 };
+
+
+struct nd_conn_pdu {
+	struct ndhdr hdr;
+};
+
+int nd_conn_init_request(struct nd_conn_request *req, int queue_id);
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req); 
 int nd_conn_try_send_data_pdu(struct nd_conn_request *req);
 int nd_conn_try_send(struct nd_conn_queue *queue);

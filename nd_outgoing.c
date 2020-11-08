@@ -160,22 +160,24 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	// int extra_bytes = 0;
 	struct inet_sock *inet = inet_sk(sk);
 	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
-	struct ndhdr* sync =  kzalloc(sizeof(struct ndhdr), GFP_KERNEL);
+	struct ndhdr* sync;
+	if(unlikely(!req)) {
+		return NULL;
+	}
+	nd_conn_init_request(req, -1);
 	req->state = ND_CONN_SEND_CMD_PDU;
-	req->pdu = sync;
-	req->data_len = sizeof(struct ndhdr);
+	sync = req->hdr;
+	req->pdu_len = sizeof(struct ndhdr);
 	req->offset = 0;
 	req->data_sent = 0;
 	// struct sk_buff* skb = __construct_control_skb(sk, 0);
 	// struct nd_flow_sync_hdr* fh;
 	// struct ndhdr* dh; 
-	if(unlikely(!req || !sync)) {
-		return NULL;
-	}
+
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
 	// dh = (struct ndhdr*) (&sync->common);
-	sync->len = htons(sizeof(struct ndhdr));
+	sync->len = 0;
 	sync->type = SYNC;
 	sync->source = inet->inet_sport;
 	sync->dest = inet->inet_dport;
@@ -195,25 +197,32 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	// int extra_bytes = 0;
 	struct inet_sock *inet = inet_sk(sk);
 	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
-	struct ndhdr* sync =  kzalloc(sizeof(struct ndhdr), GFP_KERNEL);
-	req->state = ND_CONN_SEND_CMD_PDU;
-	req->pdu = sync;
-	req->data_len = sizeof(struct ndhdr);
+	struct ndhdr* sync;
+
 	// struct sk_buff* skb = __construct_control_skb(sk, 0);
 	// struct nd_flow_sync_hdr* fh;
 	// struct ndhdr* dh; 
-	if(unlikely(!req || !sync)) {
+	if(unlikely(!req)) {
 		return NULL;
 	}
+	nd_conn_init_request(req, -1);
+	req->state = ND_CONN_SEND_CMD_PDU;
+	sync = req->hdr;
+	req->pdu_len = sizeof(struct ndhdr);
+
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
 	// dh = (struct ndhdr*) (&sync->common);
-	sync->len = htons(sizeof(struct ndhdr));
+	sync->len = 0;
 	sync->type = SYNC_ACK;
 	sync->source = inet->inet_sport;
 	sync->dest = inet->inet_dport;
 	sync->check = 0;
 	sync->doff = (sizeof(struct ndhdr)) << 2;
+
+	printk("source:%d\n", ntohs(sync->source));
+	printk("dst:%d\n", ntohs(sync->dest));
+
 	// fh->flow_id = message_id;
 	// fh->flow_size = htonl(message_size);
 	// fh->start_time = start_time;

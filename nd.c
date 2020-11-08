@@ -60,6 +60,7 @@
 #include "uapi_linux_nd.h"
 // struct udp_table nd_table __read_mostly;
 // EXPORT_SYMBOL(nd_table);
+#include "nd_host.h"
 
 struct nd_peertab nd_peers_table;
 EXPORT_SYMBOL(nd_peers_table);
@@ -83,7 +84,6 @@ struct inet_hashinfo nd_hashinfo;
 EXPORT_SYMBOL(nd_hashinfo);
 #define MAX_ND_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
-
 
 void nd_rbtree_insert(struct rb_root *root, struct sk_buff *skb)
 {
@@ -190,72 +190,204 @@ int sk_wait_ack(struct sock *sk, long *timeo)
 }
 EXPORT_SYMBOL(sk_wait_ack);
 
+static int nd_push(struct sock *sk) {
+	struct inet_sock *inet = inet_sk(sk);
+	struct sk_buff *skb;
+	struct nd_sock *nsk = nd_sk(sk);
+	while((skb = skb_peek(&sk->sk_write_queue)) != NULL) {
+		/* construct nd_conn_request */
+		struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
+		struct ndhdr* hdr;
+	
+		nd_conn_init_request(req, -1);
+		req->state = ND_CONN_SEND_CMD_PDU;
+		req->pdu_len = sizeof(struct ndhdr) + skb->len;
+		req->data_len = skb->len;
+		hdr = req->hdr;
+	// struct sk_buff* skb = __construct_control_skb(sk, 0);
+	// struct nd_flow_sync_hdr* fh;
+	// struct ndhdr* dh; 
+	// if(unlikely(!req || !sync)) {
+	// 	return -N;
+	// }
+	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
+	
+	// dh = (struct ndhdr*) (&sync->common);
+		req->skb = skb;
+		hdr->len = htons(skb->len);
+		hdr->type = DATA;
+		hdr->source = inet->inet_sport;
+		hdr->dest = inet->inet_dport;
+		hdr->check = 0;
+		hdr->doff = (sizeof(struct ndhdr)) << 2;
+		hdr->seq = htonl(nsk->sender.write_seq);
+		skb_dequeue(&sk->sk_write_queue);
+			// kfree_skb(skb);
+		sk->sk_wmem_queued -= skb->len;
+		/*increment write seq */
+		nsk->sender.write_seq += skb->len;
+		/* queue the request */
+		nd_conn_queue_request(req, false, true);
+	}
+	return 0;
+}
 
-int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len) {
-	// DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
-	// int corkreq = up->corkflag || msg->msg_flags&MSG_MORE;
-	struct nd_sock *dsk = nd_sk(sk);
-	int sent_len = 0;
-	long timeo;
-	int flags;
+/* copy from kcm sendmsg */
+static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
+{
+	// struct nd_sock *nsk = nd_sk(sk);
+	struct sk_buff *skb = NULL;
+	size_t copy, copied = 0;
+	long timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+	/* SOCK DGRAM? */
+	int eor = (sk->sk_socket->type == SOCK_DGRAM) ?
+		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
+	int err = -EPIPE;
+	int i = 0;
+	/* Per tcp_sendmsg this should be in poll */
+	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
 
-	flags = msg->msg_flags;
-	if (sk->sk_state != ND_SENDER) {
-		return -ENOTCONN;
+	if (sk->sk_err)
+		goto out_error;
+
+	// if (nsk->seq_skb) {
+	// 	/* Previously opened message */
+	// 	head = nsk->seq_skb;
+	// 	skb = nd_tx_msg(head)->last_skb;
+	// 	goto start;
+	// }
+	// skb = nd_write_queue_tail(sk);
+	// if(skb) {
+	// 	goto start;
+	// }
+	/* Call the sk_stream functions to manage the sndbuf mem. */
+	// if (!sk_stream_memory_free(sk)) {
+	// 	nd_push(nsk);
+	// 	set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+	// 	err = sk_stream_wait_memory(sk, &timeo);
+	// 	if (err)
+	// 		goto out_error;
+	// }
+
+	// if (msg_data_left(msg)) {
+	// 	/* New message, alloc head skb */
+	// 	skb = alloc_skb(0, sk->sk_allocation);
+	// 	while (!skb) {
+	// 		nd_push(nsk);
+	// 		err = sk_stream_wait_memory(sk, &timeo);
+	// 		if (err)
+	// 			goto out_error;
+
+	// 		skb = alloc_skb(0, sk->sk_allocation);
+	// 	}
+
+	// 	skb = head;
+
+	// 	/* Set ip_summed to CHECKSUM_UNNECESSARY to avoid calling
+	// 	 * csum_and_copy_from_iter from skb_do_copy_data_nocache.
+	// 	 */
+	// 	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	// }
+
+	while (msg_data_left(msg)) {
+		bool merge = true;
+		struct page_frag *pfrag = sk_page_frag(sk);
+		if (!sk_page_frag_refill(sk, pfrag))
+			goto wait_for_memory;
+		skb = nd_write_queue_tail(sk);
+		if(!skb) 
+			goto create_new_skb;
+		i = skb_shinfo(skb)->nr_frags;
+		if (!skb_can_coalesce(skb, i, pfrag->page,
+			 pfrag->offset)) {
+			if (i == MAX_SKB_FRAGS) {
+				goto create_new_skb;
+			}
+			merge = false;
+		}
+		copy = min_t(int, msg_data_left(msg),
+			     pfrag->size - pfrag->offset);
+
+		if (!sk_wmem_schedule(sk, copy))
+			goto wait_for_memory;
+
+		err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
+					       pfrag->page,
+					       pfrag->offset,
+					       copy);
+		if (err)
+			goto out_error;
+		/* Update the skb. */
+		if (merge) {
+			skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
+		} else {
+			skb_fill_page_desc(skb, i, pfrag->page,
+					   pfrag->offset, copy);
+			get_page(pfrag->page);
+		}
+		pfrag->offset += copy;
+		copied += copy;
+		continue;
+
+create_new_skb:
+		if (!sk_stream_memory_free(sk)) {
+			set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+			goto wait_for_memory;
+		}
+		skb = alloc_skb(0, sk->sk_allocation);
+		if(!skb)
+			goto wait_for_memory;
+		__skb_queue_tail(&sk->sk_write_queue, skb);
+		continue;
+
+
+wait_for_memory:
+		nd_push(sk);
+		err = sk_stream_wait_memory(sk, &timeo);
+		if (err)
+			goto out_error;
 	}
 
-	/* the bytes from user larger than the flow size */
-	if (dsk->sender.write_seq >= dsk->total_length) {
-		timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
-		sk_wait_ack(sk, &timeo);
-		return -EMSGSIZE;
-	}
-
-	if (len + dsk->sender.write_seq > dsk->total_length) {
-		len = dsk->total_length - dsk->sender.write_seq;
-	}
-	if(sk_stream_wspace(sk) <= 0) {
-		timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
-		sk_stream_wait_memory(sk, &timeo);
-	}
-
-	sent_len = nd_fill_packets(sk, msg, len);
-	if(sent_len < 0)
-		return sent_len;
-	if(sent_len == 0) {
-		timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
-		sk_stream_wait_memory(sk, &timeo);
-	}
-	if(dsk->total_length < nd_params.short_flow_size) {
-		struct sk_buff *skb;
-		dsk->grant_nxt = dsk->total_length;
-		while((skb = skb_dequeue(&sk->sk_write_queue)) != NULL) {
-			nd_xmit_data(skb, dsk, false);
+	if (eor) {
+		bool not_busy = skb_queue_empty(&sk->sk_write_queue);
+		if(not_busy) {
+			nd_push(sk);
 		}
 	}
 
-	// if(sent_len == -ENOMEM) {
-	// 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
-	// 	sk_stream_wait_memory(sk, &timeo);
+	// ND_STATS_ADD(nsk->stats.tx_bytes, copied);
+
+	release_sock(sk);
+	return copied;
+
+out_error:
+	nd_push(sk);
+
+	// if (copied && sock->type == SOCK_SEQPACKET) {
+	// 	/* Wrote some bytes before encountering an
+	// 	 * error, return partial success.
+	// 	 */
+	// 	goto partial_message;
 	// }
-	/*temporary solution */
-	local_bh_disable();
-	bh_lock_sock(sk);
-	if(!skb_queue_empty(&sk->sk_write_queue) && 
-		dsk->grant_nxt >= ND_SKB_CB(nd_send_head(sk))->end_seq) {
- 		nd_write_timer_handler(sk);
-	} 
-	bh_unlock_sock(sk);
-	local_bh_enable();
-	return sent_len;
+
+	// if (head != nsk->seq_skb)
+	// 	kfree_skb(head);
+
+	err = sk_stream_error(sk, msg->msg_flags, err);
+
+	/* make sure we wake any epoll edge trigger waiter */
+	if (unlikely(skb_queue_len(&sk->sk_write_queue) == 0 && err == -EAGAIN))
+		sk->sk_write_space(sk);
+
+	return err;
 }
 
 int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	int ret = 0;
 	lock_sock(sk);
-	nd_rps_record_flow(sk);
-	// ret = nd_sendmsg_locked(sk, msg, len);
+	// nd_rps_record_flow(sk);
+	ret = nd_sendmsg_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
 }
@@ -947,7 +1079,7 @@ void nd_destroy_sock(struct sock *sk)
 	// struct udp_hslot* hslot = udp_hashslot(sk->sk_prot->h.udp_table, sock_net(sk),
 	// 				     nd_sk(sk)->nd_port_hash);
 	struct nd_sock *up = nd_sk(sk);
-	struct inet_sock *inet = inet_sk(sk);
+	// struct inet_sock *inet = inet_sk(sk);
 	struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
 	local_bh_disable();
 	bh_lock_sock(sk);

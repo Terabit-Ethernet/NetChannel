@@ -6,7 +6,11 @@ static struct workqueue_struct *nd_conn_wq;
 struct nd_conn_ctrl* nd_ctrl;
 // static struct blk_mq_ops nvme_tcp_mq_ops;
 // static struct blk_mq_ops nvme_tcp_admin_mq_ops;
-#include "uapi_linux_nd.h"
+
+static inline bool nd_conn_has_inline_data(struct nd_conn_request *req) {
+	struct ndhdr* hdr = req->hdr;
+	return hdr->type == DATA;
+}
 
 static inline int nd_conn_queue_id(struct nd_conn_queue *queue)
 {
@@ -15,9 +19,16 @@ static inline int nd_conn_queue_id(struct nd_conn_queue *queue)
 
 static inline void nd_conn_done_send_req(struct nd_conn_queue *queue)
 {
-	kfree(queue->request->pdu);
+	struct ndhdr* hdr = queue->request->hdr;
+	if(hdr->type == DATA) 
+		kfree_skb(queue->request->skb);
+	/* pdu doesn't have to be freed */
+	// kfree(queue->request->pdu);
+	// put_page(queue->request->hdr);
+	page_frag_free(queue->request->hdr);
 	kfree(queue->request);
 	queue->request = NULL;
+	
 }
 
 static inline bool nd_conn_queue_more(struct nd_conn_queue *queue)
@@ -26,6 +37,25 @@ static inline bool nd_conn_queue_more(struct nd_conn_queue *queue)
 		!llist_empty(&queue->req_list) || queue->more_requests;
 }
 
+
+int nd_conn_init_request(struct nd_conn_request *req, int queue_id)
+{
+	struct nd_conn_queue *queue = NULL;
+	if(queue_id == -1) {
+		queue = &nd_ctrl->queues[1];
+	} else {
+		queue =  &nd_ctrl->queues[queue_id];
+	}
+	req->hdr = page_frag_alloc(&queue->pf_cache,
+		sizeof(struct ndhdr), GFP_KERNEL | __GFP_ZERO);
+	if (!req->hdr){
+		pr_warn("WARNING: fail to allocat page \n");
+		return -ENOMEM;
+	}
+
+	req->queue = queue;
+	return 0;
+}
 
 void nd_conn_restore_sock_calls(struct nd_conn_queue *queue)
 {
@@ -545,32 +575,36 @@ nd_conn_fetch_request(struct nd_conn_queue *queue)
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 {
 	struct nd_conn_queue *queue = req->queue;
-	// struct ndhdr *pdu = req->pdu;
+	struct ndhdr *hdr = req->hdr;
+	bool inline_data = nd_conn_has_inline_data(req);
 	/* it should be non-block */
-	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
-	struct kvec iov = {
-		.iov_base = req->pdu + req->offset,
-		.iov_len = req->data_len - req->offset
-	};
-	// bool inline_data = nvme_tcp_has_inline_data(req);
-	// u8 hdgst = nvme_tcp_hdgst_len(queue);
-	// int len = sizeof(*pdu) + hdgst - req->offset;
-	// int flags = MSG_DONTWAIT;
+	int flags = MSG_DONTWAIT | (inline_data ? MSG_MORE : MSG_EOR);
+	int len = sizeof(*hdr) - req->offset;
 	int ret;
 
-	if (nd_conn_queue_more(queue))
-		msg.msg_flags |= MSG_MORE;
-	else
-		msg.msg_flags |= MSG_EOR;
+	printk("nd_conn_try_send_cmd_pdu: type:%d\n", hdr->type);
+	ret = kernel_sendpage(queue->sock, virt_to_page(hdr),
+			offset_in_page(hdr) + req->offset, len,  flags);
 
-	// if (queue->hdr_digest && !req->offset)
-	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
-	ret = kernel_sendmsg(queue->sock, &msg, &iov, 1, iov.iov_len);
+	printk("pdu->source:%d\n", ntohs(hdr->source));
+	printk("pdu->dest:%d\n", ntohs(hdr->dest));
+	printk("ret :%d\n", ret);
 
-	if (unlikely(ret <= 0))
+	if (unlikely(ret <= 0)) {
 		return ret;
-	if (req->offset + ret == req->data_len) {
-		nd_conn_done_send_req(queue);
+	}
+	len -= ret;
+	printk("len:%d\n", len);
+	if (!len) {
+		if(inline_data) {
+			printk("inline data\n");
+			req->state = ND_CONN_SEND_DATA;
+			/* initialize the sending state */
+		} else {
+			printk("free done request\n");
+			req->state = ND_CONN_PDU_DONE;
+			// nd_conn_done_send_req(queue);
+		}
 		return 1;
 	}
 	req->offset += ret;
@@ -623,10 +657,11 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 		ret = nd_conn_try_send_cmd_pdu(req);
 		if (ret <= 0)
 			goto done;
-		// if (!nvme_tcp_has_inline_data(req))
-		// 	return ret;
+		if (req->state == ND_CONN_PDU_DONE)
+			goto clean;
 	}
 
+	
 	if (req->state == ND_CONN_SEND_H2C_PDU) {
 		ret = nd_conn_try_send_data_pdu(req);
 		if (ret <= 0)
@@ -638,7 +673,8 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 	// 	if (ret <= 0)
 	// 		goto done;
 	// }
-
+clean:
+	nd_conn_done_send_req(queue);
 	// if (req->state == NVME_TCP_SEND_DDGST)
 	// 	ret = nvme_tcp_try_send_ddgst(req);
 done:

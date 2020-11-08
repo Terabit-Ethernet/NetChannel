@@ -382,7 +382,7 @@ static int __init nd_load(void) {
                 pr_err("failed to allocate host side\n");
                 goto out_cleanup;
         }
-        nd_test_start();
+        // nd_test_start();
         return 0;
 
 out_cleanup:

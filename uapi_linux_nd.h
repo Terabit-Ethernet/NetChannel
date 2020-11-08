@@ -81,7 +81,7 @@ struct ndhdr {
 	 */
 	__be32 seq;
 	
-	__be32 segment_length;
+	__be32 reserved;
 
 	/**
 	 * @doff: High order 4 bits holds the number of 4-byte chunks in a

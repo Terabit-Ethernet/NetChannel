@@ -883,8 +883,8 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 	fh =  nd_hdr(skb);
 	sk = skb_steal_sock(skb);
 	if(!sk) {
-	// printk("fh->source:%d\n", fh->source);
-	// printk("fh->dest:%d\n", fh->dest);
+	printk("fh->source:%d\n", ntohs(fh->source));
+	printk("fh->dest:%d\n", ntohs(fh->dest));
 	// printk ("dev_net(skb_dst(skb)->dev): %d \n",(skb_dst(skb) == NULL));
 	// printk("sdif:%d\n", sdif);
 		sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(fh), fh->source,
@@ -1065,6 +1065,8 @@ int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
 	pr_info("read src port:%d\n", ntohs(nh->source));
+	pr_info("read dst port:%d\n", ntohs(nh->dest));
+
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(nh), nh->source,
             nh->dest, sdif, &refcounted);
     // }
@@ -1607,7 +1609,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		nh = nd_hdr(skb);
 		/* this layer could do sort of GRO stuff later */
 		if(nh->type == DATA) {
-			need_bytes = nh->segment_length + sizeof(struct ndhdr) - skb->len;
+			need_bytes = nh->len + sizeof(struct ndhdr) - skb->len;
 			if(need_bytes > 0) {
 				// printk("reach here:%d\n", __LINE__);
 				// printk("need bytes:%d\n", need_bytes);
@@ -1622,17 +1624,21 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 				// printk("reach here:%d\n", __LINE__);
 				// printk("need bytes:%d\n", need_bytes);
 				// printk("skb len:%d\n" , skb->len);
-				nd_split(queue, skb, nh->segment_length + sizeof(struct ndhdr));
+				nd_split(queue, skb, nh->len + sizeof(struct ndhdr));
 			}
 		}else {
 			/* this split should always be suceessful */
 			nd_split(queue, skb, sizeof(struct ndhdr));
 		}
 		/* pass to the vs layer; local irq should be disabled */
-		// skb_dump(KERN_WARNING, skb, false);
+		skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
+		printk("nd_hdr type :%d\n", nh->type);
+		printk("nd_hdr type :%d\n", ntohs(nh->source));
+		printk("nd_hdr type :%d\n", ntohs(nh->dest));
+
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
 
