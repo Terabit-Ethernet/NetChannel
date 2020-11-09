@@ -81,7 +81,7 @@ struct ndhdr {
 	 */
 	__be32 seq;
 	
-	__be32 reserved;
+	// __be32 reserved;
 
 	/**
 	 * @doff: High order 4 bits holds the number of 4-byte chunks in a
@@ -93,17 +93,17 @@ struct ndhdr {
 	/** @type: One of the values of &enum packet_type. */
 	__u8 type;
 
-	/**
-	 * @gro_count: value on the wire is undefined. Used only by
-	 * nd_offload.c (it counts the total number of packets aggregated
-	 * into this packet, including the top-level packet). Unused for now
-	 */
-	__u16 gro_count;
+	// /**
+	//  * @gro_count: value on the wire is undefined. Used only by
+	//  * nd_offload.c (it counts the total number of packets aggregated
+	//  * into this packet, including the top-level packet). Unused for now
+	//  */
+	// __u16 gro_count;
 	
-	/**
-	 * @checksum: not used by Homa, but must occupy the same bytes as
-	 * the checksum in a TCP header (TSO may modify this?).*/
-	__be16 check;
+	// /**
+	//  * @checksum: not used by Homa, but must occupy the same bytes as
+	//  * the checksum in a TCP header (TSO may modify this?).*/
+	// __be16 check;
 
 	__be16 len;
 	// *

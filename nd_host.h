@@ -69,10 +69,12 @@ struct nd_conn_request {
 	struct ndhdr	*hdr;
 	struct sk_buff	*skb;
 	struct nd_conn_queue	*queue;
-	u32			data_len;
-	u32			pdu_len;
-	u32			pdu_sent;
+	// u32			data_len;
+	// u32			pdu_len;
+	// u32			pdu_sent;
+	
 	u16			ttag;
+
 	struct list_head	entry;
 	struct llist_node	lentry;
 	// __le32			ddgst;
@@ -83,6 +85,8 @@ struct nd_conn_request {
 	/* send state */
 	size_t			offset;
 	size_t			data_sent;
+	size_t			frag_offset;
+	size_t			fragidx;
 	enum nd_conn_send_state state;
 };
 

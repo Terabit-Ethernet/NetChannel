@@ -548,40 +548,40 @@ int nd_clean_rtx_queue(struct sock *sk)
 }
 
 // check flow finished at receiver; assuming holding user lock and local bh is disabled
-static void nd_check_flow_finished_at_receiver(struct nd_sock *dsk) {
-	if(!dsk->receiver.finished_at_receiver && dsk->receiver.rcv_nxt == dsk->total_length) {
-		struct sock* sk = (struct sock*) dsk;
-		struct inet_sock *inet = inet_sk(sk);
-		struct rcv_core_entry *entry = &rcv_core_tab.table[dsk->core_id];
+// static void nd_check_flow_finished_at_receiver(struct nd_sock *dsk) {
+// 	if(!dsk->receiver.finished_at_receiver && dsk->receiver.rcv_nxt == dsk->total_length) {
+// 		struct sock* sk = (struct sock*) dsk;
+// 		struct inet_sock *inet = inet_sk(sk);
+// 		struct rcv_core_entry *entry = &rcv_core_tab.table[dsk->core_id];
 
-		dsk->receiver.finished_at_receiver = true;
-		if(dsk->receiver.flow_finish_wait) {
-			hrtimer_cancel(&dsk->receiver.flow_wait_timer);
-			test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
-			dsk->receiver.flow_finish_wait = false;
-		} 
-		// printk("send fin pkt\n");
-		printk("dsk->in_flight:%d\n", atomic_read(&dsk->receiver.in_flight_bytes));
-		printk("dentry->remaining_tokens:%d\n", atomic_read(&entry->remaining_tokens));
-		atomic_sub(atomic_read(&dsk->receiver.in_flight_bytes), &entry->remaining_tokens);
-		sk->sk_prot->unhash(sk);
-		/* !(sk->sk_userlocks & SOCK_BINDPORT_LOCK) may need later*/
-		if (nd_sk(sk)->icsk_bind_hash) {
-			printk("put port\n");
-			nd_put_port(sk);
-		} else {
-			printk("userlook and SOCK_BINDPORT_LOCK:%d\n", !(sk->sk_userlocks & SOCK_BINDPORT_LOCK));
-			printk("cannot put port\n");
-		}
-		/* remove the socket from scheduing */
-		nd_unschedule_sock(dsk);
-		nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
-		if(atomic_read(&entry->remaining_tokens) <= nd_params.control_pkt_bdp / 2) {
-			flowlet_done_event(&entry->flowlet_done_timer);
-		}
-	}
+// 		dsk->receiver.finished_at_receiver = true;
+// 		if(dsk->receiver.flow_finish_wait) {
+// 			hrtimer_cancel(&dsk->receiver.flow_wait_timer);
+// 			test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
+// 			dsk->receiver.flow_finish_wait = false;
+// 		} 
+// 		// printk("send fin pkt\n");
+// 		printk("dsk->in_flight:%d\n", atomic_read(&dsk->receiver.in_flight_bytes));
+// 		printk("dentry->remaining_tokens:%d\n", atomic_read(&entry->remaining_tokens));
+// 		atomic_sub(atomic_read(&dsk->receiver.in_flight_bytes), &entry->remaining_tokens);
+// 		sk->sk_prot->unhash(sk);
+// 		/* !(sk->sk_userlocks & SOCK_BINDPORT_LOCK) may need later*/
+// 		if (nd_sk(sk)->icsk_bind_hash) {
+// 			printk("put port\n");
+// 			nd_put_port(sk);
+// 		} else {
+// 			printk("userlook and SOCK_BINDPORT_LOCK:%d\n", !(sk->sk_userlocks & SOCK_BINDPORT_LOCK));
+// 			printk("cannot put port\n");
+// 		}
+// 		/* remove the socket from scheduing */
+// 		nd_unschedule_sock(dsk);
+// 		nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
+// 		if(atomic_read(&entry->remaining_tokens) <= nd_params.control_pkt_bdp / 2) {
+// 			flowlet_done_event(&entry->flowlet_done_timer);
+// 		}
+// 	}
 
-}
+// }
 /* If we update dsk->receiver.rcv_nxt, also update dsk->receiver.bytes_received 
  * and send ack pkt if the flow is finished */
 static void nd_rcv_nxt_update(struct nd_sock *dsk, u32 seq)
@@ -594,10 +594,10 @@ static void nd_rcv_nxt_update(struct nd_sock *dsk, u32 seq)
 	dsk->receiver.bytes_received += delta;
 	WRITE_ONCE(dsk->receiver.rcv_nxt, seq);
 	// printk("update the seq:%d\n", dsk->receiver.rcv_nxt);
-	if(dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch) {
-		nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
-		dsk->receiver.last_ack = dsk->receiver.rcv_nxt;
-	}
+	// if(dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch) {
+	// 	// nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
+	// 	dsk->receiver.last_ack = dsk->receiver.rcv_nxt;
+	// }
 }
 
 static void nd_drop(struct sock *sk, struct sk_buff *skb)
@@ -607,7 +607,7 @@ static void nd_drop(struct sock *sk, struct sk_buff *skb)
 }
 
 static void nd_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
-                           const struct nd_data_hdr *dh)
+                           const struct ndhdr *dh)
 {
         /* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
          * barrier() makes sure compiler wont play fool^Waliasing games.
@@ -615,10 +615,10 @@ static void nd_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
         memmove(&ND_SKB_CB(skb)->header.h4, IPCB(skb),
                 sizeof(struct inet_skb_parm));
         barrier();
-        ND_SKB_CB(skb)->seq = ntohl(dh->seg.offset);
+        ND_SKB_CB(skb)->seq = ntohl(dh->seq);
         // printk("skb len:%d\n", skb->len);
         // printk("segment length:%d\n", ntohl(dh->seg.segment_length));
-        ND_SKB_CB(skb)->end_seq = (ND_SKB_CB(skb)->seq + skb->len - (dh->common.doff / 4 + sizeof(struct data_segment)));
+        ND_SKB_CB(skb)->end_seq = ND_SKB_CB(skb)->seq + skb->len - dh->doff / 4;
         // TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
         // TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);
         // TCP_SKB_CB(skb)->tcp_tw_isn = 0;
@@ -881,16 +881,16 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 		goto drop;		/* No space for header. */
 	}
 	fh =  nd_hdr(skb);
-	sk = skb_steal_sock(skb);
-	if(!sk) {
-	printk("fh->source:%d\n", ntohs(fh->source));
-	printk("fh->dest:%d\n", ntohs(fh->dest));
+	// sk = skb_steal_sock(skb);
+	// if(!sk) {
+		// printk("fh->source:%d\n", ntohs(fh->source));
+		// printk("fh->dest:%d\n", ntohs(fh->dest));
 	// printk ("dev_net(skb_dst(skb)->dev): %d \n",(skb_dst(skb) == NULL));
 	// printk("sdif:%d\n", sdif);
-		sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(fh), fh->source,
-				fh->dest, sdif, &refcounted);
+	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(fh), fh->source,
+		fh->dest, sdif, &refcounted);
 		// sk = __nd4_lib_lookup_skb(skb, fh->common.source, fh->common.dest, &nd_table);
-	}
+	// }
 	if(sk) {
 		child = nd_conn_request(sk, skb);
 		if(child) {
@@ -906,24 +906,6 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 			/* ToDo: sync can be true; */
 			nd_conn_queue_request(construct_sync_ack_req(child), false, true);
 		}
-		// dsk = nd_sk(sk);
-		// inet = inet_sk(sk);
-		// iph = ip_hdr(skb);
-
-		// peer = nd_peer_find(&nd_peers_table, iph->saddr, inet);
-		// printk("message size:%d\n", fh->message_size);
-		// msg = nd_message_in_init(peer, dsk, fh->message_id, fh->message_size, fh->common.source);
-		// slot = nd_message_in_bucket(dsk, fh->message_id);
-		// spin_lock_bh(&slot->lock);
-		// add_nd_message_in(dsk, msg);
-		// spin_unlock_bh(&slot->lock);
-		// dsk->unsolved += 1;
-		// printk("msg address: %p LINE:%d\n", msg, __LINE__);
-		// printk("fh->message_id:%d\n", msg->id);
-		// printk("fh->message_size:%d\n", msg->total_length);
-		// printk("source port: %u\n", fh->common.source);
-		// printk("dest port: %u\n", fh->common.dest);
-		// printk("socket is NULL?: %d\n", sk == NULL);
 	}
 
 
@@ -1071,12 +1053,18 @@ int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
             nh->dest, sdif, &refcounted);
     // }
 	if(sk) {
+		bh_lock_sock(sk);
+		if(!sock_owned_by_user(sk)) {
+			sk->sk_state = ND_SENDER;
+			sk->sk_data_ready(sk);
+			kfree_skb(skb);
+		} else {
+			nd_add_backlog(sk, skb, true);
+		}
+		bh_unlock_sock(sk);
 		if (refcounted) {
 			sock_put(sk);
 		}
-		sk->sk_state = ND_SENDER;
-		sk->sk_data_ready(sk);
-		kfree_skb(skb);
 		return 0;
 	} else {
 		printk("didn't find the socket\n");
@@ -1159,19 +1147,19 @@ int nd_data_queue(struct sock *sk, struct sk_buff *skb)
 		nd_rmem_free_skb(sk, skb);
 		return 0;
 	}
-	if(atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf) {
-		struct inet_sock *inet = inet_sk(sk);
-	    printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
-	    printk("inet sk dport:%d\n", ntohs(inet->inet_dport));
-	    printk("discard packet due to memory:%d\n", __LINE__);
-		sk_drops_add(sk, skb);
-		kfree_skb(skb);
-		return 0;
+	if(WARN_ON(atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf)) {
+		// struct inet_sock *inet = inet_sk(sk);
+	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
+	    // printk("inet sk dport:%d\n", ntohs(inet->inet_dport));
+	    // printk("discard packet due to memory:%d\n", __LINE__);
+		// sk_drops_add(sk, skb);
+		// kfree_skb(skb);
+		// return 0;
 	}
 	atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 
 	// skb_dst_drop(skb);
-	__skb_pull(skb, (nd_hdr(skb)->doff >> 2)+ sizeof(struct data_segment));
+	__skb_pull(skb, nd_hdr(skb)->doff >> 2);
 	// printk("handle packet data queue?:%d\n", ND_SKB_CB(skb)->seq);
 
 	/*  Queue data for delivery to the user.
@@ -1284,12 +1272,11 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
  * shut down; the caller should not access the RPC anymore. Note: this method
  * may change the RPC's state to RPC_READY.
  */
- ktime_t start,end;
- __u64 total_bytes;
+
 int nd_handle_data_pkt(struct sk_buff *skb)
 {
 	struct nd_sock *dsk;
-	struct nd_data_hdr *dh;
+	struct ndhdr *dh;
 	struct sock *sk;
 	struct iphdr *iph;
 	int sdif = inet_sdif(skb);
@@ -1297,25 +1284,18 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	bool refcounted = false;
 	bool discard = false;
 	// printk("receive data pkt\n");
-	if (!pskb_may_pull(skb, sizeof(struct nd_data_hdr)))
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr)))
 		goto drop;		/* No space for header. */
-	dh =  nd_data_hdr(skb);
+	dh =  nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
-	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&dh->common), dh->common.source,
-            dh->common.dest, sdif, &refcounted);
+	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(dh), dh->source,
+            dh->dest, sdif, &refcounted);
     if(!sk)
     	goto drop;
+	
     // }
-    // if(total_bytes == 0) {
-    // 	start = ktime_get();
-    // }
-    // total_bytes += skb->len;
-    // if(total_bytes > 300000000) {
-    // 	end = ktime_get();
-    // 	printk("throughput:%llu\n", total_bytes * 8 * 1000000 / ktime_to_us(ktime_sub(end, start)));
-    // 	total_bytes = 0;
-    // }
+
 	nd_v4_fill_cb(skb, iph, dh);
 	// printk("packet hash %u\n", skb->hash);
 	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
@@ -1323,26 +1303,25 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	// printk("dport:%d\n", ntohs(inet_sk(sk)->inet_dport));
 	// printk("skb seq:%u\n", ND_SKB_CB(skb)->seq);
 	// printk("skb address:%p\n", skb);
+	printk("receive data pkt\n");
 	if(sk && sk->sk_state == ND_RECEIVER) {
 		dsk = nd_sk(sk);
 		iph = ip_hdr(skb);
  		bh_lock_sock(sk);
 
- 		atomic_sub(ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq, &dsk->receiver.in_flight_bytes);
- 		if(atomic_read(&dsk->receiver.in_flight_bytes) < 0) {
- 			atomic_set(&dsk->receiver.in_flight_bytes, 0);
- 		}
         // ret = 0;
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
         if (!sock_owned_by_user(sk)) {
 			/* current place to set rxhash for RFS/RPS */
 			// printk("skb->hash:%u\n", skb->hash);
-		 	sock_rps_save_rxhash(sk, skb);
+		 	// sock_rps_save_rxhash(sk, skb)
+			 printk("put into the data queue\n");
             nd_data_queue(sk, skb);
-			nd_check_flow_finished_at_receiver(dsk);;
+			// nd_check_flow_finished_at_receiver(dsk);;
         } else {
         	// printk("add to backlog\n");
-            if (nd_add_backlog(sk, skb, false)) {
+			/* omit check for now */
+            if (nd_add_backlog(sk, skb, true)) {
             	discard = true;
                 // goto discard_and_relse;
             }
@@ -1352,43 +1331,6 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		discard = true;
 	}
 	
-
-	if (!dh->free_token && sk &&  sk->sk_state == ND_RECEIVER) {
-		dsk = nd_sk(sk);
-		int remaining_tokens = 0;
-		struct rcv_core_entry *entry = &rcv_core_tab.table[dsk->core_id];
-		// printk("remaining_tokens:%d\n", atomic_read(&entry->remaining_tokens));
-		// printk("core id:%d\n", dsk->core_id);
-		// printk("process core id:%d\n", raw_smp_processor_id());
-		// printk("entry address:%p\n", entry);
-
-		remaining_tokens = atomic_sub_return( ND_SKB_CB(skb)->end_seq - 
-			ND_SKB_CB(skb)->seq, &entry->remaining_tokens);
-		// if(ND_SKB_CB(skb)->end_seq == dsk->total_length) {
-		// 	printk("remaining_tokens:%d\n", );
-		// }
-
-		if(remaining_tokens < 0) {
-			remaining_tokens = 0;
-			atomic_set(&entry->remaining_tokens, 0);
-		}
-		// printk("remaining_tokens variable:%d\n", remaining_tokens);
-		// printk("remaining_tokens of core 15:%d\n", atomic_read(&rcv_core_tab.table[15].remaining_tokens));
-
-		// printk("cpu core:%d\n", dsk->core_id);
-		// printk("remaining_tokens:%d\n", atomic_read(&entry->remaining_tokens));
-		if(atomic_read(&entry->remaining_tokens) <= nd_params.control_pkt_bdp / 2) {
-			// spin_lock_bh(&entry->lock);
-			// printk("call flowlet done event here:%d\n", __LINE__);
-			// printk("remaining_tokens of core 15:%d\n", atomic_read(&rcv_core_tab.table[15].remaining_tokens));
-			// printk("entry address:%p\n", entry);
-
-			flowlet_done_event(&entry->flowlet_done_timer);
-			// spin_unlock_bh(&entry->lock);
-		}
-
-	} 
-
 	if (discard) {
 	    printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
 	    printk("discard packet:%d\n", __LINE__);
@@ -1430,33 +1372,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	// printk("backlog rcv\n");
 
 	if(dh->type == DATA) {
-		// printk("backlog handling\n");
 		nd_data_queue(sk, skb);
-		// spin_lock_bh(&sk->sk_lock.slock);
-		local_bh_disable();
-		nd_check_flow_finished_at_receiver(dsk);
-		// if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
-		// 	printk("send token");
-		// }
-		local_bh_enable();
-		if(!dsk->receiver.finished_at_receiver)
-			nd_try_send_token(sk);
-
-		// spin_unlock_bh(&sk->sk_lock.slock);
-		if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
-			bool push_back = false;
-			struct rcv_core_entry *entry = &rcv_core_tab.table[dsk->core_id];
-			// spin_lock_bh(&sk->sk_lock.slock);
-			if(dsk->receiver.rcv_nxt >= dsk->prev_grant_nxt && nd_space(sk) > 0) {
-				push_back = true;
-				// printk("handle in backlogv\n");
-				clear_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags);
-				local_bh_disable();
-				nd_update_and_schedule_sock(dsk);
-				flowlet_done_event(&entry->flowlet_done_timer);
-				local_bh_enable();
-			}
-		}
 		return 0;
 		// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
 	} else if (dh->type == FIN) {
@@ -1468,6 +1384,9 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 		sk->sk_data_ready(sk);
 	} else if (dh->type == ACK) {
 		WARN_ON(true);
+	} else if (dh->type == SYNC_ACK) {
+		sk->sk_state = ND_SENDER;
+		sk->sk_data_ready(sk);
 	}
 
 	// else if (dh->type == TOKEN) {

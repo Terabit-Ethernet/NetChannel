@@ -114,13 +114,16 @@ void nd_release_cb(struct sock *sk)
 		// __sock_put(sk);
 	}
 	if (flags & NDF_TOKEN_TIMER_DEFERRED) {
+		WARN_ON(true);
 		nd_token_timer_defer_handler(sk);
 		// __sock_put(sk);
 	}
 	if (flags & NDF_RTX_DEFERRED) {
+		WARN_ON(true);
 		nd_write_timer_handler(sk);
 	}
 	if (flags & NDF_WAIT_DEFERRED) {
+		WARN_ON(true);
 		nd_flow_wait_handler(sk);
 	}
 	// if (flags & TCPF_MTU_REDUCED_DEFERRED) {
@@ -164,9 +167,10 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
+	nd_conn_init_request(req, -1);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
-	req->pdu_len = sizeof(struct ndhdr);
+	// req->pdu_len = sizeof(struct ndhdr);
 	req->offset = 0;
 	req->data_sent = 0;
 	// struct sk_buff* skb = __construct_control_skb(sk, 0);
@@ -180,7 +184,7 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	sync->type = SYNC;
 	sync->source = inet->inet_sport;
 	sync->dest = inet->inet_dport;
-	sync->check = 0;
+	// sync->check = 0;
 	sync->doff = (sizeof(struct ndhdr)) << 2;
 
 	// fh->flow_id = message_id;
@@ -207,7 +211,7 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	nd_conn_init_request(req, -1);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
-	req->pdu_len = sizeof(struct ndhdr);
+	// req->pdu_len = sizeof(struct ndhdr);
 
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
@@ -216,7 +220,7 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	sync->type = SYNC_ACK;
 	sync->source = inet->inet_sport;
 	sync->dest = inet->inet_dport;
-	sync->check = 0;
+	// sync->check = 0;
 	sync->doff = (sizeof(struct ndhdr)) << 2;
 
 	printk("source:%d\n", ntohs(sync->source));
@@ -511,7 +515,7 @@ int nd_xmit_control(struct sk_buff* skb, struct sock *sk, int dport)
 	dh = nd_hdr(skb);
 	dh->source = inet->inet_sport;
 	dh->dest = inet->inet_dport;
-	dh->check = 0;
+	// dh->check = 0;
 	dh->doff = (sizeof(struct ndhdr)) << 2;
 	// inet->tos = IPTOS_LOWDELAY | IPTOS_PREC_NETCONTROL;
 	skb->sk = sk;
@@ -661,7 +665,7 @@ void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 	skb_dst_set(skb, __sk_dst_get(sk));
 	skb->ip_summed = CHECKSUM_PARTIAL;
 	skb->csum_start = skb_transport_header(skb) - skb->head;
-	skb->csum_offset = offsetof(struct ndhdr, check);
+	// skb->csum_offset = offsetof(struct ndhdr, check);
 	h->common.source = inet->inet_sport;
 	h->common.dest = inet->inet_dport;
 	// h->common.len = htons(ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq);

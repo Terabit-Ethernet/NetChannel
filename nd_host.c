@@ -586,9 +586,9 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 	ret = kernel_sendpage(queue->sock, virt_to_page(hdr),
 			offset_in_page(hdr) + req->offset, len,  flags);
 
-	printk("pdu->source:%d\n", ntohs(hdr->source));
-	printk("pdu->dest:%d\n", ntohs(hdr->dest));
-	printk("ret :%d\n", ret);
+	// printk("pdu->source:%d\n", ntohs(hdr->source));
+	// printk("pdu->dest:%d\n", ntohs(hdr->dest));
+	// printk("ret :%d\n", ret);
 
 	if (unlikely(ret <= 0)) {
 		return ret;
@@ -613,32 +613,56 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 
 int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 {
-	// struct nd_conn_queue *queue = req->queue;
-	// struct nd_conn_data_pdu *pdu = req->pdu;
-	// u8 hdgst = nd_tcp_hdgst_len(queue);
-	// int len = sizeof(*pdu) - req->offset + hdgst;
-	// int ret;
+	struct nd_conn_queue *queue = req->queue;
+	struct sk_buff *skb = req->skb;
+	// unsigned int sent = req->sent;
+	unsigned short frag_offset = req->frag_offset, 
+		fragidx = req->fragidx;
+	int ret = 0;
+	int flags = MSG_DONTWAIT;
+ 	skb_frag_t *frag;
 
-	// if (queue->hdr_digest && !req->offset)
-	// 	nvme_tcp_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
-
-	// ret = kernel_sendpage(queue->sock, virt_to_page(pdu),
-	// 		offset_in_page(pdu) + req->offset, len,
-	// 		MSG_DONTWAIT | MSG_MORE | MSG_SENDPAGE_NOTLAST);
-	// if (unlikely(ret <= 0))
-	// 	return ret;
-
-	// len -= ret;
-	// if (!len) {
-	// 	req->state = NVME_TCP_SEND_DATA;
-	// 	if (queue->data_digest)
-	// 		crypto_ahash_init(queue->snd_hash);
-	// 	if (!req->data_sent)
-	// 		nvme_tcp_init_iter(req, WRITE);
-	// 	return 1;
-	// }
-	// req->offset += ret;
-
+	while(true) {
+		frag = &skb_shinfo(skb)->frags[fragidx];
+		/* this part should be handled in the future */
+		while (WARN_ON(!skb_frag_size(frag))) {
+			fragidx += 1;
+			if (fragidx == skb_shinfo(skb)->nr_frags) {
+				req->state = ND_CONN_PDU_DONE;
+				return 1;
+			}
+			frag = &skb_shinfo(skb)->frags[fragidx];
+		}
+		if(fragidx == skb_shinfo(skb)->nr_frags - 1) {
+			flags |= MSG_EOR;
+		} else {
+			flags |= MSG_MORE;
+		}
+		ret = kernel_sendpage(queue->sock,
+						skb_frag_page(frag),
+						skb_frag_off(frag) + frag_offset,
+						skb_frag_size(frag) - frag_offset,
+						flags);
+		if(ret <= 0) {
+			return ret;
+		}
+		printk("send data bytes:%d\n", ret);
+		frag_offset += ret;
+		if(frag_offset == skb_frag_size(frag)) {
+			if(fragidx == skb_shinfo(skb)->nr_frags - 1) {
+				/* sending is done */
+				req->state = ND_CONN_PDU_DONE;
+				return 1;
+			} else {
+				/* move to the next frag */
+				req->frag_offset = 0;
+				req->fragidx += 1;
+			}
+		} else {
+			/* increment the offset */
+			req->frag_offset = frag_offset;
+		}
+	}
 	return -EAGAIN;
 }
 
@@ -662,7 +686,8 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 	}
 
 	
-	if (req->state == ND_CONN_SEND_H2C_PDU) {
+	if (req->state == ND_CONN_SEND_DATA) {
+		printk("send data pdu\n");
 		ret = nd_conn_try_send_data_pdu(req);
 		if (ret <= 0)
 			goto done;

@@ -296,7 +296,7 @@ int nd_gro_complete(struct sk_buff *skb, int dhoff)
 	// const u32 ports = (((u32)dh->source) << 16) | (__force u32)dh->dest;
 
 	skb->csum_start = (unsigned char *)dh - skb->head;
-	skb->csum_offset = offsetof(struct ndhdr, check);
+	// skb->csum_offset = offsetof(struct ndhdr, check);
 	skb->ip_summed = CHECKSUM_PARTIAL;
 	skb_shinfo(skb)->gso_type |= SKB_GSO_ND;
 	skb_shinfo(skb)->gso_segs = NAPI_GRO_CB(skb)->count;

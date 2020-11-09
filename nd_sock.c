@@ -141,7 +141,6 @@ void nd_set_state(struct sock* sk, int state) {
 	case TCP_CLOSE:
 		// if (oldstate == TCP_CLOSE_WAIT || oldstate == TCP_ESTABLISHED)
 		// 	TCP_INC_STATS(sock_net(sk), TCP_MIB_ESTABRESETS);
-
 		sk->sk_prot->unhash(sk);
 		/* !(sk->sk_userlocks & SOCK_BINDPORT_LOCK) may need later*/
 		if (nd_sk(sk)->icsk_bind_hash) {
@@ -462,7 +461,7 @@ EXPORT_SYMBOL_GPL(nd_sk_get_port);
 
 
 /* this function is copied from inet_wait_for_connect */
-static long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
+long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 
@@ -626,12 +625,6 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
 	// dsk->total_length = flow_len;
-	nd_wait_for_connect(sk, 1000000000, 0);
-	if(sk->sk_state != ND_SENDER) {
-		err = -ENOTCONN;
-		goto failure;
-	}
-	printk("connected!\n");
 	// if (err)
 	// 	goto failure;
 
