@@ -616,13 +616,13 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 	struct nd_conn_queue *queue = req->queue;
 	struct sk_buff *skb = req->skb;
 	// unsigned int sent = req->sent;
-	unsigned short frag_offset = req->frag_offset, 
-		fragidx = req->fragidx;
 	int ret = 0;
 	int flags = MSG_DONTWAIT;
  	skb_frag_t *frag;
-
+	printk("skb_shinfo(skb)->nr_frags:%d\n", skb_shinfo(skb)->nr_frags);
 	while(true) {
+		unsigned short frag_offset = req->frag_offset, 
+			fragidx = req->fragidx;
 		frag = &skb_shinfo(skb)->frags[fragidx];
 		/* this part should be handled in the future */
 		while (WARN_ON(!skb_frag_size(frag))) {
@@ -638,6 +638,7 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 		} else {
 			flags |= MSG_MORE;
 		}
+		printk("sendpage:%d\n", fragidx);
 		ret = kernel_sendpage(queue->sock,
 						skb_frag_page(frag),
 						skb_frag_off(frag) + frag_offset,
@@ -651,10 +652,12 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 		if(frag_offset == skb_frag_size(frag)) {
 			if(fragidx == skb_shinfo(skb)->nr_frags - 1) {
 				/* sending is done */
+				printk("ND_CONN_PDU_DONE\n");
 				req->state = ND_CONN_PDU_DONE;
 				return 1;
 			} else {
 				/* move to the next frag */
+				printk("move to the next frag\n");
 				req->frag_offset = 0;
 				req->fragidx += 1;
 			}

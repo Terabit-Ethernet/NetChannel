@@ -241,9 +241,6 @@ void nd_flow_wait_handler(struct sock *sk) {
 	dsk->receiver.flow_finish_wait = false;
 	// dsk->receiver.prev_grant_bytes = 0;
 	// dsk->prev_grant_nxt = dsk->grant_nxt;
-	// printk("flow_wait_timer");
-	// printk("entry remaining_tokens:%d\n", atomic_read(&entry->remaining_tokens));
-	// printk("inet dport:%d\n",  ntohs(inet->inet_dport));
 	if(test_and_clear_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
 		// atomic_sub(dsk->receiver.grant_batch,  &entry->remaining_tokens);
 	}
@@ -655,7 +652,17 @@ static bool nd_try_coalesce(struct sock *sk,
 	/* Its possible this segment overlaps with prior segment in queue */
 	if (ND_SKB_CB(from)->seq != ND_SKB_CB(to)->end_seq)
 		return false;
+	pr_info("to len: %d\n", to->len);
+	pr_info("to truesize len: %d\n", to->truesize);
 
+	pr_info("from truesize: %d\n", from->truesize);
+	// if (skb_headlen(from) != 0) { 
+	// 	delta = from->truesize - SKB_DATA_ALIGN(sizeof(struct sk_buff));
+	// } else {
+	// 	delta = from->truesize - SKB_TRUESIZE(skb_end_offset(from);
+	// }
+	pr_info("from skb len :%d\n", from->len);
+	pr_info(" SKB_TRUESIZE(skb_end_offset(from):%d\n", skb_end_offset(from));
 	if (!skb_try_coalesce(to, from, fragstolen, &delta))
 		return false;
 	/* assume we have alrady add true size beforehand*/
@@ -1450,7 +1457,7 @@ splitAndMerge:
 /* split skb and push back the new skb into head of the queue */
 int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	struct sk_buff* new_skb;
-	int bytes = ND_HEADER_MAX_SIZE;
+	int bytes = ND_HEADER_MAX_SIZE, len;
 	if(skb->len < need_bytes)
 		return -ENOMEM;
 	if(skb->len == need_bytes)
@@ -1462,12 +1469,20 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 		printk("need bytes:%d\n", need_bytes);
 	}
 	new_skb = alloc_skb(bytes, GFP_ATOMIC);
+
 	/* set the network header, but not tcp header */
 	skb_put(new_skb, sizeof(struct iphdr));
+
 	skb_reset_network_header(new_skb);
+
 	memcpy(skb_network_header(new_skb), skb_network_header(skb), sizeof(struct iphdr));
 	skb_pull(new_skb, sizeof(struct iphdr));
+	/* change the truesize */
+	len = skb->len - need_bytes;
+	new_skb->truesize += len;
+	skb->truesize -= len;
 	skb_split(skb, new_skb, need_bytes);
+
 	skb_queue_head(queue, new_skb);
 	return 0; 
 }
@@ -1492,7 +1507,6 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 			}
 			need_bytes -= new_skb->len;
 		} else {
-			pr_info("split first: %d \n", need_bytes);
 			nd_split(queue, new_skb, need_bytes);
 			/* then coalesce */
 			if(!skb_try_coalesce(skb, new_skb,&fragstolen, &delta)) {
@@ -1528,11 +1542,8 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		nh = nd_hdr(skb);
 		/* this layer could do sort of GRO stuff later */
 		if(nh->type == DATA) {
-			need_bytes = nh->len + sizeof(struct ndhdr) - skb->len;
+			need_bytes = ntohs(nh->len) + sizeof(struct ndhdr) - skb->len;
 			if(need_bytes > 0) {
-				// printk("reach here:%d\n", __LINE__);
-				// printk("need bytes:%d\n", need_bytes);
-				// printk("skb len:%d\n" , skb->len);
 				ret = nd_split_and_merge(queue, skb, need_bytes);
 				if(ret == -ENOMEM) {
 					goto push_back;
@@ -1540,10 +1551,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 				}
 			}
 			if(need_bytes < 0) {
-				// printk("reach here:%d\n", __LINE__);
-				// printk("need bytes:%d\n", need_bytes);
-				// printk("skb len:%d\n" , skb->len);
-				nd_split(queue, skb, nh->len + sizeof(struct ndhdr));
+				nd_split(queue, skb, ntohs(nh->len) + sizeof(struct ndhdr));
 			}
 		}else {
 			/* this split should always be suceessful */
@@ -1554,9 +1562,6 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
-		printk("nd_hdr type :%d\n", nh->type);
-		printk("nd_hdr type :%d\n", ntohs(nh->source));
-		printk("nd_hdr type :%d\n", ntohs(nh->dest));
 
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);

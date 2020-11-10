@@ -213,6 +213,10 @@ static int nd_push(struct sock *sk) {
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
 	// dh = (struct ndhdr*) (&sync->common);
+		pr_info("skb->len:%d\n", skb->len);
+		pr_info("skb->data_len:%d\n", skb->data_len);
+		pr_info(" htons(skb->len):%d\n",  htons(skb->len));
+
 		req->skb = skb;
 		hdr->len = htons(skb->len);
 		hdr->type = DATA;
@@ -300,7 +304,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		if (!sk_page_frag_refill(sk, pfrag))
 			goto wait_for_memory;
 		skb = nd_write_queue_tail(sk);
-		if(!skb) 
+		if(!skb || skb->len == USHRT_MAX) 
 			goto create_new_skb;
 		i = skb_shinfo(skb)->nr_frags;
 		if (!skb_can_coalesce(skb, i, pfrag->page,
@@ -310,21 +314,16 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 			}
 			merge = false;
 		}
-		copy = min_t(int, msg_data_left(msg),
+		copy = min_t(int, USHRT_MAX - skb->len, msg_data_left(msg));
+		copy = min_t(int, copy,
 			     pfrag->size - pfrag->offset);
-		printk(" before enqueue forward alloc:%d\n", sk->sk_forward_alloc);
-		printk(" copy :%d\n", copy);
 		if (!sk_wmem_schedule(sk, copy))
 			goto wait_for_memory;
-		printk(" after enqueue 1 forward alloc:%d\n", sk->sk_forward_alloc);
 
 		err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
 					       pfrag->page,
 					       pfrag->offset,
 					       copy);
-		printk("copied bytes: %d\n", copy);
-		printk(" after enqueue 2 forward alloc:%d\n", sk->sk_forward_alloc);
-
 		if (err)
 			goto out_error;
 		/* Update the skb. */
@@ -345,6 +344,7 @@ create_new_skb:
 			goto wait_for_memory;
 		}
 		skb = alloc_skb(0, sk->sk_allocation);
+		printk("create new skb\n");
 		if(!skb)
 			goto wait_for_memory;
 		__skb_queue_tail(&sk->sk_write_queue, skb);
@@ -357,10 +357,9 @@ wait_for_memory:
 		if (err)
 			goto out_error;
 	}
-	printk("eor:%d\n", eor);
-	printk("timeo:%d\n", timeo);
 	if (eor) {
 		if(!skb_queue_empty(&sk->sk_write_queue)) {
+			printk("call nd push\n");
 			nd_push(sk);
 		}
 	}
@@ -395,7 +394,6 @@ out_error:
 int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	int ret = 0;
-	printk("sendmsg\n");
 	lock_sock(sk);
 	// nd_rps_record_flow(sk);
 	ret = nd_sendmsg_locked(sk, msg, len);
@@ -533,20 +531,20 @@ void nd_destruct_sock(struct sock *sk)
 	// struct sk_buff *skb;
 	// struct udp_hslot* hslot = udp_hashslot(sk->sk_prot->h.udp_table, sock_net(sk),
 	// 				     nd_sk(sk)->nd_port_hash);
-	printk("call destruct sock \n");
 	/* clean the message*/
 	// skb_queue_splice_tail_init(&sk->sk_receive_queue, &dsk->reader_queue);
 	// while ((skb = __skb_dequeue(&dsk->reader_queue)) != NULL) {
 	// 	total += skb->truesize;
 	// 	kfree_skb(skb);
 	// }
-
 	/* clean sk_forward_alloc*/
 	__sk_mem_reclaim(sk, sk->sk_forward_alloc);
 	sk->sk_forward_alloc = 0;
-	printk("sk_mem reclain:%d\n", sk->sk_forward_alloc);
 	nd_rmem_release(sk, total, 0, true);
 	inet_sock_destruct(sk);
+	/* unclear part */
+	printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
+
 }
 EXPORT_SYMBOL_GPL(nd_destruct_sock);
 
