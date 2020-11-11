@@ -132,11 +132,10 @@ void inet_sk_state_store(struct sock *sk, int newstate)
 void nd_set_state(struct sock* sk, int state) {
 	
 	switch (state) {
-	case ND_RECEIVER:
-		// if (oldstate != ND_ESTABLISHED)
+	case ND_ESTABLISH:
 			// TCP_INC_STATS(sock_net(sk), TCP_MIB_CURRESTAB);
-		break;
-	case ND_SENDER:
+		// break;
+	// case ND_SENDER:
 		break;
 	case TCP_CLOSE:
 		// if (oldstate == TCP_CLOSE_WAIT || oldstate == TCP_ESTABLISHED)
@@ -1126,7 +1125,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
     if(newsk) {
 		/* Unlike TCP, req_sock will not be inserted in the ehash table initially.*/
 
-	    nd_set_state(newsk, ND_RECEIVER);
+	    nd_set_state(newsk, ND_ESTABLISH);
 		nd_ehash_nolisten(newsk, NULL);
     	sock_rps_save_rxhash(newsk, skb);
     } 

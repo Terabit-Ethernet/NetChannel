@@ -220,7 +220,7 @@ bool nd_xmit_token_single_core(struct rcv_core_entry *entry) {
  		bh_lock_sock(sk);
  		dsk->receiver.in_pq = false;
  		// printk("xmit token for socket:%d\n", ntohs(inet->inet_dport));
- 		if(sk->sk_state == ND_RECEIVER && !dsk->receiver.finished_at_receiver) {
+ 		if(sk->sk_state == ND_ESTABLISH && !dsk->receiver.finished_at_receiver) {
 			// int retransmit_bytes;
 			// dsk->receiver.prev_grant_bytes = 0;
 			// if(ntohs(inet->inet_dport) == 1000) {

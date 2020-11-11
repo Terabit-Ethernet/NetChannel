@@ -250,7 +250,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 	int err = -EPIPE;
 	int i = 0;
 
-	while(sk->sk_state != ND_SENDER) {
+	while(sk->sk_state != ND_ESTABLISH) {
 		nd_wait_for_connect(sk, 1000000000, 0);
 	}
 	/* Per tcp_sendmsg this should be in poll */
@@ -566,7 +566,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->prev_grant_nxt, 0);
 	WRITE_ONCE(dsk->new_grant_nxt, 0);
 
-	INIT_LIST_HEAD(&dsk->match_link);
+	// INIT_LIST_HEAD(&dsk->match_link);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
@@ -586,8 +586,8 @@ int nd_init_sock(struct sock *sk)
 	atomic_set(&dsk->receiver.in_flight_bytes, 0);
 	atomic_set(&dsk->receiver.backlog_len, 0);
 	dsk->start_time = ktime_get();
-	hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
-	dsk->receiver.flow_wait_timer.function = &nd_flow_wait_event;
+	// hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
+	// dsk->receiver.flow_wait_timer.function = &nd_flow_wait_event;
 
 	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
 	WRITE_ONCE(sk->sk_rcvbuf, nd_params.rmem_default);
@@ -628,23 +628,23 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 }
 
 bool nd_try_send_token(struct sock *sk) {
-	if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
-		// struct nd_sock *dsk = nd_sk(sk);
-		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
-		// int available_space = nd_space(sk);
-		// if(grant_len > available_space || grant_len < )
-		// 	return;
-		// printk("try to send token \n");
-		int grant_bytes = calc_grant_bytes(sk);
+	// if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
+	// 	// struct nd_sock *dsk = nd_sk(sk);
+	// 	// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
+	// 	// int available_space = nd_space(sk);
+	// 	// if(grant_len > available_space || grant_len < )
+	// 	// 	return;
+	// 	// printk("try to send token \n");
+	// 	int grant_bytes = calc_grant_bytes(sk);
 
-		// printk("grant bytes delay:%d\n", grant_bytes);
-		if (grant_bytes > 0) {
-			// spin_lock_bh(&sk->sk_lock.slock);
-			xmit_batch_token(sk, grant_bytes, false);
-			// spin_unlock_bh(&sk->sk_lock.slock);
-			return true;
-		}
-	}
+	// 	// printk("grant bytes delay:%d\n", grant_bytes);
+	// 	if (grant_bytes > 0) {
+	// 		// spin_lock_bh(&sk->sk_lock.slock);
+	// 		xmit_batch_token(sk, grant_bytes, false);
+	// 		// spin_unlock_bh(&sk->sk_lock.slock);
+	// 		return true;
+	// 	}
+	// }
 	return false;
 
 }
@@ -683,7 +683,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	// printk("target bytes:%d\n", target);
 
 	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
-	    (sk->sk_state == ND_RECEIVER))
+	    (sk->sk_state == ND_ESTABLISH))
 		sk_busy_loop(sk, nonblock);
 
 	lock_sock(sk);
@@ -693,7 +693,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
 	timeo = sock_rcvtimeo(sk, nonblock);
 
-	if (sk->sk_state != ND_RECEIVER)
+	if (sk->sk_state != ND_ESTABLISH)
 		goto out;
 	/* Urgent data needs to be handled specially. */
 	// if (flags & MSG_OOB)
@@ -1094,13 +1094,13 @@ void nd_destroy_sock(struct sock *sk)
 	// 				     nd_sk(sk)->nd_port_hash);
 	struct nd_sock *up = nd_sk(sk);
 	// struct inet_sock *inet = inet_sk(sk);
-	struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
+	// struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
 	local_bh_disable();
 	bh_lock_sock(sk);
-	hrtimer_cancel(&up->receiver.flow_wait_timer);
+	// hrtimer_cancel(&up->receiver.flow_wait_timer);
 	test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
 	up->receiver.flow_finish_wait = false;
-	if(sk->sk_state == ND_SENDER || sk->sk_state == ND_RECEIVER) {
+	if(sk->sk_state == ND_ESTABLISH) {
 		printk("send fin pkt\n");
 		nd_conn_queue_request(construct_fin_req(sk), false, true);
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
@@ -1115,11 +1115,11 @@ void nd_destroy_sock(struct sock *sk)
 	local_bh_enable();
 
 	// printk("sk->sk_wmem_queued:%d\n",sk->sk_wmem_queued);
-	spin_lock_bh(&entry->lock);
+	// spin_lock_bh(&entry->lock);
 	// printk("dsk->match_link:%p\n", &up->match_link);
-	if(up->receiver.in_pq)
-		nd_pq_delete(&entry->flow_q, &up->match_link);
-	spin_unlock_bh(&entry->lock);
+	// if(up->receiver.in_pq)
+		// nd_pq_delete(&entry->flow_q, &up->match_link);
+	// spin_unlock_bh(&entry->lock);
 	// if (static_branch_unlikely(&nd_encap_needed_key)) {
 	// 	if (up->encap_type) {
 	// 		void (*encap_destroy)(struct sock *sk);

@@ -5,13 +5,9 @@ nd_module-y = 	 nd_host.o\
 				 nd_sock.o\
 				 nd_hashtables.o \
 				 nd_pq.o \
-				 nd_message.o\
-				 nd_matching.o\
 				 nd_incoming.o\
 				 nd_outgoing.o \
 				 nd.o \
-				 nd_scheduling.o\
-				 nd_offload.o\
 				 nd_target.o\
 				 nd_plumbing.o
 

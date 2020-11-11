@@ -41,8 +41,8 @@ enum {
 enum {
 	/* The initial state is TCP_CLOSE */
 	/* Sender and receiver state are easier to debug.*/
-	ND_RECEIVER = 1,
-	ND_SENDER,
+	// ND_RECEIVER = 1,
+	ND_ESTABLISH = 1,
 	ND_LISTEN,
 	ND_SYNC_SENT,
 	/* use TCP_CLOSE because of inet_bind use TCP_CLOSE to
@@ -52,8 +52,8 @@ enum {
 
 enum {
 	// NDF_NEW = (1 << ND_NEW),
-	NDF_SENDER = (1 << ND_SENDER),
-	NDF_RECEIVER = (1 << ND_RECEIVER),
+	// NDF_SENDER = (1 << ND_SENDER),
+	NDF_ESTABLISH = (1 << ND_ESTABLISH),
 	NDF_LISTEN	 = (1 << ND_LISTEN),
 	NDF_SYNC_SENT = (1 << ND_SYNC_SENT),
 };
@@ -503,7 +503,7 @@ struct nd_sock {
 		bool flow_finish_wait;
 		int rmem_exhausted;
 		/* short flow waiting timer or long flow waiting timer; after all tokens arer granted */
-		struct hrtimer flow_wait_timer;
+		// struct hrtimer flow_wait_timer;
 	    ktime_t last_rtx_time;
 
 		uint32_t copied_seq;

@@ -95,7 +95,7 @@ static inline void nd_rps_record_flow(const struct sock *sk)
 		 * OR	an additional socket flag
 		 * [1] : sk_state and sk_prot are in the same cache line.
 		 */
-		if (sk->sk_state == ND_RECEIVER || sk->sk_state == ND_SENDER || sk->sk_state == ND_LISTEN) {
+		if (sk->sk_state == ND_ESTABLISH || sk->sk_state == ND_LISTEN) {
 			// printk("rfs:rxhash:%u\n", sk->sk_rxhash);
 			sock_rps_record_flow_hash(sk->sk_rxhash);
 		}

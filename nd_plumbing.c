@@ -329,14 +329,14 @@ static int __init nd_load(void) {
         }
         // nd_epoch_init(&nd_epoch);
         /* initialize rcv_core table and xmit_core table */
-        status = rcv_core_table_init(&rcv_core_tab);
-        if(status != 0) {
-            goto out_cleanup;
-        }
-        status = xmit_core_table_init(&xmit_core_tab);
-        if(status != 0) {
-            goto out_cleanup;
-        }
+        // status = rcv_core_table_init(&rcv_core_tab);
+        // if(status != 0) {
+        //     goto out_cleanup;
+        // }
+        // status = xmit_core_table_init(&xmit_core_tab);
+        // if(status != 0) {
+        //     goto out_cleanup;
+        // }
         // if (status)
         //         goto out_cleanup;
         // ndlite4_register();
@@ -356,12 +356,12 @@ static int __init nd_load(void) {
                 goto out_cleanup;
         }
         
-        status = ndv4_offload_init();
-        printk("init the offload\n");
-        if (status != 0) {
-                printk(KERN_ERR "ND couldn't init offloads\n");
-                goto out_cleanup;
-        }
+        // status = ndv4_offload_init();
+        // printk("init the offload\n");
+        // if (status != 0) {
+        //         printk(KERN_ERR "ND couldn't init offloads\n");
+        //         goto out_cleanup;
+        // }
         // tasklet_init(&timer_tasklet, homa_tasklet_handler, 0);
         // hrtimer_init(&hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
         // hrtimer.function = &homa_hrtimer;
@@ -389,11 +389,11 @@ out_cleanup:
         // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
 
-        if (ndv4_offload_end() != 0)
-            printk(KERN_ERR "ND couldn't stop offloads\n");
+        // if (ndv4_offload_end() != 0)
+        //     printk(KERN_ERR "ND couldn't stop offloads\n");
         // nd_epoch_destroy(&nd_epoch);
-        rcv_core_table_destory(&rcv_core_tab);
-        xmit_core_table_destory(&xmit_core_tab);
+        // rcv_core_table_destory(&rcv_core_tab);
+        // xmit_core_table_destory(&xmit_core_tab);
         unregister_net_sysctl_table(nd_ctl_header);
         nd_destroy();
         inet_del_protocol(&nd_protocol, IPPROTO_VIRTUAL_SOCK);
@@ -436,14 +436,14 @@ static void __exit nd_unload(void) {
         /* clean up the host side logic */
         nd_conn_cleanup_module();
 
-        if (ndv4_offload_end() != 0)
-            printk(KERN_ERR "ND couldn't stop offloads\n");
+        // if (ndv4_offload_end() != 0)
+        //     printk(KERN_ERR "ND couldn't stop offloads\n");
         printk("start to unload\n");
         // nd_epoch_destroy(&nd_epoch);
         unregister_net_sysctl_table(nd_ctl_header);
         printk("unregister sysctl table\n");
-        rcv_core_table_destory(&rcv_core_tab);
-        xmit_core_table_destory(&xmit_core_tab);
+        // rcv_core_table_destory(&rcv_core_tab);
+        // xmit_core_table_destory(&xmit_core_tab);
 
         // nd_mattab_destroy(&nd_match_table);
         // printk("remove match table\n");

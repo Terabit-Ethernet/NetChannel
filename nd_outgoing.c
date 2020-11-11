@@ -105,27 +105,27 @@ void nd_release_cb(struct sock *sk)
 	sock_release_ownership(sk);
 
 	/* First check read memory */
-	if (flags & NDF_RMEM_CHECK_DEFERRED) {
-		nd_rem_check_handler(sk);
-	}
+	// if (flags & NDF_RMEM_CHECK_DEFERRED) {
+	// 	nd_rem_check_handler(sk);
+	// }
 
-	if (flags & NDF_CLEAN_TIMER_DEFERRED) {
-		nd_clean_rtx_queue(sk);
-		// __sock_put(sk);
-	}
-	if (flags & NDF_TOKEN_TIMER_DEFERRED) {
-		WARN_ON(true);
-		nd_token_timer_defer_handler(sk);
-		// __sock_put(sk);
-	}
-	if (flags & NDF_RTX_DEFERRED) {
-		WARN_ON(true);
-		nd_write_timer_handler(sk);
-	}
-	if (flags & NDF_WAIT_DEFERRED) {
-		WARN_ON(true);
-		nd_flow_wait_handler(sk);
-	}
+	// if (flags & NDF_CLEAN_TIMER_DEFERRED) {
+	// 	nd_clean_rtx_queue(sk);
+	// 	// __sock_put(sk);
+	// }
+	// if (flags & NDF_TOKEN_TIMER_DEFERRED) {
+	// 	WARN_ON(true);
+	// 	nd_token_timer_defer_handler(sk);
+	// 	// __sock_put(sk);
+	// }
+	// if (flags & NDF_RTX_DEFERRED) {
+	// 	WARN_ON(true);
+	// 	nd_write_timer_handler(sk);
+	// }
+	// if (flags & NDF_WAIT_DEFERRED) {
+	// 	WARN_ON(true);
+	// 	nd_flow_wait_handler(sk);
+	// }
 	// if (flags & TCPF_MTU_REDUCED_DEFERRED) {
 	// 	inet_csk(sk)->icsk_af_ops->mtu_reduced(sk);
 	// 	__sock_put(sk);
@@ -467,59 +467,6 @@ struct sk_buff* construct_accept_pkt(struct sock* sk, unsigned short iter, int e
 // }
 
 
-void nd_retransmit(struct sock* sk) {
-	struct nd_sock* dsk = nd_sk(sk);
-	// struct nd_sack_block *sp;
-	struct sk_buff *skb;
-	int start_seq, end_seq, mss_now, mtu, i;
-	struct dst_entry *dst;
-	dst = sk_dst_get(sk);
-	mtu = dst_mtu(dst);
-	mss_now = mtu - sizeof(struct iphdr) - sizeof(struct nd_data_hdr);
-	/* last sack is the fake sack [prev_grant_next, prev_grant_next) */
-	skb = skb_rb_first(&sk->tcp_rtx_queue);
-	for (i = 0; i < dsk->num_sacks; i++) {
-		if(!skb)
-			break;
-		if(i == 0) {
-			start_seq = dsk->sender.snd_una;
-		} else {
-			start_seq = dsk->selective_acks[i - 1].end_seq;
-		}
-		end_seq = dsk->selective_acks[i].start_seq;
-
-		while(skb) {
-			if(!before(start_seq, ND_SKB_CB(skb)->end_seq)) {
-				goto go_to_next;
-			}
-			if(!after(end_seq, ND_SKB_CB(skb)->seq)) {
-				break;
-			}
-			/* split the skb buffer; after split, end sequence of skb will change */
-			if(after(start_seq, ND_SKB_CB(skb)->seq)) {
-				/* move the start seq forward to the start of a MSS packet */
-				int seg = (start_seq - ND_SKB_CB(skb)->seq + 1) / mss_now;
-				int ret = nd_fragment(sk, ND_FRAG_IN_RTX_QUEUE, skb,
-				 seg * (mss_now + sizeof(struct data_segment)), mss_now  + sizeof(struct data_segment), GFP_ATOMIC);
-				/* move forward after the split */
-				if(!ret)
-					skb = skb_rb_next(skb);
-			}
-			if(before(end_seq, ND_SKB_CB(skb)->end_seq)) {
-				/* split the skb buffer; Round up this time */
-				int seg = DIV_ROUND_UP((end_seq - ND_SKB_CB(skb)->seq), mss_now);
-				nd_fragment(sk, ND_FRAG_IN_RTX_QUEUE, skb,
-				 seg * (mss_now + sizeof(struct data_segment)), mss_now  + sizeof(struct data_segment), GFP_ATOMIC);		
-			}
-			nd_retransmit_data(skb, nd_sk(sk));
-go_to_next:
-			skb = skb_rb_next(skb);
-		}
-
-
-	}	
-	dsk->num_sacks = 0;
-}
 /**
  * __nd_xmit_control() - Lower-level version of nd_xmit_control: sends
  * a control packet.
@@ -639,18 +586,6 @@ void nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 	// }
 }
 
-void nd_retransmit_data(struct sk_buff *skb, struct nd_sock* dsk)
-{
-	struct sock* sk = (struct sock*)(dsk);
-	struct sk_buff* oskb;
-	oskb = skb;
-	if (unlikely(skb_cloned(oskb)))
-		skb = pskb_copy(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
-	else
-		skb = skb_clone(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
-	__nd_xmit_data(skb, dsk, 0);
-}
-
 /**
  * __homa_xmit_data() - Handles packet transmission stuff that is common
  * to homa_xmit_data and homa_resend_data.
@@ -737,19 +672,19 @@ int nd_write_timer_handler(struct sock *sk)
 	struct nd_sock *dsk = nd_sk(sk);
 	struct sk_buff *skb;
 	int sent_bytes = 0;
-	if(dsk->num_sacks > 0) {
-		// printk("retransmit\n");
-		nd_retransmit(sk);
-	}
-	while((skb = skb_dequeue(&sk->sk_write_queue)) != NULL) {
-		if (ND_SKB_CB(skb)->end_seq <= dsk->grant_nxt) {
-			nd_xmit_data(skb, dsk, false);
-			sent_bytes += ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq;
-		} else {
-			skb_queue_head(&sk->sk_write_queue, skb);
-			break;
-		}
-	}
+	// if(dsk->num_sacks > 0) {
+	// 	// printk("retransmit\n");
+	// 	nd_retransmit(sk);
+	// }
+	// while((skb = skb_dequeue(&sk->sk_write_queue)) != NULL) {
+	// 	if (ND_SKB_CB(skb)->end_seq <= dsk->grant_nxt) {
+	// 		nd_xmit_data(skb, dsk, false);
+	// 		sent_bytes += ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq;
+	// 	} else {
+	// 		skb_queue_head(&sk->sk_write_queue, skb);
+	// 		break;
+	// 	}
+	// }
 	return sent_bytes;
 
 //         struct inet_connection_sock *icsk = inet_csk(sk);
