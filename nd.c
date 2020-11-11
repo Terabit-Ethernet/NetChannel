@@ -814,7 +814,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		}
 
 		// tcp_cleanup_rbuf(sk, copied);
-		nd_try_send_token(sk);
+		// nd_try_send_token(sk);
 		// printk("release sock");
 		if (copied >= target) {
 			/* Do not sleep, just process backlog. */
@@ -840,7 +840,7 @@ found_ok_skb:
 		used = skb->len - offset;
 		if (len < used)
 			used = len;
-		nd_try_send_token(sk);
+		// nd_try_send_token(sk);
 
 		/* Do we have urgent data here? */
 		// if (tp->urg_data) {
@@ -921,13 +921,13 @@ found_ok_skb:
 
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
-	nd_try_send_token(sk);
-	if (dsk->receiver.copied_seq == dsk->total_length) {
-		printk("call tcp close in the recv msg\n");
-		nd_set_state(sk, TCP_CLOSE);
-	} else {
-		// nd_try_send_token(sk);
-	}
+	// nd_try_send_token(sk);
+	// if (dsk->receiver.copied_seq == dsk->total_length) {
+	// 	printk("call tcp close in the recv msg\n");
+	// 	nd_set_state(sk, TCP_CLOSE);
+	// } else {
+	// 	// nd_try_send_token(sk);
+	// }
 	release_sock(sk);
 
 	// if (cmsg_flags) {
@@ -1057,6 +1057,7 @@ int nd_rcv(struct sk_buff *skb)
 	} else if (dh->type == SYNC) {
 		return nd_handle_sync_pkt(skb);
 	} else if (dh->type == TOKEN) {
+		WARN_ON(true);
 		return nd_handle_token_pkt(skb);
 	} else if (dh->type == FIN) {
 		return nd_handle_fin_pkt(skb);
@@ -1101,8 +1102,9 @@ void nd_destroy_sock(struct sock *sk)
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_SENDER || sk->sk_state == ND_RECEIVER) {
 		printk("send fin pkt\n");
+		nd_conn_queue_request(construct_fin_req(sk), false, true);
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
-	}
+	}      
 	printk("reach here:%d", __LINE__);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pending_frames(sk);

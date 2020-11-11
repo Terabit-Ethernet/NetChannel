@@ -223,9 +223,6 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	// sync->check = 0;
 	sync->doff = (sizeof(struct ndhdr)) << 2;
 
-	printk("source:%d\n", ntohs(sync->source));
-	printk("dst:%d\n", ntohs(sync->dest));
-
 	// fh->flow_id = message_id;
 	// fh->flow_size = htonl(message_size);
 	// fh->start_time = start_time;
@@ -235,6 +232,41 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	return req;
 }
 
+struct nd_conn_request* construct_fin_req(struct sock* sk) {
+	// int extra_bytes = 0;
+	struct inet_sock *inet = inet_sk(sk);
+	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
+	struct ndhdr* sync;
+
+	// struct sk_buff* skb = __construct_control_skb(sk, 0);
+	// struct nd_flow_sync_hdr* fh;
+	// struct ndhdr* dh; 
+	if(unlikely(!req)) {
+		return NULL;
+	}
+	nd_conn_init_request(req, -1);
+	req->state = ND_CONN_SEND_CMD_PDU;
+	sync = req->hdr;
+	// req->pdu_len = sizeof(struct ndhdr);
+
+	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
+	
+	// dh = (struct ndhdr*) (&sync->common);
+	sync->len = 0;
+	sync->type = FIN;
+	sync->source = inet->inet_sport;
+	sync->dest = inet->inet_dport;
+	// sync->check = 0;
+	sync->doff = (sizeof(struct ndhdr)) << 2;
+
+	// fh->flow_id = message_id;
+	// fh->flow_size = htonl(message_size);
+	// fh->start_time = start_time;
+	// extra_bytes = ND_HEADER_MAX_SIZE - length;
+	// if (extra_bytes > 0)
+	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
+	return req;
+}
 struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,
 	 __u32 prev_grant_nxt, __u32 grant_nxt, bool handle_rtx) {
 	// int extra_bytes = 0;
