@@ -81,7 +81,9 @@ enum ndcsq_flags {
 };
 
 struct nd_params {
-	int clean_match_sock;
+	int nd_add_host;
+	int nd_host_added;
+
 	int min_iter;
 	int match_socket_port;
 	int bandwidth;

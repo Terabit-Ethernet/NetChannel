@@ -141,8 +141,8 @@ static struct net_protocol nd_protocol = {
 static struct ctl_table nd_ctl_table[] = {
         {
                 // this is only being called when unloading the module
-                .procname       = "clean_match_sock",
-                .data           = &nd_params.clean_match_sock,
+                .procname       = "nd_add_host",
+                .data           = &nd_params.nd_add_host,
                 .maxlen         = sizeof(int),
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
@@ -197,7 +197,8 @@ struct request_sock_ops nd_request_sock_ops __read_mostly = {
 static struct ctl_table_header *nd_ctl_header;
 
 void nd_params_init(struct nd_params* params) {
-    params->clean_match_sock = 0;
+    params->nd_add_host = 0;
+    params->nd_host_added = 0;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
@@ -271,11 +272,13 @@ void nd_sysctl_changed(struct nd_params *params)
         // tmp = homa->max_nic_queue_ns;
         // tmp = (tmp*cpu_khz)/1000000;
         // homa->max_nic_queue_cycles = tmp;
-    if(params->clean_match_sock == 1) {
+    if(params->nd_add_host == 1 && params->nd_host_added == 0) {
         // sock_release(nd_match_table.sock);
         // nd_match_table.sock = NULL;
         // nd_epoch_destroy(&nd_epoch);
-        params->clean_match_sock = 0;
+        params->nd_add_host = 0;
+        params->nd_host_added = 1;
+        nd_conn_init_module();
     }
 }
 /**
@@ -377,11 +380,11 @@ static int __init nd_load(void) {
              pr_err("failed to allocate target side\n");
              goto out_ndt_conn;
         }
-        status = nd_conn_init_module();
-        if (status != 0) {
-                pr_err("failed to allocate host side\n");
-                goto out_nd_conn;
-        }
+        // status = nd_conn_init_module();
+        // if (status != 0) {
+        //         pr_err("failed to allocate host side\n");
+        //         goto out_nd_conn;
+        // }
         // nd_test_start();
         return 0;
 
@@ -395,7 +398,7 @@ out_cleanup:
         // rcv_core_table_destory(&rcv_core_tab);
         // xmit_core_table_destory(&xmit_core_tab);
 out_nd_conn:
-        nd_conn_cleanup_module();
+        // nd_conn_cleanup_module();
 out_ndt_conn:
         ndt_conn_exit();
 
@@ -441,7 +444,8 @@ static void __exit nd_unload(void) {
         /* clean up the target side logic */
         ndt_conn_exit();
         /* clean up the host side logic */
-        nd_conn_cleanup_module();
+        if(nd_params.nd_host_added)
+                nd_conn_cleanup_module();
 
         // if (ndv4_offload_end() != 0)
         //     printk(KERN_ERR "ND couldn't stop offloads\n");

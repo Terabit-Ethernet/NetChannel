@@ -1071,7 +1071,7 @@ out_free_ctrl:
 	return ERR_PTR(ret);
 }
 
-int __init nd_conn_init_module(void)
+int nd_conn_init_module(void)
 {
     struct nd_conn_ctrl_options* opts = kmalloc(sizeof(*opts), GFP_KERNEL);
 	nd_conn_wq = alloc_workqueue("nd_conn_wq",
@@ -1084,7 +1084,7 @@ int __init nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.116";
+    opts->traddr = "192.168.10.117";
     opts->trsvcid = "9000";
     /* src address */
     opts->host_traddr = "192.168.10.116";

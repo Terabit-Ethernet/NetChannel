@@ -193,6 +193,6 @@ int __nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl);
 void nd_conn_destroy_io_queues(struct nd_conn_ctrl *ctrl, bool remove);
 int nd_conn_setup_ctrl(struct nd_conn_ctrl *ctrl, bool new);
 struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts);
-int __init nd_conn_init_module(void);
+int nd_conn_init_module(void);
 void nd_conn_cleanup_module(void);
 #endif
