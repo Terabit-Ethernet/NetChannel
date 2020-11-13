@@ -688,7 +688,7 @@ err:
 	return ret;
 }
 
-void __exit ndt_conn_exit(void)
+void ndt_conn_exit(void)
 {
 	struct ndt_conn_queue *queue;
 

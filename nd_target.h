@@ -102,6 +102,6 @@ void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue);
 void ndt_conn_release_queue_work(struct work_struct *w);
 void ndt_conn_restore_socket_callbacks(struct ndt_conn_queue *queue);
 int __init ndt_conn_init(void);
-void __exit ndt_conn_exit(void);
+void ndt_conn_exit(void);
 
 #endif /* _ND_TARGET_H */

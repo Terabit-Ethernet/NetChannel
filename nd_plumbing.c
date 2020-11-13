@@ -325,7 +325,7 @@ static int __init nd_load(void) {
         if (status != 0) {
                 printk(KERN_ERR "inet_add_protocol failed in nd_load: %d\n",
                     status);
-                goto out_cleanup;
+                goto out_inet;
         }
         // nd_epoch_init(&nd_epoch);
         /* initialize rcv_core table and xmit_core table */
@@ -353,7 +353,7 @@ static int __init nd_load(void) {
         if (!nd_ctl_header) {
                 printk(KERN_ERR "couldn't register ND sysctl parameters\n");
                 status = -ENOMEM;
-                goto out_cleanup;
+                goto out_nd_ctl_header;
         }
         
         // status = ndv4_offload_init();
@@ -375,12 +375,12 @@ static int __init nd_load(void) {
         status = ndt_conn_init();
         if (status != 0) {
              pr_err("failed to allocate target side\n");
-             goto out_cleanup;
+             goto out_ndt_conn;
         }
         status = nd_conn_init_module();
         if (status != 0) {
                 pr_err("failed to allocate host side\n");
-                goto out_cleanup;
+                goto out_nd_conn;
         }
         // nd_test_start();
         return 0;
@@ -394,16 +394,23 @@ out_cleanup:
         // nd_epoch_destroy(&nd_epoch);
         // rcv_core_table_destory(&rcv_core_tab);
         // xmit_core_table_destory(&xmit_core_tab);
+out_nd_conn:
+        nd_conn_cleanup_module();
+out_ndt_conn:
+        ndt_conn_exit();
+
+out_nd_ctl_header:
         unregister_net_sysctl_table(nd_ctl_header);
-        nd_destroy();
         inet_del_protocol(&nd_protocol, IPPROTO_VIRTUAL_SOCK);
         printk("inet delete protocol\n");
+out_inet:
         inet_unregister_protosw(&nd_protosw);
         printk("inet unregister protosw");
         proto_unregister(&nd_prot);
         printk("unregister protocol\n");
         // proto_unregister(&ndlite_prot);
 out:
+        nd_destroy();
         return status;
 }
 

@@ -76,6 +76,27 @@
 // }
 
 
+static void nd_rfree(struct sk_buff *skb)
+{
+	struct sock *sk = skb->sk;
+	// struct kcm_sock *kcm = kcm_sk(sk);
+	// struct kcm_mux *mux = kcm->mux;
+	unsigned int len = skb->truesize;
+
+	// sk_mem_uncharge(sk, len);
+	atomic_sub(len, &sk->sk_rmem_alloc);
+
+	/* For reading rx_wait and rx_psock without holding lock */
+	// smp_mb__after_atomic();
+
+	// if (!kcm->rx_wait && !kcm->rx_psock &&
+	//     sk_rmem_alloc_get(sk) < sk->sk_rcvlowat) {
+	// 	spin_lock_bh(&mux->rx_lock);
+	// 	kcm_rcv_ready(kcm);
+	// 	spin_unlock_bh(&mux->rx_lock);
+	// }
+}
+
 
 static inline bool nd_sack_extend(struct nd_sack_block *sp, u32 seq,
 				  u32 end_seq)
@@ -666,7 +687,6 @@ static bool nd_try_coalesce(struct sock *sk,
 	if (!skb_try_coalesce(to, from, fragstolen, &delta))
 		return false;
 	/* assume we have alrady add true size beforehand*/
-	atomic_sub(skb_truesize, &sk->sk_rmem_alloc);
 	atomic_add(delta, &sk->sk_rmem_alloc);
 	// sk_mem_charge(sk, delta);
 	// NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPRCVCOALESCE);
@@ -804,8 +824,14 @@ merge_right:
 	// 	tp->ooo_last_skb = skb;
 add_sack:
 	// if (tcp_is_sack(tp))
-	nd_sack_new_ofo_skb(sk, seq, end_seq);
+	// nd_sack_new_ofo_skb(sk, seq, end_seq);
 end:
+	if(skb) {
+		skb->sk = sk;
+		skb->destructor = nd_rfree;
+		atomic_add(skb->truesize, &sk->sk_rmem_alloc);
+		// sk_mem_charge(sk, skb->truesize);
+	}
 	return 0;
 	// if (skb) {
 	// 	tcp_grow_window(sk, skb);
@@ -1138,7 +1164,12 @@ static int  nd_queue_rcv(struct sock *sk, struct sk_buff *skb,  bool *fragstolen
 		 nd_try_coalesce(sk, tail,
 				  skb, fragstolen)) ? 1 : 0;
 	if (!eaten) {
+		skb->sk = sk;
+		skb->destructor = nd_rfree;
+		atomic_add(skb->truesize, &sk->sk_rmem_alloc);
+		// sk_mem_charge(sk, skb->truesize);
 		__skb_queue_tail(&sk->sk_receive_queue, skb);
+		
 		// skb_set_owner_r(skb, sk);
 	}
 	nd_rcv_nxt_update(nd_sk(sk), ND_SKB_CB(skb)->end_seq);
@@ -1154,16 +1185,18 @@ int nd_data_queue(struct sock *sk, struct sk_buff *skb)
 		nd_rmem_free_skb(sk, skb);
 		return 0;
 	}
-	if(WARN_ON(atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf)) {
-		// struct inet_sock *inet = inet_sk(sk);
-	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
-	    // printk("inet sk dport:%d\n", ntohs(inet->inet_dport));
-	    // printk("discard packet due to memory:%d\n", __LINE__);
-		// sk_drops_add(sk, skb);
-		// kfree_skb(skb);
-		// return 0;
-	}
-	atomic_add(skb->truesize, &sk->sk_rmem_alloc);
+	// if(WARN_ON(atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf)) {
+	// 	// struct inet_sock *inet = inet_sk(sk);
+	//     // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
+	//     // printk("inet sk dport:%d\n", ntohs(inet->inet_dport));
+	//     // printk("discard packet due to memory:%d\n", __LINE__);
+	// 	// sk_drops_add(sk, skb);
+	// 	// kfree_skb(skb);
+	// 	// return 0;
+	// }
+	// if (!sk_rmem_schedule(sk, skb, skb->truesize))
+	// 	return -ENOBUFS;
+	// atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 
 	// skb_dst_drop(skb);
 	__skb_pull(skb, nd_hdr(skb)->doff >> 2);
@@ -1263,7 +1296,7 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
                 // __NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPBACKLOGDROP);
                 return true;
         }
-        atomic_add(skb->truesize, &dsk->receiver.backlog_len);
+        // atomic_add(skb->truesize, &dsk->receiver.backlog_len);
 
         return false;
 
@@ -1321,7 +1354,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 			/* current place to set rxhash for RFS/RPS */
 			// printk("skb->hash:%u\n", skb->hash);
 		 	// sock_rps_save_rxhash(sk, skb)
-			 printk("put into the data queue\n");
+			//  printk("put into the data queue\n");
             nd_data_queue(sk, skb);
 			// nd_check_flow_finished_at_receiver(dsk);;
         } else {
@@ -1372,7 +1405,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	struct ndhdr* dh;
 	struct nd_sock *dsk = nd_sk(sk);
 	dh = nd_hdr(skb);
-	atomic_sub(skb->truesize, &dsk->receiver.backlog_len);
+	// atomic_sub(skb->truesize, &dsk->receiver.backlog_len);
 	/* current place to set rxhash for RFS/RPS */
  	sock_rps_save_rxhash(sk, skb);
 	// printk("backlog rcv\n");
@@ -1557,7 +1590,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 			nd_split(queue, skb, sizeof(struct ndhdr));
 		}
 		/* pass to the vs layer; local irq should be disabled */
-		skb_dump(KERN_WARNING, skb, false);
+		// skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));

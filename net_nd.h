@@ -287,7 +287,7 @@ static inline void nd_ofo_queue_unlink(struct sk_buff *skb, struct sock *sk)
 }
 
 static inline void nd_rmem_free_skb(struct sock *sk, struct sk_buff *skb) {
-	atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+	// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
 	__kfree_skb(skb);
 }
 

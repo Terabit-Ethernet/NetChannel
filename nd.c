@@ -198,7 +198,9 @@ static int nd_push(struct sock *sk) {
 		/* construct nd_conn_request */
 		struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
 		struct ndhdr* hdr;
-	
+		if(skb->len == 0 || skb->data_len == 0) {
+			WARN_ON(true);
+		}
 		nd_conn_init_request(req, -1);
 		req->state = ND_CONN_SEND_CMD_PDU;
 		// req->pdu_len = sizeof(struct ndhdr) + skb->len;
@@ -213,9 +215,9 @@ static int nd_push(struct sock *sk) {
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
 	// dh = (struct ndhdr*) (&sync->common);
-		pr_info("skb->len:%d\n", skb->len);
-		pr_info("skb->data_len:%d\n", skb->data_len);
-		pr_info(" htons(skb->len):%d\n",  htons(skb->len));
+		// pr_info("skb->len:%d\n", skb->len);
+		// pr_info("skb->data_len:%d\n", skb->data_len);
+		// pr_info(" htons(skb->len):%d\n",  htons(skb->len));
 
 		req->skb = skb;
 		hdr->len = htons(skb->len);
@@ -227,12 +229,14 @@ static int nd_push(struct sock *sk) {
 		hdr->seq = htonl(nsk->sender.write_seq);
 		skb_dequeue(&sk->sk_write_queue);
 			// kfree_skb(skb);
-		sk->sk_wmem_queued -= skb->len;
+		sk_wmem_queued_add(sk, -skb->truesize);
+		sk_mem_uncharge(sk, skb->truesize);
+		// sk->sk_wmem_queued -= skb->len;
 		/*increment write seq */
 		nsk->sender.write_seq += skb->len;
 		/* queue the request */
 		nd_conn_queue_request(req, false, true);
-		printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
+		// printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
 	}
 	return 0;
 }
@@ -249,9 +253,8 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
 	int err = -EPIPE;
 	int i = 0;
-
 	while(sk->sk_state != ND_ESTABLISH) {
-		nd_wait_for_connect(sk, 1000000000, 0);
+		nd_wait_for_connect(sk, timeo, 0);
 	}
 	/* Per tcp_sendmsg this should be in poll */
 	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
@@ -317,6 +320,14 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		copy = min_t(int, USHRT_MAX - skb->len, msg_data_left(msg));
 		copy = min_t(int, copy,
 			     pfrag->size - pfrag->offset);
+		
+		if(copy == 0) {
+			WARN_ON(true);
+			pr_info("skb->len: %d\n",skb->len);
+			pr_info("msg_data_left(msg): %ld\n",msg_data_left(msg));
+			pr_info("pfrag->size - pfrag->offset: %d\n", pfrag->size - pfrag->offset);
+
+		}
 		if (!sk_wmem_schedule(sk, copy))
 			goto wait_for_memory;
 
@@ -336,6 +347,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		}
 		pfrag->offset += copy;
 		copied += copy;
+
 		continue;
 
 create_new_skb:
@@ -344,9 +356,12 @@ create_new_skb:
 			goto wait_for_memory;
 		}
 		skb = alloc_skb(0, sk->sk_allocation);
-		printk("create new skb\n");
+		// printk("create new skb\n");
 		if(!skb)
 			goto wait_for_memory;
+		/* add truesize of skb */
+		sk_wmem_queued_add(sk, skb->truesize);
+		sk_mem_charge(sk, skb->truesize);
 		__skb_queue_tail(&sk->sk_write_queue, skb);
 		continue;
 
@@ -359,7 +374,7 @@ wait_for_memory:
 	}
 	if (eor) {
 		if(!skb_queue_empty(&sk->sk_write_queue)) {
-			printk("call nd push\n");
+			// printk("call nd push\n");
 			nd_push(sk);
 		}
 	}
@@ -481,53 +496,54 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 }
 
 /* fully reclaim rmem/fwd memory allocated for skb */
-static void nd_rmem_release(struct sock *sk, int size, int partial,
-			     bool rx_queue_lock_held)
-{
-	struct nd_sock *up = nd_sk(sk);
-	struct sk_buff_head *sk_queue;
-	int amt;
+// static void nd_rmem_release(struct sock *sk, int size, int partial,
+// 			     bool rx_queue_lock_held)
+// {
+// 	struct nd_sock *up = nd_sk(sk);
+// 	struct sk_buff_head *sk_queue;
+// 	int amt;
 
-	if (likely(partial)) {
-		up->forward_deficit += size;
-		size = up->forward_deficit;
-		if (size < (sk->sk_rcvbuf >> 2) &&
-		    !skb_queue_empty(&up->reader_queue))
-			return;
-	} else {
-		size += up->forward_deficit;
-	}
-	up->forward_deficit = 0;
+// 	if (likely(partial)) {
+// 		up->forward_deficit += size;
+// 		size = up->forward_deficit;
+// 		if (size < (sk->sk_rcvbuf >> 2) &&
+// 		    !skb_queue_empty(&up->reader_queue))
+// 			return;
+// 	} else {
+// 		size += up->forward_deficit;
+// 	}
+// 	up->forward_deficit = 0;
 
-	/* acquire the sk_receive_queue for fwd allocated memory scheduling,
-	 * if the called don't held it already
-	 */
-	sk_queue = &sk->sk_receive_queue;
-	if (!rx_queue_lock_held)
-		spin_lock(&sk_queue->lock);
+// 	/* acquire the sk_receive_queue for fwd allocated memory scheduling,
+// 	 * if the called don't held it already
+// 	 */
+// 	sk_queue = &sk->sk_receive_queue;
+// 	if (!rx_queue_lock_held)
+// 		spin_lock(&sk_queue->lock);
 
 
-	sk->sk_forward_alloc += size;
-	amt = (sk->sk_forward_alloc - partial) & ~(SK_MEM_QUANTUM - 1);
-	sk->sk_forward_alloc -= amt;
+// 	sk->sk_forward_alloc += size;
+// 	amt = (sk->sk_forward_alloc - partial) & ~(SK_MEM_QUANTUM - 1);
+// 	sk->sk_forward_alloc -= amt;
 
-	if (amt)
-		__sk_mem_reduce_allocated(sk, amt >> SK_MEM_QUANTUM_SHIFT);
+// 	if (amt)
+// 		__sk_mem_reduce_allocated(sk, amt >> SK_MEM_QUANTUM_SHIFT);
 
-	atomic_sub(size, &sk->sk_rmem_alloc);
+// 	atomic_sub(size, &sk->sk_rmem_alloc);
 
-	/* this can save us from acquiring the rx queue lock on next receive */
-	skb_queue_splice_tail_init(sk_queue, &up->reader_queue);
+// 	/* this can save us from acquiring the rx queue lock on next receive */
+// 	skb_queue_splice_tail_init(sk_queue, &up->reader_queue);
 
-	if (!rx_queue_lock_held)
-		spin_unlock(&sk_queue->lock);
-}
+// 	if (!rx_queue_lock_held)
+// 		spin_unlock(&sk_queue->lock);
+// }
 
 void nd_destruct_sock(struct sock *sk)
 {
 
 	/* reclaim completely the forward allocated memory */
 	unsigned int total = 0;
+	struct nd_sock *nsk = nd_sk(sk);
 	// struct sk_buff *skb;
 	// struct udp_hslot* hslot = udp_hashslot(sk->sk_prot->h.udp_table, sock_net(sk),
 	// 				     nd_sk(sk)->nd_port_hash);
@@ -537,13 +553,17 @@ void nd_destruct_sock(struct sock *sk)
 	// 	total += skb->truesize;
 	// 	kfree_skb(skb);
 	// }
+	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
+	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	/* clean sk_forward_alloc*/
-	__sk_mem_reclaim(sk, sk->sk_forward_alloc);
-	sk->sk_forward_alloc = 0;
-	nd_rmem_release(sk, total, 0, true);
+	sk_mem_reclaim(sk);
+	// sk->sk_forward_alloc = 0;
+	// nd_rmem_release(sk, total, 0, true);
 	inet_sock_destruct(sk);
-	/* unclear part */
 	printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
+
+	/* unclear part */
+	// printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
 
 }
 EXPORT_SYMBOL_GPL(nd_destruct_sock);
@@ -877,7 +897,7 @@ found_ok_skb:
 		if (used + offset < skb->len)
 			continue;
 		__skb_unlink(skb, &sk->sk_receive_queue);
-		atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
 		kfree_skb(skb);
 
 		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
@@ -1273,17 +1293,17 @@ void __init nd_init(void)
 	sysctl_nd_mem[1] = limit;
 	sysctl_nd_mem[2] = sysctl_nd_mem[0] * 2;
 
-	__nd_sysctl_init(&init_net);
-	/* 16 spinlocks per cpu */
-	// nd_busylocks_log = ilog2(nr_cpu_ids) + 4;
-	// nd_busylocks = kmalloc(sizeof(spinlock_t) << nd_busylocks_log,
-	// 			GFP_KERNEL);
-	// if (!nd_busylocks)
-	// 	panic("ND: failed to alloc nd_busylocks\n");
-	// for (i = 0; i < (1U << nd_busylocks_log); i++)
-	// 	spin_lock_init(nd_busylocks + i);
-	if (register_pernet_subsys(&nd_sysctl_ops)) 
-		panic("ND: failed to init sysctl parameters.\n");
+	// __nd_sysctl_init(&init_net);
+	// /* 16 spinlocks per cpu */
+	// // nd_busylocks_log = ilog2(nr_cpu_ids) + 4;
+	// // nd_busylocks = kmalloc(sizeof(spinlock_t) << nd_busylocks_log,
+	// // 			GFP_KERNEL);
+	// // if (!nd_busylocks)
+	// // 	panic("ND: failed to alloc nd_busylocks\n");
+	// // for (i = 0; i < (1U << nd_busylocks_log); i++)
+	// // 	spin_lock_init(nd_busylocks + i);
+	// if (register_pernet_subsys(&nd_sysctl_ops)) 
+	// 	panic("ND: failed to init sysctl parameters.\n");
 
 	printk("ND init complete\n");
 

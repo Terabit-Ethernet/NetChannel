@@ -582,7 +582,7 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 	int len = sizeof(*hdr) - req->offset;
 	int ret;
 
-	printk("nd_conn_try_send_cmd_pdu: type:%d\n", hdr->type);
+	// printk("nd_conn_try_send_cmd_pdu: type:%d\n", hdr->type);
 	ret = kernel_sendpage(queue->sock, virt_to_page(hdr),
 			offset_in_page(hdr) + req->offset, len,  flags);
 
@@ -594,14 +594,11 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 		return ret;
 	}
 	len -= ret;
-	printk("len:%d\n", len);
 	if (!len) {
 		if(inline_data) {
-			printk("inline data\n");
 			req->state = ND_CONN_SEND_DATA;
 			/* initialize the sending state */
 		} else {
-			printk("free done request\n");
 			req->state = ND_CONN_PDU_DONE;
 			// nd_conn_done_send_req(queue);
 		}
@@ -619,7 +616,7 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 	int ret = 0;
 	int flags = MSG_DONTWAIT;
  	skb_frag_t *frag;
-	printk("skb_shinfo(skb)->nr_frags:%d\n", skb_shinfo(skb)->nr_frags);
+	// printk("skb_shinfo(skb)->nr_frags:%d\n", skb_shinfo(skb)->nr_frags);
 	while(true) {
 		unsigned short frag_offset = req->frag_offset, 
 			fragidx = req->fragidx;
@@ -638,7 +635,7 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 		} else {
 			flags |= MSG_MORE;
 		}
-		printk("sendpage:%d\n", fragidx);
+		// printk("sendpage:%d\n", fragidx);
 		ret = kernel_sendpage(queue->sock,
 						skb_frag_page(frag),
 						skb_frag_off(frag) + frag_offset,
@@ -647,17 +644,17 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 		if(ret <= 0) {
 			return ret;
 		}
-		printk("send data bytes:%d\n", ret);
+		// printk("send data bytes:%d\n", ret);
 		frag_offset += ret;
 		if(frag_offset == skb_frag_size(frag)) {
 			if(fragidx == skb_shinfo(skb)->nr_frags - 1) {
 				/* sending is done */
-				printk("ND_CONN_PDU_DONE\n");
+				// printk("ND_CONN_PDU_DONE\n");
 				req->state = ND_CONN_PDU_DONE;
 				return 1;
 			} else {
 				/* move to the next frag */
-				printk("move to the next frag\n");
+				// printk("move to the next frag\n");
 				req->frag_offset = 0;
 				req->fragidx += 1;
 			}
@@ -690,7 +687,7 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 
 	
 	if (req->state == ND_CONN_SEND_DATA) {
-		printk("send data pdu\n");
+		// printk("send data pdu\n");
 		ret = nd_conn_try_send_data_pdu(req);
 		if (ret <= 0)
 			goto done;
@@ -990,7 +987,7 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 				opts->nr_poll_queues + 1;
 	ctrl->sqsize = opts->queue_size - 1;
 	// ctrl->ctrl.kato = opts->kato;
-    pr_info("queue count: %u\n", ctrl->queue_count);
+    // pr_info("queue count: %u\n", ctrl->queue_count);
 	// INIT_DELAYED_WORK(&ctrl->connect_work,
 	// 		nvme_tcp_reconnect_ctrl_work);
 	// INIT_WORK(&ctrl->err_work, nd_conn_error_recovery_work);
@@ -1101,7 +1098,7 @@ int __init nd_conn_init_module(void)
 	return 0;
 }
 
-void __exit nd_conn_cleanup_module(void)
+void nd_conn_cleanup_module(void)
 {
 	struct nd_conn_ctrl *ctrl;
 
