@@ -1533,6 +1533,7 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 			return -ENOMEM;
 		if(new_skb->len <= need_bytes) {
 			if (!skb_try_coalesce(skb, new_skb, &fragstolen, &delta)) {
+				int i = 0;
 				pr_info("Coalesce fails:%d\n", __LINE__);
 				pr_info("need bytes:%d\n", need_bytes);
 				pr_info("skb len:%d\n", skb->len);
@@ -1541,7 +1542,10 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 				pr_info("bew skb trusize:%d\n", new_skb->truesize);
 				pr_info("skb frags:%d\n", skb_shinfo(skb)->nr_frags);
 				pr_info("new skb frags:%d\n", skb_shinfo(new_skb)->nr_frags);
-
+				for(i = 0; i <  skb_shinfo(skb)->nr_frags; i++) {
+					skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+					pr_info("frag %d size : %d\n ",i, skb_frag_size(frag));
+				}
 			} else {
 				kfree_skb_partial(new_skb, fragstolen);
 			}
