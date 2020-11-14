@@ -46,15 +46,18 @@ enum nd_queue {
 struct nd_skb_cb {
 	__u32 seq; /* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + datalen	*/
-
-	union {
-		struct inet_skb_parm	h4;
-#if IS_ENABLED(CONFIG_IPV6)
-		struct inet6_skb_parm	h6;
-#endif
-	} header;
-	__u16		cscov;
-	__u8		partial_cov;
+	__u32       total_len; /* this for aggregating packts */
+	__u32       count; /* the number of skbs in fraglist */
+	__u32 		total_size;
+	struct sk_buff* tail; /* tail of skb's fraglist */
+// 	union {
+// 		struct inet_skb_parm	h4;
+// #if IS_ENABLED(CONFIG_IPV6)
+// 		struct inet6_skb_parm	h6;
+// #endif
+// 	} header;
+// 	__u16		cscov;
+// 	__u8		partial_cov;
 };
 #define ND_SKB_CB(__skb)	((struct nd_skb_cb *)((__skb)->cb))
 
@@ -322,18 +325,18 @@ extern long sysctl_nd_mem[3];
 /*
  *	Generic checksumming routines for ND(-Lite) v4 and v6
  */
-static inline __sum16 __nd_lib_checksum_complete(struct sk_buff *skb)
-{
-	return (ND_SKB_CB(skb)->cscov == skb->len ?
-		__skb_checksum_complete(skb) :
-		__skb_checksum_complete_head(skb, ND_SKB_CB(skb)->cscov));
-}
+// static inline __sum16 __nd_lib_checksum_complete(struct sk_buff *skb)
+// {
+// 	return (ND_SKB_CB(skb)->cscov == skb->len ?
+// 		__skb_checksum_complete(skb) :
+// 		__skb_checksum_complete_head(skb, ND_SKB_CB(skb)->cscov));
+// }
 
-static inline int nd_lib_checksum_complete(struct sk_buff *skb)
-{
-	return !skb_csum_unnecessary(skb) &&
-		__nd_lib_checksum_complete(skb);
-}
+// static inline int nd_lib_checksum_complete(struct sk_buff *skb)
+// {
+// 	return !skb_csum_unnecessary(skb) &&
+// 		__nd_lib_checksum_complete(skb);
+// }
 
 // /**
 //  * 	nd_csum_outgoing  -  compute NDv4/v6 checksum over fragments
@@ -371,14 +374,14 @@ static inline __sum16 nd_v4_check(int len, __be32 saddr,
 void nd_set_csum(bool nocheck, struct sk_buff *skb,
 		  __be32 saddr, __be32 daddr, int len);
 
-static inline void nd_csum_pull_header(struct sk_buff *skb)
-{
-	if (!skb->csum_valid && skb->ip_summed == CHECKSUM_NONE)
-		skb->csum = csum_partial(skb->data, sizeof(struct nd_data_hdr),
-					 skb->csum);
-	skb_pull_rcsum(skb, sizeof(struct nd_data_hdr));
-	ND_SKB_CB(skb)->cscov -= sizeof(struct nd_data_hdr);
-}
+// static inline void nd_csum_pull_header(struct sk_buff *skb)
+// {
+// 	if (!skb->csum_valid && skb->ip_summed == CHECKSUM_NONE)
+// 		skb->csum = csum_partial(skb->data, sizeof(struct nd_data_hdr),
+// 					 skb->csum);
+// 	skb_pull_rcsum(skb, sizeof(struct nd_data_hdr));
+// 	ND_SKB_CB(skb)->cscov -= sizeof(struct nd_data_hdr);
+// }
 
 typedef struct sock *(*nd_lookup_t)(struct sk_buff *skb, __be16 sport,
 				     __be16 dport);
@@ -456,22 +459,22 @@ static inline void nd_lib_close(struct sock *sk, long timeout)
  * Save and compile IPv4 options, return a pointer to it
  */
 
-static inline struct ip_options_rcu *nd_v4_save_options(struct net *net,
-							 struct sk_buff *skb)
-{
-	const struct ip_options *opt = &ND_SKB_CB(skb)->header.h4.opt;
-	struct ip_options_rcu *dopt = NULL;
-	if (opt->optlen) {
-		int opt_size = sizeof(*dopt) + opt->optlen;
+// static inline struct ip_options_rcu *nd_v4_save_options(struct net *net,
+// 							 struct sk_buff *skb)
+// {
+// 	const struct ip_options *opt = &ND_SKB_CB(skb)->header.h4.opt;
+// 	struct ip_options_rcu *dopt = NULL;
+// 	if (opt->optlen) {
+// 		int opt_size = sizeof(*dopt) + opt->optlen;
 
-		dopt = kmalloc(opt_size, GFP_ATOMIC);
-		if (dopt && __ip_options_echo(net, &dopt->opt, skb, opt)) {
-			kfree(dopt);
-			dopt = NULL;
-		}
-	}
-	return dopt;
-}
+// 		dopt = kmalloc(opt_size, GFP_ATOMIC);
+// 		if (dopt && __ip_options_echo(net, &dopt->opt, skb, opt)) {
+// 			kfree(dopt);
+// 			dopt = NULL;
+// 		}
+// 	}
+// 	return dopt;
+// }
 
 static inline int nd_rqueue_get(struct sock *sk)
 {

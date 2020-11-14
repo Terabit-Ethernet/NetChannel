@@ -630,8 +630,8 @@ static void nd_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
         /* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
          * barrier() makes sure compiler wont play fool^Waliasing games.
          */
-        memmove(&ND_SKB_CB(skb)->header.h4, IPCB(skb),
-                sizeof(struct inet_skb_parm));
+        // memmove(&ND_SKB_CB(skb)->header.h4, IPCB(skb),
+        //         sizeof(struct inet_skb_parm));
         barrier();
         ND_SKB_CB(skb)->seq = ntohl(dh->seq);
         // printk("skb len:%d\n", skb->len);
@@ -907,7 +907,7 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 	// struct iphdr *iph;
 	// struct message_hslot* slot;
 	struct ndhdr *fh;
-	struct sock *sk, *child;
+	struct sock *sk = NULL, *child;
 	int sdif = inet_sdif(skb);
 	bool refcounted = false;
 	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
@@ -924,6 +924,7 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 		fh->dest, sdif, &refcounted);
 		// sk = __nd4_lib_lookup_skb(skb, fh->common.source, fh->common.dest, &nd_table);
 	// }
+	pr_info("receive sync pkt\n");
 	if(sk) {
 		child = nd_conn_request(sk, skb);
 		if(child) {
@@ -939,6 +940,8 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 			/* ToDo: sync can be true; */
 			nd_conn_queue_request(construct_sync_ack_req(child), false, true);
 		}
+	} else {
+		goto free;
 	}
 
 
@@ -946,6 +949,7 @@ drop:
     if (refcounted) {
         sock_put(sk);
     }
+free:
 	kfree_skb(skb);
 
 	return 0;
@@ -1081,7 +1085,7 @@ int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
 	// if(!sk) {
 	// pr_info("read src port:%d\n", ntohs(nh->source));
 	// pr_info("read dst port:%d\n", ntohs(nh->dest));
-
+	// pr_info("receive sync ack pkt\n");
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(nh), nh->source,
             nh->dest, sdif, &refcounted);
     // }
@@ -1199,7 +1203,7 @@ int nd_data_queue(struct sock *sk, struct sk_buff *skb)
 	// atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 
 	// skb_dst_drop(skb);
-	__skb_pull(skb, nd_hdr(skb)->doff >> 2);
+	// __skb_pull(skb, nd_hdr(skb)->doff >> 2);
 	// printk("handle packet data queue?:%d\n", ND_SKB_CB(skb)->seq);
 
 	/*  Queue data for delivery to the user.
@@ -1296,11 +1300,50 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
                 // __NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPBACKLOGDROP);
                 return true;
         }
+		/* sk_add_backlog add skb->truesize, but we have fraglist skbs */
+		sk->sk_backlog.len -= skb->truesize + ND_SKB_CB(skb)->total_size;
         // atomic_add(skb->truesize, &dsk->receiver.backlog_len);
 
         return false;
 
  }
+
+/* asssume socket user lock is hold */
+static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
+		int count, total_len, i, seq;
+		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
+		struct iphdr *iph;
+		struct ndhdr *dh;
+	
+		iph = ip_hdr(skb);
+		dh =  nd_hdr(skb);
+		/* handle the first packet which contains the header */
+		count = ND_SKB_CB(skb)->count;
+		total_len = ND_SKB_CB(skb)->total_len;
+		
+		skb_shinfo(skb)->frag_list = NULL;
+		ND_SKB_CB(skb)->count = 0;
+		ND_SKB_CB(skb)->total_len = 0;
+		ND_SKB_CB(skb)->total_size = 0;
+		nd_v4_fill_cb(skb, iph, dh);
+		seq = ND_SKB_CB(skb)->end_seq;
+		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
+		nd_data_queue(sk, skb);
+
+		/* handle the rest of packets */
+		for(i = 0; i < count; i++) {
+			WARN_ON(!head);
+			ND_SKB_CB(head)->seq = seq;
+			ND_SKB_CB(head)->end_seq = seq + head->len;
+			temp = head->next;
+			head->next = NULL;
+			/* update the seq */
+			seq = ND_SKB_CB(skb)->end_seq;
+			nd_data_queue(sk, head);
+			head = temp;
+		}
+	return ;
+}
 /**
  * nd_data_pkt() - Handler for incoming DATA packets
  * @skb:     Incoming packet; size known to be large enough for the header.
@@ -1318,7 +1361,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	struct nd_sock *dsk;
 	struct ndhdr *dh;
 	struct sock *sk;
-	struct iphdr *iph;
+	// struct iphdr *iph;
 	int sdif = inet_sdif(skb);
 
 	bool refcounted = false;
@@ -1333,10 +1376,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
             dh->dest, sdif, &refcounted);
     if(!sk)
     	goto drop;
-	
-    // }
 
-	nd_v4_fill_cb(skb, iph, dh);
+    // }
 	// printk("packet hash %u\n", skb->hash);
 	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
 	// printk("receive packet core:%d\n", raw_smp_processor_id());
@@ -1345,7 +1386,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	// printk("skb address:%p\n", skb);
 	if(sk && sk->sk_state == ND_ESTABLISH) {
 		dsk = nd_sk(sk);
-		iph = ip_hdr(skb);
+		// iph = ip_hdr(skb);
  		bh_lock_sock(sk);
 
         // ret = 0;
@@ -1355,7 +1396,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 			// printk("skb->hash:%u\n", skb->hash);
 		 	// sock_rps_save_rxhash(sk, skb)
 			//  printk("put into the data queue\n");
-            nd_data_queue(sk, skb);
+			nd_handle_data_skb(sk, skb);
+
 			// nd_check_flow_finished_at_receiver(dsk);;
         } else {
         	// printk("add to backlog\n");
@@ -1411,7 +1453,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	// printk("backlog rcv\n");
 
 	if(dh->type == DATA) {
-		nd_data_queue(sk, skb);
+		nd_handle_data_skb(sk, skb);
 		return 0;
 		// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
 	} else if (dh->type == FIN) {
@@ -1519,11 +1561,13 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	return 0; 
 }
 
-int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
-	struct sk_buff* new_skb;
+int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes, bool coalesce) {
+	struct sk_buff* new_skb, *head;
 	int delta = 0;
  	bool fragstolen = false;
-
+	WARN_ON(!skb);
+	head = skb;
+	// pr_info("reach here:%d\n", __LINE__);
 	while(need_bytes > 0) {
 		/* skb_split only handles non-header part */
 		fragstolen = false;
@@ -1531,41 +1575,47 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		new_skb =  skb_dequeue(queue);
 		if(!new_skb)
 			return -ENOMEM;
-		if(new_skb->len <= need_bytes) {
-			if (!skb_try_coalesce(skb, new_skb, &fragstolen, &delta)) {
-				int i = 0;
-				pr_info("Coalesce fails:%d\n", __LINE__);
-				pr_info("need bytes:%d\n", need_bytes);
-				pr_info("skb len:%d\n", skb->len);
-				pr_info("skb trusize:%d\n", skb->truesize);
-				pr_info("new skb len:%d\n", new_skb->len);
-				pr_info("bew skb trusize:%d\n", new_skb->truesize);
-				pr_info("skb frags:%d\n", skb_shinfo(skb)->nr_frags);
-				pr_info("new skb frags:%d\n", skb_shinfo(new_skb)->nr_frags);
-				for(i = 0; i <  skb_shinfo(skb)->nr_frags; i++) {
-					skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
-					pr_info("frag %d size : %d\n ",i, skb_frag_size(frag));
-				}
-			} else {
-				kfree_skb_partial(new_skb, fragstolen);
-			}
-			need_bytes -= new_skb->len;
-		} else {
+		if(new_skb->len > need_bytes)
 			nd_split(queue, new_skb, need_bytes);
-			/* then coalesce */
-			if(!skb_try_coalesce(skb, new_skb,&fragstolen, &delta)) {
+		need_bytes -= new_skb->len;
+		// pr_info("reach here:%d\n", __LINE__);
+		if(coalesce) {
+			if (!skb_try_coalesce(head, new_skb, &fragstolen, &delta)) {
+				// int i = 0;
 				pr_info("Coalesce fails:%d\n", __LINE__);
-				pr_info("need bytes:%d\n", need_bytes);
-				pr_info("skb len:%d\n", skb->len);
-				pr_info("skb trusize:%d\n", skb->truesize);
-				pr_info("new skb len:%d\n", new_skb->len);
-				pr_info("bew skb trusize:%d\n", new_skb->truesize);
-				pr_info("skb frags:%d\n", skb_shinfo(skb)->nr_frags);
-				pr_info("new skb frags:%d\n", skb_shinfo(new_skb)->nr_frags);
+				// pr_info("need bytes:%d\n", need_bytes);
+				// pr_info("skb len:%d\n", skb->len);
+				// pr_info("skb trusize:%d\n", skb->truesize);
+				// pr_info("new skb len:%d\n", new_skb->len);
+				// pr_info("bew skb trusize:%d\n", new_skb->truesize);
+				// pr_info("skb frags:%d\n", skb_shinfo(skb)->nr_frags);
+				// pr_info("new skb frags:%d\n", skb_shinfo(new_skb)->nr_frags);
+				// for(i = 0; i <  skb_shinfo(skb)->nr_frags; i++) {
+				// 	skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+				// 	pr_info("frag %d size : %d\n ",i, skb_frag_size(frag));
+				// }
 			} else {
 				kfree_skb_partial(new_skb, fragstolen);
 			}
-			need_bytes = 0;
+		} else {
+			// pr_info("reach here:%d\n", __LINE__);
+			if(!skb_shinfo(head)->frag_list) {
+				skb_shinfo(head)->frag_list = new_skb;
+				ND_SKB_CB(head)->tail = new_skb;
+				// pr_info("reach here:%d\n", __LINE__);
+
+			} else {
+				// pr_info("reach here:%d\n", __LINE__);
+				WARN_ON(!ND_SKB_CB(head)->tail);
+				ND_SKB_CB(head)->tail->next = new_skb;
+				ND_SKB_CB(head)->tail = new_skb;
+
+			}
+			// skb = new_skb;
+			/* don't increment truesize and len of head */
+			ND_SKB_CB(head)->total_size += new_skb->truesize;
+			ND_SKB_CB(head)->total_len += new_skb->len;
+			ND_SKB_CB(head)->count += 1;
 		}
 	}
 	if(need_bytes > 0)
@@ -1579,9 +1629,13 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 	int ret;
 	struct iphdr* iph;
 	while ((skb = skb_dequeue(queue)) != NULL) {
+		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
+		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
 		if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 			need_bytes = sizeof(struct ndhdr) - skb->len;
-			ret = nd_split_and_merge(queue, skb, need_bytes);
+			WARN_ON(need_bytes < 0);
+			// pr_info("skb->len:%d\n", skb->len);
+			ret = nd_split_and_merge(queue, skb, need_bytes, true);
 			/* No space for header . */
 			if(ret == -ENOMEM) {
 				goto push_back;
@@ -1593,10 +1647,20 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		nh = nd_hdr(skb);
 		/* this layer could do sort of GRO stuff later */
 		if(nh->type == DATA) {
-			need_bytes = ntohs(nh->len) + sizeof(struct ndhdr) - skb->len;
+			if(!skb_has_frag_list(skb)) {
+				/* first time to handle the skb */
+				// skb_shinfo(head)->frag_list = NULL;
+				ND_SKB_CB(skb)->total_size = skb->truesize;
+				ND_SKB_CB(skb)->total_len = skb->len;
+				ND_SKB_CB(skb)->count = 0;
+			}
+			
+			need_bytes = ntohs(nh->len) + sizeof(struct ndhdr) - ND_SKB_CB(skb)->total_len;
+			// pr_info("need bytes:%d\n", need_bytes);
 			if(need_bytes > 0) {
-				ret = nd_split_and_merge(queue, skb, need_bytes);
+				ret = nd_split_and_merge(queue, skb, need_bytes, false);
 				if(ret == -ENOMEM) {
+					// pr_info("go to push back\n");
 					goto push_back;
 					return;
 				}
@@ -1613,17 +1677,20 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
-
+		// skb_dump(KERN_WARNING, skb, false);
+		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
 
 		// }
 		/* disable irq since it is in the process context */
-		local_bh_disable();
-		/* pass to the virutal socket layer */
-		nd_rcv(skb);
-		local_bh_enable();
-		// kfree_skb(skb);
+		// if(nh->type != DATA) {
+			local_bh_disable();
+			/* pass to the virutal socket layer */
+			nd_rcv(skb);
+			local_bh_enable();
+		// } else
+		// 	kfree_skb(skb);
 	}
 	return;
 push_back:

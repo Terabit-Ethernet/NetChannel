@@ -459,30 +459,58 @@ fail_unlock:
 EXPORT_SYMBOL_GPL(nd_sk_get_port);
 
 
-/* this function is copied from inet_wait_for_connect */
-long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
+int nd_wait_for_connect(struct sock *sk, long *timeo_p)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	struct task_struct *tsk = current;
+	int done;
 
-	add_wait_queue(sk_sleep(sk), &wait);
-	sk->sk_write_pending += writebias;
+	do {
+		int err = sock_error(sk);
+		if (err)
+			return err;
+		if ((1 << sk->sk_state) & ~(NDF_SYNC_SENT))
+			return -EPIPE;
+		if (!*timeo_p)
+			return -EAGAIN;
+		if (signal_pending(tsk))
+			return sock_intr_errno(*timeo_p);
 
-	/* Basic assumption: if someone sets sk->sk_err, he _must_
-	 * change state of the socket from TCP_SYN_*.
-	 * Connect() does not allow to get error notifications
-	 * without closing the socket.
-	 */
-	while ((1 << sk->sk_state) & (NDF_SYNC_SENT)) {
-		release_sock(sk);
-		timeo = wait_woken(&wait, TASK_INTERRUPTIBLE, timeo);
-		lock_sock(sk);
-		if (signal_pending(current) || !timeo)
-			break;
-	}
-	remove_wait_queue(sk_sleep(sk), &wait);
-	sk->sk_write_pending -= writebias;
-	return timeo;
+		add_wait_queue(sk_sleep(sk), &wait);
+		sk->sk_write_pending++;
+		done = sk_wait_event(sk, timeo_p,
+				     !sk->sk_err &&
+				     !((1 << sk->sk_state) &
+				       ~(NDF_ESTABLISH)), &wait);
+		remove_wait_queue(sk_sleep(sk), &wait);
+		sk->sk_write_pending--;
+	} while (!done);
+	return 0;
 }
+/* this function is copied from inet_wait_for_connect */
+// long nd_wait_for_connect(struct sock *sk, long timeo, int writebias)
+// {
+// 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+
+// 	add_wait_queue(sk_sleep(sk), &wait);
+// 	sk->sk_write_pending += writebias;
+
+// 	/* Basic assumption: if someone sets sk->sk_err, he _must_
+// 	 * change state of the socket from TCP_SYN_*.
+// 	 * Connect() does not allow to get error notifications
+// 	 * without closing the socket.
+// 	 */
+// 	while ((1 << sk->sk_state) & (NDF_SYNC_SENT)) {
+// 		release_sock(sk);
+// 		timeo = wait_woken(&wait, TASK_INTERRUPTIBLE, timeo);
+// 		lock_sock(sk);
+// 		if (signal_pending(current) || !timeo)
+// 			break;
+// 	}
+// 	remove_wait_queue(sk_sleep(sk), &wait);
+// 	sk->sk_write_pending -= writebias;
+// 	return timeo;
+// }
 
 /* This will initiate an outgoing connection. */
 int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
@@ -951,7 +979,7 @@ static void nd_v4_init_req(struct request_sock *req,
 		ireq->no_srccheck = inet_sk(sk_listener)->transparent;
 		/* Note: tcp_v6_init_req() might override ir_iif for link locals */
 		ireq->ir_iif = inet_request_bound_dev_if(sk_listener, skb);
-        RCU_INIT_POINTER(ireq->ireq_opt, nd_v4_save_options(net, skb));
+        // RCU_INIT_POINTER(ireq->ireq_opt, nd_v4_save_options(net, skb));
 		refcount_set(&req->rsk_refcnt, 1);
 }
 

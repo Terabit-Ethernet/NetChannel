@@ -70,7 +70,7 @@ struct sock *nd_sk_reqsk_queue_add(struct sock *sk,
 				      struct request_sock *req,
 				      struct sock *child);
 
-long nd_wait_for_connect(struct sock *sk, long timeo, int writebias);
+int nd_wait_for_connect(struct sock *sk, long *timeo);
 // static void nd_v4_init_req(struct request_sock *req,
 //                             const struct sock *sk_listener,
 //                             struct sk_buff *skb);

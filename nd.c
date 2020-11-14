@@ -253,8 +253,11 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
 	int err = -EPIPE;
 	int i = 0;
-	while(sk->sk_state != ND_ESTABLISH) {
-		nd_wait_for_connect(sk, timeo, 0);
+	
+	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
+		err = nd_wait_for_connect(sk, &timeo);
+		if (err != 0)
+			goto out_error;
 	}
 	/* Per tcp_sendmsg this should be in poll */
 	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
