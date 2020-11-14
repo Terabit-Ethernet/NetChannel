@@ -1338,7 +1338,7 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 			temp = head->next;
 			head->next = NULL;
 			/* update the seq */
-			seq = ND_SKB_CB(skb)->end_seq;
+			seq = ND_SKB_CB(head)->end_seq;
 			nd_data_queue(sk, head);
 			head = temp;
 		}
