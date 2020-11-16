@@ -114,75 +114,75 @@ static inline bool nd_sack_extend(struct nd_sack_block *sp, u32 seq,
 /* These routines update the SACK block as out-of-order packets arrive or
  * in-order packets close up the sequence space.
  */
-static void nd_sack_maybe_coalesce(struct nd_sock *dsk)
-{
-	int this_sack;
-	struct nd_sack_block *sp = &dsk->selective_acks[0];
-	struct nd_sack_block *swalk = sp + 1;
+// static void nd_sack_maybe_coalesce(struct nd_sock *dsk)
+// {
+// 	int this_sack;
+// 	struct nd_sack_block *sp = &dsk->selective_acks[0];
+// 	struct nd_sack_block *swalk = sp + 1;
 
-	/* See if the recent change to the first SACK eats into
-	 * or hits the sequence space of other SACK blocks, if so coalesce.
-	 */
-	for (this_sack = 1; this_sack < dsk->num_sacks;) {
-		if (nd_sack_extend(sp, swalk->start_seq, swalk->end_seq)) {
-			int i;
+// 	/* See if the recent change to the first SACK eats into
+// 	 * or hits the sequence space of other SACK blocks, if so coalesce.
+// 	 */
+// 	for (this_sack = 1; this_sack < dsk->num_sacks;) {
+// 		if (nd_sack_extend(sp, swalk->start_seq, swalk->end_seq)) {
+// 			int i;
 
-			/* Zap SWALK, by moving every further SACK up by one slot.
-			 * Decrease num_sacks.
-			 */
-			dsk->num_sacks--;
-			for (i = this_sack; i < dsk->num_sacks; i++)
-				sp[i] = sp[i + 1];
-			continue;
-		}
-		this_sack++, swalk++;
-	}
-}
+// 			/* Zap SWALK, by moving every further SACK up by one slot.
+// 			 * Decrease num_sacks.
+// 			 */
+// 			dsk->num_sacks--;
+// 			for (i = this_sack; i < dsk->num_sacks; i++)
+// 				sp[i] = sp[i + 1];
+// 			continue;
+// 		}
+// 		this_sack++, swalk++;
+// 	}
+// }
 
-static void nd_sack_new_ofo_skb(struct sock *sk, u32 seq, u32 end_seq)
-{
-	struct nd_sock *dsk = nd_sk(sk);
-	struct nd_sack_block *sp = &dsk->selective_acks[0];
-	int cur_sacks = dsk->num_sacks;
-	int this_sack;
+// static void nd_sack_new_ofo_skb(struct sock *sk, u32 seq, u32 end_seq)
+// {
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	struct nd_sack_block *sp = &dsk->selective_acks[0];
+// 	int cur_sacks = dsk->num_sacks;
+// 	int this_sack;
 
-	if (!cur_sacks)
-		goto new_sack;
+// 	if (!cur_sacks)
+// 		goto new_sack;
 
-	for (this_sack = 0; this_sack < cur_sacks; this_sack++, sp++) {
-		if (nd_sack_extend(sp, seq, end_seq)) {
-			/* Rotate this_sack to the first one. */
-			for (; this_sack > 0; this_sack--, sp--)
-				swap(*sp, *(sp - 1));
-			if (cur_sacks > 1)
-				nd_sack_maybe_coalesce(dsk);
-			return;
-		}
-	}
+// 	for (this_sack = 0; this_sack < cur_sacks; this_sack++, sp++) {
+// 		if (nd_sack_extend(sp, seq, end_seq)) {
+// 			/* Rotate this_sack to the first one. */
+// 			for (; this_sack > 0; this_sack--, sp--)
+// 				swap(*sp, *(sp - 1));
+// 			if (cur_sacks > 1)
+// 				nd_sack_maybe_coalesce(dsk);
+// 			return;
+// 		}
+// 	}
 
-	/* Could not find an adjacent existing SACK, build a new one,
-	 * put it at the front, and shift everyone else down.  We
-	 * always know there is at least one SACK present already here.
-	 *
-	 * If the sack array is full, forget about the last one.
-	 */
-	if (this_sack > ND_NUM_SACKS) {
-		// if (tp->compressed_ack > TCP_FASTRETRANS_THRESH)
-		// 	tcp_send_ack(sk);
-		WARN_ON(true);
-		this_sack--;
-		dsk->num_sacks--;
-		sp--;
-	}
-	for (; this_sack > 0; this_sack--, sp--)
-		*sp = *(sp - 1);
+// 	/* Could not find an adjacent existing SACK, build a new one,
+// 	 * put it at the front, and shift everyone else down.  We
+// 	 * always know there is at least one SACK present already here.
+// 	 *
+// 	 * If the sack array is full, forget about the last one.
+// 	 */
+// 	if (this_sack > ND_NUM_SACKS) {
+// 		// if (tp->compressed_ack > TCP_FASTRETRANS_THRESH)
+// 		// 	tcp_send_ack(sk);
+// 		WARN_ON(true);
+// 		this_sack--;
+// 		dsk->num_sacks--;
+// 		sp--;
+// 	}
+// 	for (; this_sack > 0; this_sack--, sp--)
+// 		*sp = *(sp - 1);
 
-new_sack:
-	/* Build the new head SACK, and we're done. */
-	sp->start_seq = seq;
-	sp->end_seq = end_seq;
-	dsk->num_sacks++;
-}
+// new_sack:
+// 	/* Build the new head SACK, and we're done. */
+// 	sp->start_seq = seq;
+// 	sp->end_seq = end_seq;
+// 	dsk->num_sacks++;
+// }
 
 /* RCV.NXT advances, some SACKs should be eaten. */
 
@@ -286,7 +286,7 @@ enum hrtimer_restart nd_flow_wait_event(struct hrtimer *timer) {
 	// 	test_and_set_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
 	// }
 	// bh_unlock_sock(sk);
-	// return HRTIMER_NORESTART;
+	return HRTIMER_NORESTART;
 }
 
 /* Called inside release_cb or by flow_wait_event; BH is disabled by the caller and lock_sock is hold by caller.
@@ -604,8 +604,8 @@ int nd_clean_rtx_queue(struct sock *sk)
  * and send ack pkt if the flow is finished */
 static void nd_rcv_nxt_update(struct nd_sock *dsk, u32 seq)
 {
-	struct sock *sk = (struct sock*) dsk;
-	struct inet_sock *inet = inet_sk(sk);
+	// struct sock *sk = (struct sock*) dsk;
+	// struct inet_sock *inet = inet_sk(sk);
 	u32 delta = seq - dsk->receiver.rcv_nxt;
 	// int grant_bytes = calc_grant_bytes(sk);
 
@@ -667,7 +667,7 @@ static bool nd_try_coalesce(struct sock *sk,
 			     bool *fragstolen)
 {
 	int delta;
-	int skb_truesize = from->truesize;
+	// int skb_truesize = from->truesize;
 	*fragstolen = false;
 
 	/* Its possible this segment overlaps with prior segment in queue */
@@ -1286,7 +1286,7 @@ queue_and_out:
 
 bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
 {
-		struct nd_sock *dsk = nd_sk(sk);
+		// struct nd_sock *dsk = nd_sk(sk);
         u32 limit = READ_ONCE(sk->sk_rcvbuf) + READ_ONCE(sk->sk_sndbuf);
         // pr_info("put into the backlog\n:wq");
 	skb_condense(skb);
@@ -1451,7 +1451,7 @@ drop:
  */
 int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	struct ndhdr* dh;
-	struct nd_sock *dsk = nd_sk(sk);
+	// struct nd_sock *dsk = nd_sk(sk);
 	dh = nd_hdr(skb);
 	// atomic_sub(skb->truesize, &dsk->receiver.backlog_len);
 	/* current place to set rxhash for RFS/RPS */

@@ -969,7 +969,7 @@ static void nd_v4_init_req(struct request_sock *req,
                             struct sk_buff *skb)
 {
 	    struct inet_request_sock *ireq = inet_rsk(req);
-        struct net *net = sock_net(sk_listener);
+        // struct net *net = sock_net(sk_listener);
 
         sk_rcv_saddr_set(req_to_sk(req), ip_hdr(skb)->daddr);
         sk_daddr_set(req_to_sk(req), ip_hdr(skb)->saddr);

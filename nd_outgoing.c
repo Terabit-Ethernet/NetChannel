@@ -669,8 +669,8 @@ void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
    assuming hold the socket lock */
 int nd_write_timer_handler(struct sock *sk)
 {    
-	struct nd_sock *dsk = nd_sk(sk);
-	struct sk_buff *skb;
+	// struct nd_sock *dsk = nd_sk(sk);
+	// struct sk_buff *skb;
 	int sent_bytes = 0;
 	// if(dsk->num_sacks > 0) {
 	// 	// printk("retransmit\n");
