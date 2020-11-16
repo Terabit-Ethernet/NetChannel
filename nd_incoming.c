@@ -1314,7 +1314,7 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
 
 /* asssume socket user lock is hold */
 static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
-		int count, total_len, i, seq;
+		uint32_t count, total_len, i, seq;
 		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
 		struct iphdr *iph;
 		struct ndhdr *dh;
