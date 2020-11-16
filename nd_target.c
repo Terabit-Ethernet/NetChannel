@@ -519,7 +519,7 @@ void ndt_conn_io_work(struct work_struct *w)
 	do {
 		pending = false;
 
-		ret = ndt_conn_try_recv(queue, NDT_CONN_RECV_BUDGET - ops, &ops);
+		ret = ndt_conn_try_recv(queue, NDT_CONN_IO_WORK_BUDGET - ops, &ops);
 		if (ret > 0) {
 			pending = true;
 		} 
@@ -631,7 +631,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.117";
+	ndt_port->local_ip = "192.168.10.116";
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);
