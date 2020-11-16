@@ -201,8 +201,10 @@ void ndt_conn_data_ready(struct sock *sk)
 
 	read_lock_bh(&sk->sk_callback_lock);
 	queue = sk->sk_user_data;
-	if (likely(queue))
+	if (likely(queue)) {
+		// pr_info("conn data ready\n");
 		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
 
@@ -316,106 +318,66 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	return 0;
 }
 
+// uint32_t max_pkts = 0;
 static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 		     unsigned int orig_offset, size_t orig_len)
 {
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
-	struct sk_buff *skb;
-	skb = skb_clone(orig_skb, GFP_KERNEL);
-	__skb_queue_tail(&queue->receive_queue, skb);
+	struct sk_buff *skb, *list_skb, *list_skb_next;
+	// skb_dump(KERN_WARNING, orig_skb, false);
+	// pr_info("orignal skb address:%p\n", orig_skb);
+	// pr_info("origianl skb has fraglist:%d\n", skb_has_frag_list(orig_skb));
+	// pr_info("origianl skb fraglist:%p\n", skb_shinfo(orig_skb)->frag_list);
+	// if(max_pkts == 0) {
+		skb = skb_clone(orig_skb, GFP_KERNEL);
+		__skb_queue_tail(&queue->receive_queue, skb);
+	// pr_info("skb has fraglist:%d\n", skb_has_frag_list(skb));
+	// pr_info("skb fraglist:%p\n", skb_shinfo(skb)->frag_list);
+	// max_pkts += orig_len;
+	// pr_info("max pkts:%u\n", max_pkts);
+	// skb_dump(KERN_WARNING, skb, true);
+
+		if(skb_has_frag_list(skb)) {
+			list_skb = skb_shinfo(skb)->frag_list;
+			skb_shinfo(skb)->frag_list = NULL;
+			/* clone each skb */
+			while(list_skb) {
+				// pr_info("clone skb\n");
+				/* fraglist don't have to clone */
+				// list_skb_clone = skb_clone(list_skb, GFP_KERNEL);
+				// skb_dump(KERN_WARNING, list_skb, true);
+				list_skb_next = list_skb->next;
+				skb->truesize -= list_skb->truesize;
+				skb->data_len -= list_skb->len;
+				skb->len -= list_skb->len;
+				__skb_queue_tail(&queue->receive_queue, list_skb);
+				list_skb = list_skb_next;
+			}
+			// pr_info("original skb data len:%d\n", skb->data_len);
+			// int calc_size = skb_headlen(skb), i;
+			int calc_size = 0, i;
+			for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+				calc_size +=  skb_frag_size(&skb_shinfo(skb)->frags[i]);
+			}
+			// pr_info("real skb len:%d\n", calc_size);
+
+		}
+	// 	max_pkts += 1;
+	// } else {
+	// 	skb = skb_clone(orig_skb, GFP_KERNEL);
+	// 	pr_info("new skb address:%p\n", skb);
+
+	// 	pr_info("new skb has fraglist:%p\n", skb_shinfo(skb)->frag_list);
+	// 	if(skb_has_frag_list(skb)) {
+	// 		skb_walk_frags(skb, list_skb)
+	// 			pr_info("skb cloned(listskb):%d\n", skb_cloned(list_skb));
+	// 	}
+	// 	kfree_skb(skb);
+	// }
 	desc->count -= 1;
 	return orig_len;
 }
 
-static int ndt_conn_try_recv_pdu(struct ndt_conn_queue *queue)
-{
-	// struct vs_hdr *hdr = &queue->vs_hdr;
-// 	struct socket *sock = queue->sock;
-// 	int len;
-// 	read_descriptor_t desc;
-
-// 	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
-// 		return -EBUSY;
-
-// 	desc.arg.data = queue;
-// 	desc.error = 0;
-// 	desc.count = 1; /* give more than one skb per call */
-// recv:
-// 	lock_sock(sock->sk);
-// 	/* sk should be locked here, so okay to do read_sock */
-// 	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
-// 	release_sock(sock->sk);
-
-	
-	// if (queue->left)
-	// 	return -EAGAIN;
-
-	// if (queue->offset == sizeof(struct vs_hdr)) {
-	// 	// u8 hdgst = nvmet_tcp_hdgst_len(queue);
-	// 	pr_info("vs_hdr.src port:%d \n", hdr->source);
-	// 	// if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
-	// 	// 	pr_err("unexpected pdu type %d\n", hdr->type);
-	// 	// 	nvmet_tcp_fatal_error(queue);
-	// 	// 	return -EIO;
-	// 	// }
-
-	// 	// if (unlikely(hdr->hlen != nvmet_tcp_pdu_size(hdr->type))) {
-	// 	// 	pr_err("pdu %d bad hlenf %d\n", hdr->type, hdr->hlen);
-	// 	// 	return -EIO;
-	// 	// }
-
-	// 	// queue->left = hdr->len - queue->offset + hdgst;
-	// 	goto recv;
-	// }
-
-	// if (queue->hdr_digest &&
-	//     nvmet_tcp_verify_hdgst(queue, &queue->pdu, queue->offset)) {
-	// 	nvmet_tcp_fatal_error(queue); /* fatal */
-	// 	return -EPROTO;
-	// }
-
-	// if (queue->data_digest &&
-	//     nvmet_tcp_check_ddgst(queue, &queue->pdu)) {
-	// 	nvmet_tcp_fatal_error(queue); /* fatal */
-	// 	return -EPROTO;
-	// }
-	return 0;
-	// return nvmet_tcp_done_recv_pdu(queue);
-}
-
-static int ndt_conn_try_recv_one(struct ndt_conn_queue *queue)
-{
-	int result = 0;
-
-	// if (unlikely(queue->rcv_state == NDT_CONN_RECV_ERR))
-	// 	return 0;
-
-	// if (queue->rcv_state == NDT_CONN_RECV_PDU) {
-		result = ndt_conn_try_recv_pdu(queue);
-		// if (result != 0)
-		// 	goto done_recv;
-	// }
-
-	// if (queue->rcv_state == NVMET_CONN_RECV_DATA) {
-	// 	result = nvmet_tcp_try_recv_data(queue);
-	// 	if (result != 0)
-	// 		goto done_recv;
-	// }
-
-	// if (queue->rcv_state == NVMET_COONN_RECV_DDGST) {
-	// 	result = nvmet_tcp_try_recv_ddgst(queue);
-	// 	if (result != 0)
-	// 		goto done_recv;
-	// }
-
-done_recv:
-	if (result < 0) {
-		if (result == -EAGAIN)
-			return 0;
-		return result;
-	}
-	return 1;
-}
 
 int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 		int budget, int *recvs)
@@ -433,20 +395,10 @@ int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 recv:
 	lock_sock(sock->sk);
 	/* sk should be locked here, so okay to do read_sock */
-	sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
+	ret = sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
 	release_sock(sock->sk);
 
 	(*recvs) += budget - desc.count;
-	// for (i = 0; i < budget; i++) {
-	// 	ret = ndt_conn_try_recv_one(queue);
-	// 	if (unlikely(ret < 0)) {
-	// 		// ndt_conn_socket_error(queue, ret);
-	// 		goto done;
-	// 	} else if (ret == 0) {
-	// 		break;
-	// 	}
-	// 	(*recvs)++;
-	// }
 done:
 	return ret;
 }
@@ -564,17 +516,20 @@ void ndt_conn_io_work(struct work_struct *w)
 		container_of(w, struct ndt_conn_queue, io_work);
 	bool pending;
 	int ret, ops = 0;
-
 	do {
 		pending = false;
 
-		ret = ndt_conn_try_recv(queue, NDT_CONN_RECV_BUDGET, &ops);
-		if (ret > 0)
+		ret = ndt_conn_try_recv(queue, NDT_CONN_RECV_BUDGET - ops, &ops);
+		if (ret > 0) {
 			pending = true;
-		else if (ret < 0)
+		} 
+		else if (ret < 0) {
+			// pr_info("ret < 0 \n");
 			return;
+		}
 		/* parsing packet; not sure if it should includes in while loop when accounting budget */
 		pass_to_vs_layer(queue->sock->sk, &queue->receive_queue);
+		// pr_info("ops:%d\n", ops);
 		// ret = ndt_conn_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
 		// 	pending = true;
@@ -586,8 +541,10 @@ void ndt_conn_io_work(struct work_struct *w)
 	// /*
 	//  * We exahusted our budget, requeue our selves
 	//  */
-	// if (pending)
-	// 	queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	if (pending) {
+		// pr_info("pending is true\n");
+		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	}
 }
 
 int ndt_conn_alloc_queue(struct ndt_conn_port *port,
@@ -674,7 +631,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.116";
+	ndt_port->local_ip = "192.168.10.117";
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);

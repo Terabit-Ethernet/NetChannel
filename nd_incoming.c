@@ -939,6 +939,7 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 			/* currently assume at the target side */
 			/* ToDo: sync can be true; */
 			nd_conn_queue_request(construct_sync_ack_req(child), false, true);
+			printk("send back sync ack:\n");
 		}
 	} else {
 		goto free;
@@ -1123,6 +1124,7 @@ int nd_handle_fin_pkt(struct sk_buff *skb) {
 	// 	kfree_skb(skb);		/* No space for header. */
 	// 	return 0;
 	// }
+	printk("receive fin pkt\n");
 	dh = nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
@@ -1133,13 +1135,14 @@ int nd_handle_fin_pkt(struct sk_buff *skb) {
  		bh_lock_sock(sk);
 		dsk = nd_sk(sk);
 		if (!sock_owned_by_user(sk)) {
-			// printk("reach here:%d", __LINE__);
+			printk("reach here:%d", __LINE__);
 
 	        nd_set_state(sk, TCP_CLOSE);
 	        nd_write_queue_purge(sk);
 	        sk->sk_data_ready(sk);
 	        kfree_skb(skb);
         } else {
+			printk("put fin to backlog:%d", __LINE__);
             nd_add_backlog(sk, skb, true);
         }
         bh_unlock_sock(sk);
@@ -1285,7 +1288,8 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
 {
 		struct nd_sock *dsk = nd_sk(sk);
         u32 limit = READ_ONCE(sk->sk_rcvbuf) + READ_ONCE(sk->sk_sndbuf);
-        skb_condense(skb);
+        // pr_info("put into the backlog\n:wq");
+	skb_condense(skb);
 
         /* Only socket owner can try to collapse/prune rx queues
          * to reduce memory overhead, so add a little headroom here.
@@ -1337,6 +1341,8 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 			ND_SKB_CB(head)->end_seq = seq + head->len;
 			temp = head->next;
 			head->next = NULL;
+			// pr_info("ND_SKB_CB(head)->seq = seq:%u\n", seq);
+			// pr_info("ND_SKB_CB(head)->end_seq = seq + head->len:%u\n", seq + head->len);
 			/* update the seq */
 			seq = ND_SKB_CB(head)->end_seq;
 			nd_data_queue(sk, head);
@@ -1540,10 +1546,12 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	/* this part might need to be changed */
 	if(skb_headlen(skb) > need_bytes) {
 		bytes +=  skb_headlen(skb) - need_bytes;
-		// printk("need bytes:%d\n", need_bytes);
 	}
+	// printk("alloc bytes:%d\n", bytes);
 	new_skb = alloc_skb(bytes, GFP_ATOMIC);
-
+	WARN_ON(!new_skb);
+	// pr_info("reach here:%d\n", __LINE__);
+	// skb_dump(KERN_WARNING, skb, false);
 	/* set the network header, but not tcp header */
 	skb_put(new_skb, sizeof(struct iphdr));
 
@@ -1558,6 +1566,8 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	skb_split(skb, new_skb, need_bytes);
 
 	skb_queue_head(queue, new_skb);
+	// pr_info("reach here:%d\n", __LINE__);
+	// skb_dump(KERN_WARNING, new_skb, false);
 	return 0; 
 }
 
@@ -1575,14 +1585,27 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		new_skb =  skb_dequeue(queue);
 		if(!new_skb)
 			return -ENOMEM;
+		WARN_ON(skb_cloned(new_skb));
+		// pr_info("new_skb->len:%d\n", new_skb->len);
 		if(new_skb->len > need_bytes)
 			nd_split(queue, new_skb, need_bytes);
 		need_bytes -= new_skb->len;
 		// pr_info("reach here:%d\n", __LINE__);
+		// pr_info("new_skb->len:%d\n", new_skb->len);
 		if(coalesce) {
 			if (!skb_try_coalesce(head, new_skb, &fragstolen, &delta)) {
 				// int i = 0;
-				pr_info("Coalesce fails:%d\n", __LINE__);
+				WARN_ON(true);
+				// skb_dump(KERN_WARNING, head, false);
+				// skb_dump(KERN_WARNING, new_skb, false);
+				// pr_info("head has fraglist: %d\n ", skb_has_frag_list(head));
+				// pr_info("new_skb has fraglist: %d\n ", skb_has_frag_list(new_skb));
+				// pr_info("nrfragment: head:%d\n", skb_shinfo(head)->nr_frags);
+				// pr_info("nrfragment: new_skbhead:%d\n", skb_shinfo(new_skb)->nr_frags);
+				// pr_info("skb_cloned(skb):%d\n", skb_cloned(skb));
+				// pr_info("skb_cloned(new_skb):%d\n", skb_cloned(new_skb));
+				// pr_info("skb_head_is_locked:%d\n", skb_head_is_locked(new_skb));
+				// pr_info("Coalesce fails:%d\n", __LINE__);
 				// pr_info("need bytes:%d\n", need_bytes);
 				// pr_info("skb len:%d\n", skb->len);
 				// pr_info("skb trusize:%d\n", skb->truesize);
@@ -1606,13 +1629,19 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 
 			} else {
 				// pr_info("reach here:%d\n", __LINE__);
-				WARN_ON(!ND_SKB_CB(head)->tail);
+				WARN_ON(!skb_has_frag_list(skb));
+				WARN_ON(ND_SKB_CB(head)->tail == NULL);
+				// pr_info("!skb_has_frag_list(skb):%d\n",(!skb_has_frag_list(skb)));
+                //                 pr_info("ND_SKB_CB(head)->tail:%p\n", ND_SKB_CB(head)->tail);
+                //                 pr_info("ND_SKB_CB(head)->tail->next:%p\n", ND_SKB_CB(head)->tail->next);
 				ND_SKB_CB(head)->tail->next = new_skb;
 				ND_SKB_CB(head)->tail = new_skb;
+                // pr_info("reach here:%d\n", __LINE__);
 
 			}
 			// skb = new_skb;
 			/* don't increment truesize and len of head */
+			// pr_info("reach here:%d\n", __LINE__);
 			ND_SKB_CB(head)->total_size += new_skb->truesize;
 			ND_SKB_CB(head)->total_len += new_skb->len;
 			ND_SKB_CB(head)->count += 1;
@@ -1628,23 +1657,36 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 	int need_bytes = 0;
 	int ret;
 	struct iphdr* iph;
+	// printk("pass_to_vs_layer core:%d\n", raw_smp_processor_id());
+
 	while ((skb = skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
+		WARN_ON(skb_cloned(skb));
+		// pr_info("start processing\n");
+		// pr_info("skb->len:%d\n", skb->len);
 		if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 			need_bytes = sizeof(struct ndhdr) - skb->len;
 			WARN_ON(need_bytes < 0);
 			// pr_info("skb->len:%d\n", skb->len);
+			// pr_info("reach here: %d\n", __LINE__);
 			ret = nd_split_and_merge(queue, skb, need_bytes, true);
 			/* No space for header . */
 			if(ret == -ENOMEM) {
 				goto push_back;
+				// pr_info("reach here: %d\n", __LINE__);
 				return;
 			}
+			/* pull again */
+			pskb_may_pull(skb, sizeof(struct ndhdr));
 		}
+		// pr_info("skb->len:%d\n", skb->len);
+		// pr_info("skb->headlen:%d\n", skb_headlen(skb));
 		/* reset the transport layer header as nd header; and ignore TCP header */
 		skb_set_transport_header(skb, 0);
 		nh = nd_hdr(skb);
+		// skb_dump(KERN_WARNING, skb, false);
+		// WARN_ON(nh->type != DATA && nh->type != SYNC);
 		/* this layer could do sort of GRO stuff later */
 		if(nh->type == DATA) {
 			if(!skb_has_frag_list(skb)) {
@@ -1653,10 +1695,13 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 				ND_SKB_CB(skb)->total_size = skb->truesize;
 				ND_SKB_CB(skb)->total_len = skb->len;
 				ND_SKB_CB(skb)->count = 0;
+				ND_SKB_CB(skb)->tail = NULL;
 			}
 			
 			need_bytes = ntohs(nh->len) + sizeof(struct ndhdr) - ND_SKB_CB(skb)->total_len;
-			// pr_info("need bytes:%d\n", need_bytes);
+			// pr_info("ntohs(nh->len):%d\n", ntohs(nh->len));
+			// pr_info("ND_SKB_CB(skb)->total_len:%d\n", ND_SKB_CB(skb)->total_len);
+			// pr_info("LINE:%d need bytes:%d\n", __LINE__,  need_bytes);
 			if(need_bytes > 0) {
 				ret = nd_split_and_merge(queue, skb, need_bytes, false);
 				if(ret == -ENOMEM) {
@@ -1676,8 +1721,9 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		// skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
+		// pr_info("seq num :%u\n", ntohl(nh->seq));
+		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
-		// skb_dump(KERN_WARNING, skb, false);
 		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
@@ -1685,12 +1731,16 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		// }
 		/* disable irq since it is in the process context */
 		// if(nh->type != DATA) {
+		// 	pr_info("reach here:%d\n", __LINE__);
+			// skb_dump(KERN_WARNING, skb, false);
 			local_bh_disable();
 			/* pass to the virutal socket layer */
 			nd_rcv(skb);
 			local_bh_enable();
-		// } else
-		// 	kfree_skb(skb);
+		//  } else {
+		// 	pr_info("finish here:%d\n", __LINE__);
+		//  	kfree_skb(skb);
+		//  }
 	}
 	return;
 push_back:
