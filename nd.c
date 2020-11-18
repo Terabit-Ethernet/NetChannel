@@ -190,14 +190,29 @@ int sk_wait_ack(struct sock *sk, long *timeo)
 }
 EXPORT_SYMBOL(sk_wait_ack);
 
+
+
 static int nd_push(struct sock *sk) {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sk_buff *skb;
 	struct nd_sock *nsk = nd_sk(sk);
-	while((skb = skb_peek(&sk->sk_write_queue)) != NULL) {
+	bool push_success;
+	struct nd_conn_request* req;
+	struct ndhdr* hdr;
+
+	while((skb = skb_peek(&sk->sk_write_queue)) != NULL || nsk->sender.pending_req) {
+
+		if(nsk->sender.pending_req) {
+			WARN_ON(nsk->sender.pending_req == NULL);
+			req = nsk->sender.pending_req;
+			nsk->sender.pending_req = NULL;
+			goto queue_req;
+		}
+
 		/* construct nd_conn_request */
-		struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
-		struct ndhdr* hdr;
+		req = kzalloc(sizeof(*req), GFP_KERNEL);
+
+
 		if(skb->len == 0 || skb->data_len == 0) {
 			WARN_ON(true);
 		}
@@ -234,21 +249,53 @@ static int nd_push(struct sock *sk) {
 		// sk->sk_wmem_queued -= skb->len;
 		/*increment write seq */
 		nsk->sender.write_seq += skb->len;
+queue_req:
 		/* queue the request */
-		nd_conn_queue_request(req, false, true);
+		push_success = nd_conn_queue_request(req, false, false);
+		if(!push_success) {
+			WARN_ON(nsk->sender.pending_req);
+			nsk->sender.pending_req = req;
+			break;
+		}
 		// printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
 	}
 	return 0;
 }
 
+void nd_tx_work(struct work_struct *w)
+{
+	struct nd_sock *nsk = container_of(w, struct nd_sock, tx_work);
+	struct sock *sk = (struct sock*)nsk;
+	int err;
+	lock_sock(sk);
+	/* Primarily for SOCK_DGRAM sockets, also handle asynchronous tx
+	 * aborts
+	 */
+	nd_push(sk);
+	/* Primarily for SOCK_SEQPACKET sockets */
+	if (likely(sk->sk_socket)) {
+		if(sk_stream_memory_free(sk)) {
+			sk->sk_write_space(sk);
+		} else {
+			/* push back since there is no space */
+			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		}
+	} 	
+out:
+	release_sock(sk);
+}
+
 /* copy from kcm sendmsg */
 static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 {
-	// struct nd_sock *nsk = nd_sk(sk);
+	struct nd_sock *nsk = nd_sk(sk);
 	struct sk_buff *skb = NULL;
 	size_t copy, copied = 0;
 	long timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
 	/* SOCK DGRAM? */
+	// timeo = 20000;
+	// printk("timeo:%ld\n", timeo);
+	// printk("long max:%ld\n", LONG_MAX);
 	int eor = (sk->sk_socket->type == SOCK_DGRAM) ?
 		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
 	int err = -EPIPE;
@@ -355,7 +402,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 
 create_new_skb:
 		if (!sk_stream_memory_free(sk)) {
-			set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+			// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 			goto wait_for_memory;
 		}
 		skb = alloc_skb(0, sk->sk_allocation);
@@ -371,9 +418,17 @@ create_new_skb:
 
 wait_for_memory:
 		nd_push(sk);
+		// pr_info("start wait \n");
+		// pr_info("timeo:%ld\n", timeo);
+		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		/* hard code nd_ctrl for now */
+		nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		err = sk_stream_wait_memory(sk, &timeo);
-		if (err)
+		// pr_info("end wait \n");
+		if (err) {
+			pr_info("out error \n");
 			goto out_error;
+		}
 	}
 	if (eor) {
 		if(!skb_queue_empty(&sk->sk_write_queue)) {
@@ -388,7 +443,7 @@ wait_for_memory:
 	return copied;
 
 out_error:
-	nd_push(sk);
+	// nd_push(sk);
 
 	// if (copied && sock->type == SOCK_SEQPACKET) {
 	// 	/* Wrote some bytes before encountering an
@@ -578,37 +633,44 @@ int nd_init_sock(struct sock *sk)
 	skb_queue_head_init(&nd_sk(sk)->reader_queue);
 	dsk->core_id = raw_smp_processor_id();
 	printk("init sock\n");
+
 	// next_going_id 
 	// printk("remaining tokens:%d\n", nd_epoch.remaining_tokens);
 	// atomic64_set(&dsk->next_outgoing_id, 1);
 	// initialize the ready queue and its lock
 	sk->sk_destruct = nd_destruct_sock;
+	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
 	WRITE_ONCE(dsk->grant_nxt, 0);
 	WRITE_ONCE(dsk->prev_grant_nxt, 0);
 	WRITE_ONCE(dsk->new_grant_nxt, 0);
 
+
+	INIT_WORK(&dsk->tx_work, nd_tx_work);
+	WRITE_ONCE(dsk->wait_cpu, 0);
+	INIT_LIST_HEAD(&dsk->wait_list);
 	// INIT_LIST_HEAD(&dsk->match_link);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
+	WRITE_ONCE(dsk->sender.pending_req, NULL);
 
-	WRITE_ONCE(dsk->receiver.free_flow, false);
+	// WRITE_ONCE(dsk->receiver.free_flow, false);
 	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	WRITE_ONCE(dsk->receiver.max_gso_data, 0);
-	WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
-	WRITE_ONCE(dsk->receiver.flow_finish_wait, false);
+	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
+	// WRITE_ONCE(dsk->receiver.flow_finish_wait, false);
 	WRITE_ONCE(dsk->receiver.rmem_exhausted, 0);
 	WRITE_ONCE(dsk->receiver.prev_grant_bytes, 0);
-	WRITE_ONCE(dsk->receiver.in_pq, false);
-	WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
+	// WRITE_ONCE(dsk->receiver.in_pq, false);
+	// WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
 	atomic_set(&dsk->receiver.in_flight_bytes, 0);
 	atomic_set(&dsk->receiver.backlog_len, 0);
-	dsk->start_time = ktime_get();
+	// dsk->start_time = ktime_get();
 	// hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
 	// dsk->receiver.flow_wait_timer.function = &nd_flow_wait_event;
 
@@ -703,7 +765,8 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	// 	return inet_recv_error(sk, msg, len, addr_len);
 	// printk("start recvmsg \n");
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
-	// printk("target bytes:%d\n", target);
+
+	printk("target bytes:%d\n", target);
 
 	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
 	    (sk->sk_state == ND_ESTABLISH))
@@ -1118,10 +1181,11 @@ void nd_destroy_sock(struct sock *sk)
 	struct nd_sock *up = nd_sk(sk);
 	// struct inet_sock *inet = inet_sk(sk);
 	// struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
-	local_bh_disable();
-	bh_lock_sock(sk);
+	// local_bh_disable();
+	// bh_lock_sock(sk);
 	// hrtimer_cancel(&up->receiver.flow_wait_timer);
-	test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
+	// test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
+	lock_sock(sk);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_ESTABLISH) {
 		printk("send fin pkt\n");
@@ -1129,13 +1193,20 @@ void nd_destroy_sock(struct sock *sk)
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}      
 	printk("reach here:%d", __LINE__);
+	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
-	// nd_flush_pending_frames(sk);
+	// nd_flush_pendfing_frames(sk);
 	nd_write_queue_purge(sk);
 	nd_read_queue_purge(sk);
-	
-	bh_unlock_sock(sk);
-	local_bh_enable();
+	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
+
+	/* remove from sleep wait queue */
+	nd_conn_remove_sleep_sock(nd_ctrl, up);
+	cancel_work_sync(&up->tx_work);
+	/*  */
+	release_sock(sk);
+	// bh_unlock_sock(sk);
+	// local_bh_enable();
 
 	// printk("sk->sk_wmem_queued:%d\n",sk->sk_wmem_queued);
 	// spin_lock_bh(&entry->lock);

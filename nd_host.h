@@ -13,7 +13,7 @@
 #include <crypto/hash.h>
 #include <net/busy_poll.h>
 #include "uapi_linux_nd.h"
-
+#include "linux_nd.h"
 extern struct nd_conn_ctrl* nd_ctrl;
 
 #define ND_CONN_AQ_DEPTH		32
@@ -98,6 +98,11 @@ struct nd_conn_ctrl {
 
 	/* other member variables */
 	struct list_head	list;
+	/* socket wait list */
+	struct mutex sock_wait_lock;
+	struct list_head sock_wait_list;
+	struct workqueue_struct *sock_wait_wq;
+
 	// struct blk_mq_tag_set	admin_tag_set;
 	struct sockaddr_storage addr;
 	struct sockaddr_storage src_addr;
@@ -109,6 +114,8 @@ struct nd_conn_ctrl {
 	// struct delayed_work	connect_work;
 	// struct nd_conn_request async_req;
 	u32			io_queues[32];
+	struct page_frag_cache	pf_cache;
+
 };
 
 struct nd_conn_queue {
@@ -131,8 +138,9 @@ struct nd_conn_queue {
 
 	/* send state */
 	struct nd_conn_request *request;
-
+	atomic_t	cur_queue_size;
 	int			queue_size;
+	// int			cur_queue_size;
 	// size_t			cmnd_capsule_len;
 	struct nd_conn_ctrl	*ctrl;
 	unsigned long		flags;
@@ -145,7 +153,7 @@ struct nd_conn_queue {
 	// __le32			exp_ddgst;
 	// __le32			recv_ddgst;
 
-	struct page_frag_cache	pf_cache;
+	// struct page_frag_cache	pf_cache;
 
 	void (*state_change)(struct sock *);
 	void (*data_ready)(struct sock *);
@@ -156,6 +164,10 @@ struct nd_conn_queue {
 struct nd_conn_pdu {
 	struct ndhdr hdr;
 };
+
+void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk);
+void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk);
+void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl);
 
 int nd_conn_init_request(struct nd_conn_request *req, int queue_id);
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req); 
@@ -179,8 +191,8 @@ void nd_conn_state_change(struct sock *sk);
 void nd_conn_data_ready(struct sock *sk);
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid, size_t queue_size);
-void nd_conn_queue_request(struct nd_conn_request *req,
-		bool sync, bool last);
+bool nd_conn_queue_request(struct nd_conn_request *req,
+		bool sync, bool avoid_check);
 // void nd_conn_error_recovery_work(struct work_struct *work);
 void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown);
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl);

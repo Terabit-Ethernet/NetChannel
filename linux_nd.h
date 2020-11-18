@@ -17,7 +17,7 @@
 #include <linux/skbuff.h>
 #include <net/netns/hash.h>
 #include "uapi_linux_nd.h"
-
+// #include "nd_host.h"
 #define ND_MESSAGE_BUCKETS 1024
 /**
  * define ND_PEERTAB_BUCKETS - Number of bits in the bucket index for a
@@ -467,8 +467,13 @@ struct nd_sock {
     uint32_t num_sacks;
 	struct nd_sack_block selective_acks[16]; /* The SACKS themselves*/
 
-    ktime_t start_time;
-	struct list_head match_link;
+    // ktime_t start_time;
+	// struct list_head match_link;
+
+	struct list_head wait_list;
+	struct work_struct tx_work;
+	int wait_cpu;
+	
     /* sender */
     struct nd_sender {
 	    /* next sequence from the user; Also equals total bytes written by user. */
@@ -478,17 +483,17 @@ struct nd_sock {
 
 	    /* the last unack byte.*/
 	    uint32_t snd_una;
-
+		struct nd_conn_request* pending_req;
 	    // uint32_t total_bytes_sent;
 	    // uint32_t bytes_from_user;
-	    int remaining_pkts_at_sender;
+	    // int remaining_pkts_at_sender;
 
 		/* ND metric */
-	    uint64_t first_byte_send_time;
+	    // uint64_t first_byte_send_time;
 
-	    uint64_t start_time;
-	    uint64_t finish_time;
-	    double latest_data_pkt_sent_time;
+	    // uint64_t start_time;
+	    // uint64_t finish_time;
+	    // double latest_data_pkt_sent_time;
     } sender;
     struct nd_receiver {
 		/**

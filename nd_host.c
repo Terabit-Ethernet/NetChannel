@@ -40,20 +40,20 @@ static inline bool nd_conn_queue_more(struct nd_conn_queue *queue)
 
 int nd_conn_init_request(struct nd_conn_request *req, int queue_id)
 {
-	struct nd_conn_queue *queue = NULL;
-	if(queue_id == -1) {
-		queue = &nd_ctrl->queues[1];
-	} else {
-		queue =  &nd_ctrl->queues[queue_id];
-	}
-	req->hdr = page_frag_alloc(&queue->pf_cache,
+	// struct nd_conn_queue *queue = NULL;
+	// if(queue_id == -1) {
+	// 	queue = &nd_ctrl->queues[1];
+	// } else {
+	// 	queue =  &nd_ctrl->queues[queue_id];
+	// }
+	req->hdr = page_frag_alloc(&nd_ctrl->pf_cache,
 		sizeof(struct ndhdr), GFP_KERNEL | __GFP_ZERO);
 	if (!req->hdr){
 		pr_warn("WARNING: fail to allocat page \n");
 		return -ENOMEM;
 	}
 
-	req->queue = queue;
+	// req->queue = queue;
 	return 0;
 }
 
@@ -275,8 +275,8 @@ done:
 	read_unlock(&sk->sk_callback_lock);
 }
 
-void nd_conn_queue_request(struct nd_conn_request *req,
-		bool sync, bool last)
+bool nd_conn_queue_request(struct nd_conn_request *req,
+		bool sync, bool avoid_check)
 {
 	struct nd_conn_queue *queue = req->queue;
 	bool empty;
@@ -285,6 +285,12 @@ void nd_conn_queue_request(struct nd_conn_request *req,
 		/* hard code forr now */
 		req->queue = &nd_ctrl->queues[1];
 		queue = req->queue;
+	}
+	WARN_ON(req == NULL);
+	if(!avoid_check){
+		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
+		== queue->queue_size)
+			return false;
 	}
 	empty = llist_add(&req->lentry, &queue->req_list) &&
 		list_empty(&queue->send_list) && !queue->request;
@@ -296,14 +302,15 @@ void nd_conn_queue_request(struct nd_conn_request *req,
 	 */
 	if (queue->io_cpu == smp_processor_id() &&
 	    sync && empty && mutex_trylock(&queue->send_mutex)) {
-		queue->more_requests = !last;
+		// queue->more_requests = !last;
 		ret = nd_conn_try_send(queue);
-		if(ret == -EAGAIN)
-			queue->more_requests = false;
+		// if(ret == -EAGAIN)
+		// 	queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
-	} else if (last) {	
+	} else {	
 		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	}
+	return true;
 }
 
 // void nd_conn_error_recovery(struct nd_conn_ctrl *ctrl)
@@ -351,6 +358,8 @@ void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown)
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl)
 {
 	nd_conn_teardown_ctrl(ctrl, true);
+	flush_workqueue(ctrl->sock_wait_wq);
+	destroy_workqueue(ctrl->sock_wait_wq);
     /* free option here */
     kfree(ctrl->opts);
 }
@@ -691,6 +700,9 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 		ret = nd_conn_try_send_data_pdu(req);
 		if (ret <= 0)
 			goto done;
+		if (ret == 1) {
+			atomic_dec(&queue->cur_queue_size);
+		}
 	}
 
 	// if (req->state == NVME_TCP_SEND_DATA) {
@@ -720,8 +732,9 @@ void nd_conn_io_work(struct work_struct *w)
 		container_of(w, struct nd_conn_queue, io_work);
 	unsigned long deadline = jiffies + msecs_to_jiffies(1);
 	int ret;
+	bool pending;
 	do {
-		bool pending = false;
+		pending = false;
 		int result;
 		mutex_lock(&queue->send_mutex);
 		result = nd_conn_try_send(queue);
@@ -738,11 +751,42 @@ void nd_conn_io_work(struct work_struct *w)
 		// else if (unlikely(result < 0))
 		// 	return;
 		if (!pending)
-			return;
+			break;
 
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
-	ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	if(pending)
+		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	nd_conn_wake_up_all_socks(queue->ctrl);
 }
+
+
+void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
+	uint32_t i;
+	mutex_lock(&ctrl->sock_wait_lock);
+	nsk->wait_cpu = raw_smp_processor_id();
+	list_add_tail(&nsk->wait_list, &ctrl->sock_wait_list);
+	mutex_unlock(&ctrl->sock_wait_lock);
+	for(i = 0; i < ctrl->queue_count; i++) {
+		queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+	}
+}
+
+void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
+	mutex_lock(&ctrl->sock_wait_lock);
+	list_del_init(&nsk->wait_list);
+	mutex_unlock(&ctrl->sock_wait_lock);
+}
+
+void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
+	struct nd_sock *nsk; 
+	// pr_info("wake up all sock\n");
+	mutex_lock(&ctrl->sock_wait_lock);
+	list_for_each_entry(nsk, &ctrl->sock_wait_list, wait_list)
+		queue_work_on(nsk->wait_cpu, ctrl->sock_wait_wq, &nsk->tx_work);
+	INIT_LIST_HEAD(&ctrl->sock_wait_list);
+	mutex_unlock(&ctrl->sock_wait_lock);
+}
+
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid, size_t queue_size)
 {
@@ -758,6 +802,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
     mutex_init(&queue->send_mutex);
 	INIT_WORK(&queue->io_work, nd_conn_io_work);
 	queue->queue_size = queue_size;
+	atomic_set(&queue->cur_queue_size, 0);
 
 	// if (qid > 0)
 	// 	queue->cmnd_capsule_len = nctrl->ioccsz * 16;
@@ -982,6 +1027,7 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&ctrl->list);
+	INIT_LIST_HEAD(&ctrl->sock_wait_list);
 	ctrl->opts = opts;
 	ctrl->queue_count = opts->nr_io_queues + opts->nr_write_queues +
 				opts->nr_poll_queues + 1;
@@ -993,6 +1039,10 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 	// INIT_WORK(&ctrl->err_work, nd_conn_error_recovery_work);
 	// INIT_WORK(&ctrl->ctrl.reset_work, nvme_reset_ctrl_work);
     mutex_init(&ctrl->teardown_lock);
+	mutex_init(&ctrl->sock_wait_lock);
+	ctrl->sock_wait_wq = alloc_workqueue("sock_wait_wq",
+			WQ_MEM_RECLAIM, 0);
+
 	// if (!(opts->mask & NVMF_OPT_TRSVCID)) {
 	// 	opts->trsvcid =
 	// 		kstrdup(__stringify(NVME_TCP_DISC_PORT), GFP_KERNEL);
@@ -1090,7 +1140,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = "192.168.10.116";
     // opts->host_port = "10000";
 
-    opts->queue_size = 1000;
+    opts->queue_size = 64;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

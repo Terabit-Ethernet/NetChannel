@@ -363,25 +363,6 @@ void nd_token_timer_defer_handler(struct sock *sk) {
 
 }
 
-void sk_stream_write_space(struct sock *sk)
-{
-	struct socket *sock = sk->sk_socket;
-	struct socket_wq *wq;
-
-	if (__sk_stream_is_writeable(sk, 1) && sock) {
-		clear_bit(SOCK_NOSPACE, &sock->flags);
-
-		rcu_read_lock();
-		wq = rcu_dereference(sk->sk_wq);
-		if (skwq_has_sleeper(wq))
-			wake_up_interruptible_poll(&wq->wait, EPOLLOUT |
-						EPOLLWRNORM | EPOLLWRBAND);
-		if (wq && wq->fasync_list && !(sk->sk_shutdown & SEND_SHUTDOWN))
-			sock_wake_async(wq, SOCK_WAKE_SPACE, POLL_OUT);
-		rcu_read_unlock();
-	}
-}
-
 
 /* Remove acknowledged frames from the retransmission queue. If our packet
  * is before the ack sequence we can discard it as it's confirmed to have
@@ -484,7 +465,7 @@ int nd_clean_rtx_queue(struct sock *sk)
 		// 	tp->lost_skb_hint = NULL;
 		// tcp_highest_sack_replace(sk, skb, next);
 		nd_rtx_queue_unlink_and_free(skb, sk);
-		sk_stream_write_space(sk);
+		// sk_stream_write_space(sk);
 	}
 	// if (!skb)
 	// 	tcp_chrono_stop(sk, TCP_CHRONO_BUSY);
