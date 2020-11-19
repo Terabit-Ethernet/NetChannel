@@ -1237,7 +1237,6 @@ queue_and_out:
 		if (eaten > 0)
 			kfree_skb_partial(skb, fragstolen);
 		if (!sock_flag(sk, SOCK_DEAD)) {
-			pr_info("try to wake up\n");
 			sk->sk_data_ready(sk);
 		}
 		return 0;
