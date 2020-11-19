@@ -694,7 +694,7 @@ static int nd_data_queue_ofo(struct sock *sk, struct sk_buff *skb)
 	/* Disable header prediction. */
 	// tp->pred_flags = 0;
 	// inet_csk_schedule_ack(sk);
-
+	pr_info("get outof order packet\n");
 	// tp->rcv_ooopack += max_t(u16, 1, skb_shinfo(skb)->gso_segs);
 	// NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPOFOQUEUE);
 	seq = ND_SKB_CB(skb)->seq;
@@ -1230,6 +1230,7 @@ queue_and_out:
 		if (eaten > 0)
 			kfree_skb_partial(skb, fragstolen);
 		if (!sock_flag(sk, SOCK_DEAD)) {
+			pr_info("try to wake up\n");
 			sk->sk_data_ready(sk);
 		}
 		return 0;
@@ -1314,7 +1315,7 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 		seq = ND_SKB_CB(skb)->end_seq;
 		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
 		nd_data_queue(sk, skb);
-
+		
 		/* handle the rest of packets */
 		for(i = 0; i < count; i++) {
 			WARN_ON(!head);
@@ -1342,7 +1343,6 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
  * shut down; the caller should not access the RPC anymore. Note: this method
  * may change the RPC's state to RPC_READY.
  */
-
 int nd_handle_data_pkt(struct sk_buff *skb)
 {
 	struct nd_sock *dsk;
@@ -1361,9 +1361,10 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	// if(!sk) {
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(dh), dh->source,
             dh->dest, sdif, &refcounted);
-    if(!sk)
+    if(!sk) {
     	goto drop;
-
+	}
+	
     // }
 	// printk("packet hash %u\n", skb->hash);
 	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
@@ -1440,6 +1441,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	// printk("backlog rcv\n");
 
 	if(dh->type == DATA) {
+		// pr_info("handle backlog\n");
 		nd_handle_data_skb(sk, skb);
 		return 0;
 		// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
@@ -1678,8 +1680,8 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 				ND_SKB_CB(skb)->count = 0;
 				ND_SKB_CB(skb)->tail = NULL;
 			}
-			
-			need_bytes = ntohs(nh->len) + sizeof(struct ndhdr) - ND_SKB_CB(skb)->total_len;
+
+			need_bytes = (int)(ntohs(nh->len)) + sizeof(struct ndhdr) - ND_SKB_CB(skb)->total_len;
 			// pr_info("ntohs(nh->len):%d\n", ntohs(nh->len));
 			// pr_info("ND_SKB_CB(skb)->total_len:%d\n", ND_SKB_CB(skb)->total_len);
 			// pr_info("LINE:%d need bytes:%d\n", __LINE__,  need_bytes);
@@ -1693,6 +1695,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 			}
 			if(need_bytes < 0) {
 				nd_split(queue, skb, ntohs(nh->len) + sizeof(struct ndhdr));
+				ND_SKB_CB(skb)->total_len += need_bytes;
 			}
 		}else {
 			/* this split should always be suceessful */
