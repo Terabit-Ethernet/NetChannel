@@ -581,18 +581,26 @@ int nd_clean_rtx_queue(struct sock *sk)
 // 	}
 
 // }
+
 /* If we update dsk->receiver.rcv_nxt, also update dsk->receiver.bytes_received 
  * and send ack pkt if the flow is finished */
-static void nd_rcv_nxt_update(struct nd_sock *dsk, u32 seq)
+ 
+static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 {
-	// struct sock *sk = (struct sock*) dsk;
+	struct sock *sk = (struct sock*) nsk;
 	// struct inet_sock *inet = inet_sk(sk);
-	u32 delta = seq - dsk->receiver.rcv_nxt;
+	u32 delta = seq - nsk->receiver.rcv_nxt;
 	// int grant_bytes = calc_grant_bytes(sk);
 
-	dsk->receiver.bytes_received += delta;
-	WRITE_ONCE(dsk->receiver.rcv_nxt, seq);
+	nsk->receiver.bytes_received += delta;
+	WRITE_ONCE(nsk->receiver.rcv_nxt, seq);
 	// printk("update the seq:%d\n", dsk->receiver.rcv_nxt);
+	if(nd_window_size(nsk) + nsk->receiver.rcv_nxt > nsk->receiver.grant_nxt) {
+		/* send ack pkt for new window */
+		 nsk->receiver.grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+		nd_conn_queue_request(construct_ack_req(sk), false, true);
+
+	}
 	// if(dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch) {
 	// 	// nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
 	// 	dsk->receiver.last_ack = dsk->receiver.rcv_nxt;
@@ -1007,37 +1015,37 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	// struct nd_peer *peer;
 	// struct iphdr *iph;
 	// struct ndhdr *dh;
-	struct nd_ack_hdr *ah;
+	struct ndhdr *ah;
 	struct sock *sk;
 	int sdif = inet_sdif(skb);
 	bool refcounted = false;
 
-	if (!pskb_may_pull(skb, sizeof(struct nd_ack_hdr))) {
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 		kfree_skb(skb);		/* No space for header. */
 		return 0;
 	}
-	ah = nd_ack_hdr(skb);
+	ah = nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
-	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&ah->common), ah->common.source,
-            ah->common.dest, sdif, &refcounted);
+	// sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&ah->common), ah->common.source,
+    //         ah->common.dest, sdif, &refcounted);
     // }
-
-	if(sk) {
- 		bh_lock_sock(sk);
-		dsk = nd_sk(sk);
-		dsk->sender.snd_una = ah->rcv_nxt > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
-		if (!sock_owned_by_user(sk)) {
-	 		nd_clean_rtx_queue(sk);
-        } else {
-	 		test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
-	    }
-        bh_unlock_sock(sk);
+	pr_info("receive ack: %u\n", ntohl(ah->grant_seq));
+	// if(sk) {
+ 	// 	bh_lock_sock(sk);
+	// 	dsk = nd_sk(sk);
+	// 	dsk->sender.snd_una = ah->rcv_nxt > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
+	// 	if (!sock_owned_by_user(sk)) {
+	//  		nd_clean_rtx_queue(sk);
+    //     } else {
+	//  		test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
+	//     }
+    //     bh_unlock_sock(sk);
 	   
 
-		// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
+	// 	// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
 
-	} 
+	// } 
 
     if (refcounted) {
         sock_put(sk);

@@ -43,8 +43,8 @@ static void set_max_grant_batch(struct dst_entry *dst, struct nd_sock* dsk) {
 	max_gso_data = bufs_per_gso * max_pkt_data;
 	// gso_size = bufs_per_gso * mtu;
 	num_gso_per_bdp = DIV_ROUND_UP(nd_params.bdp, max_gso_data);
-	dsk->receiver.max_gso_data = max_gso_data;
-	dsk->receiver.max_grant_batch = num_gso_per_bdp * max_gso_data;
+	// dsk->receiver.max_gso_data = max_gso_data;
+	// dsk->receiver.max_grant_batch = num_gso_per_bdp * max_gso_data;
 }
 
 void reqsk_queue_alloc(struct request_sock_queue *queue)
@@ -1139,7 +1139,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	dsk = nd_sk(newsk);
 	// dsk->flow_id = fhdr->flow_id;
 	dsk->core_id = nd_sk(sk)->core_id;
-	dsk->total_length = 1000000000;
+	// dsk->total_length = 1000000000;
 	set_max_grant_batch(dst, dsk);
 	/* set up max gso segment */
 	sk_setup_caps(newsk, dst);

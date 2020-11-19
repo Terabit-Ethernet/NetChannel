@@ -81,7 +81,8 @@ struct ndhdr {
 	 */
 	__be32 seq;
 	
-	// __be32 reserved;
+	/* the max seq num the sender is allowed to send */
+	__be32 grant_seq;
 
 	/**
 	 * @doff: High order 4 bits holds the number of 4-byte chunks in a

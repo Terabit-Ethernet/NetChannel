@@ -600,7 +600,7 @@ void nd_destruct_sock(struct sock *sk)
 {
 
 	/* reclaim completely the forward allocated memory */
-	unsigned int total = 0;
+	// unsigned int total = 0;
 	struct nd_sock *nsk = nd_sk(sk);
 	// struct sk_buff *skb;
 	// struct udp_hslot* hslot = udp_hashslot(sk->sk_prot->h.udp_table, sock_net(sk),
@@ -642,9 +642,10 @@ int nd_init_sock(struct sock *sk)
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
-	WRITE_ONCE(dsk->grant_nxt, 0);
-	WRITE_ONCE(dsk->prev_grant_nxt, 0);
-	WRITE_ONCE(dsk->new_grant_nxt, 0);
+	WRITE_ONCE(dsk->default_win , nd_params.bdp);
+	// WRITE_ONCE(dsk->grant_nxt, 0);
+	// WRITE_ONCE(dsk->prev_grant_nxt, 0);
+	// WRITE_ONCE(dsk->new_grant_nxt, 0);
 
 
 	INIT_WORK(&dsk->tx_work, nd_tx_work);
@@ -655,13 +656,14 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
-
+	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
 	// WRITE_ONCE(dsk->receiver.free_flow, false);
 	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
-	WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
-	WRITE_ONCE(dsk->receiver.max_gso_data, 0);
+	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
+	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
+	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
 	// WRITE_ONCE(dsk->receiver.flow_finish_wait, false);
 	WRITE_ONCE(dsk->receiver.rmem_exhausted, 0);
@@ -699,16 +701,19 @@ EXPORT_SYMBOL(nd_ioctl);
 
 
 void nd_try_send_ack(struct sock *sk, int copied) {
-	struct nd_sock *dsk = nd_sk(sk);
-	struct inet_sock *inet = inet_sk(sk);
-	if(copied > 0 && dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch / 5) {
+	struct nd_sock *nsk = nd_sk(sk);
+	// struct inet_sock *inet = inet_sk(sk);
+	if(copied > 0) {
+		if(nd_window_size(nsk) + nsk->receiver.rcv_nxt > nsk->receiver.grant_nxt) {
+			/* send ack pkt for new window */
+			nsk->receiver.grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+			nd_conn_queue_request(construct_ack_req(sk), false, true);
+		}
 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
 		// int available_space = nd_space(sk);
 		// if(grant_len > available_space || grant_len < )
 		// 	return;
 		// printk("try to send ack \n");
-		nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
-		dsk->receiver.last_ack = dsk->receiver.rcv_nxt;
 	}
 }
 
@@ -900,7 +905,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		}
 
 		// tcp_cleanup_rbuf(sk, copied);
-		// nd_try_send_token(sk);
+		nd_try_send_ack(sk, copied);
 		// printk("release sock");
 		if (copied >= target) {
 			/* Do not sleep, just process backlog. */
@@ -1007,7 +1012,7 @@ found_ok_skb:
 
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
-	// nd_try_send_token(sk);
+	nd_try_send_ack(sk, copied);
 	// if (dsk->receiver.copied_seq == dsk->total_length) {
 	// 	printk("call tcp close in the recv msg\n");
 	// 	nd_set_state(sk, TCP_CLOSE);
@@ -1342,15 +1347,15 @@ static void __nd_sysctl_init(struct net *net)
 #endif
 }
 
-static int __net_init nd_sysctl_init(struct net *net)
-{
-	__nd_sysctl_init(net);
-	return 0;
-}
+// static int __net_init nd_sysctl_init(struct net *net)
+// {
+// 	__nd_sysctl_init(net);
+// 	return 0;
+// }
 
-static struct pernet_operations __net_initdata nd_sysctl_ops = {
-	.init	= nd_sysctl_init,
-};
+// static struct pernet_operations __net_initdata nd_sysctl_ops = {
+// 	.init	= nd_sysctl_init,
+// };
 
 void __init nd_init(void)
 {

@@ -456,14 +456,14 @@ struct nd_sock {
 	/**
 	 * size of flow in bytes
 	 */
-    uint32_t total_length;
+    // uint32_t total_length;
 	
 	/*protected by entry scheduling lock */
-	uint32_t grant_nxt;
-	uint32_t prev_grant_nxt;
+	// uint32_t grant_nxt;
+	// uint32_t prev_grant_nxt;
 
 	/* protected by socket user lock*/
-	uint32_t new_grant_nxt;
+	// uint32_t new_grant_nxt;
     uint32_t num_sacks;
 	struct nd_sack_block selective_acks[16]; /* The SACKS themselves*/
 
@@ -473,13 +473,15 @@ struct nd_sock {
 	struct list_head wait_list;
 	struct work_struct tx_work;
 	int wait_cpu;
-	
+	uint32_t default_win;
     /* sender */
     struct nd_sender {
 	    /* next sequence from the user; Also equals total bytes written by user. */
 	    uint32_t write_seq;
 	    /* the next sequence will be sent (at the first time)*/
 	    uint32_t snd_nxt;
+		/* sender side grant nxt from the receiver*/
+		uint32_t sd_grant_nxt;
 
 	    /* the last unack byte.*/
 	    uint32_t snd_una;
@@ -516,8 +518,9 @@ struct nd_sock {
 		uint32_t copied_seq;
 	    uint32_t bytes_received;
 	    // uint32_t received_count;
-	    uint32_t max_gso_data;
-	    uint32_t max_grant_batch;
+	    // uint32_t max_gso_data;
+	    // uint32_t max_grant_batch;
+		uint32_t grant_nxt;
 
 	    /* current received bytes + 1*/
 	    uint32_t rcv_nxt;

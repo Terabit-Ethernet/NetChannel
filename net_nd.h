@@ -81,6 +81,17 @@ static inline int nd_full_space(const struct sock *sk)
 	return nd_win_from_space(sk, READ_ONCE(sk->sk_rcvbuf));
 }
 
+static inline uint32_t nd_window_size(struct nd_sock *nsk) {
+		uint32_t win;
+		struct sock *sk = (struct sock*) nsk;
+		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq);
+		if(win > READ_ONCE(sk->sk_rcvbuf)) {
+			WARN_ON(true);
+		}
+	    win = min_t (uint32_t, win, nsk->default_win);
+	return win;
+}
+
 static inline void nd_rps_record_flow(const struct sock *sk)
 {
 	struct nd_sock *dsk = nd_sk(sk);
