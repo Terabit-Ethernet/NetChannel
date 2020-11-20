@@ -177,7 +177,7 @@ int compat_nd_setsockopt(struct sock *sk, int level, int optname,
 int compat_nd_getsockopt(struct sock *sk, int level, int optname,
 			  char __user *optval, int __user *optlen);
 #endif
-int nd_push(struct sock *sk);
+int nd_push(struct sock *sk, gfp_t flag);
 int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 		int flags, int *addr_len);
 int nd_sendpage(struct sock *sk, struct page *page, int offset, size_t size,

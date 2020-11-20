@@ -192,7 +192,7 @@ EXPORT_SYMBOL(sk_wait_ack);
 
 
 
-int nd_push(struct sock *sk) {
+int nd_push(struct sock *sk, gfp_t flag) {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sk_buff *skb;
 	struct nd_sock *nsk = nd_sk(sk);
@@ -210,7 +210,7 @@ int nd_push(struct sock *sk) {
 		}
 
 		/* construct nd_conn_request */
-		req = kzalloc(sizeof(*req), GFP_KERNEL);
+		req = kzalloc(sizeof(*req), flag);
 
 
 		if(skb->len == 0 || skb->data_len == 0) {
@@ -251,8 +251,10 @@ int nd_push(struct sock *sk) {
 		nsk->sender.write_seq += skb->len;
 queue_req:
 		/* check the window is available */
-		if(nsk->sender.write_seq > nsk->sender.sd_grant_nxt) {
+		if(nsk->sender.sd_grant_nxt - nsk->sender.write_seq > nsk->default_win) {
 			WARN_ON(nsk->sender.pending_req);
+			WARN_ON(nsk->sender.sd_grant_nxt - nsk->sender.write_seq < (1<<30));
+			// pr_info("write seq:%u sd_grant_nxt:%u \n", nsk->sender.write_seq, nsk->sender.sd_grant_nxt);
 			nsk->sender.pending_req = req;
 			ret = -EMSGSIZE;
 			break;
@@ -261,13 +263,14 @@ queue_req:
 		push_success = nd_conn_queue_request(req, false, false);
 		if(!push_success) {
 			WARN_ON(nsk->sender.pending_req);
+			// pr_info("add to sleep sock:%d\n", __LINE__);
 			nsk->sender.pending_req = req;
 			ret = -EDQUOT;
 			break;
 		}
 		// printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
 	}
-	return 0;
+	return ret;
 }
 
 void nd_tx_work(struct work_struct *w)
@@ -279,7 +282,7 @@ void nd_tx_work(struct work_struct *w)
 	/* Primarily for SOCK_DGRAM sockets, also handle asynchronous tx
 	 * aborts
 	 */
-	err = nd_push(sk);
+	err = nd_push(sk, GFP_KERNEL);
 	/* Primarily for SOCK_SEQPACKET sockets */
 	if (likely(sk->sk_socket)) {
 		if(sk_stream_memory_free(sk)) {
@@ -425,13 +428,15 @@ create_new_skb:
 
 
 wait_for_memory:
-		err = nd_push(sk);
+		err = nd_push(sk, GFP_KERNEL);
 		// pr_info("start wait \n");
 		// pr_info("timeo:%ld\n", timeo);
 		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		/* hard code nd_ctrl for now */
-		if(err == -EDQUOT)
+		if(err == -EDQUOT){
+			// pr_info("add to sleep sock send msg\n");
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		}
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
 		if (err) {
@@ -442,7 +447,7 @@ wait_for_memory:
 	if (eor) {
 		if(!skb_queue_empty(&sk->sk_write_queue)) {
 			// printk("call nd push\n");
-			nd_push(sk);
+			nd_push(sk, GFP_KERNEL);
 		}
 	}
 
@@ -713,12 +718,15 @@ EXPORT_SYMBOL(nd_ioctl);
 
 void nd_try_send_ack(struct sock *sk, int copied) {
 	struct nd_sock *nsk = nd_sk(sk);
+	u32 new_grant_nxt;
 	// struct inet_sock *inet = inet_sk(sk);
 	if(copied > 0) {
-		if(nd_window_size(nsk) + nsk->receiver.rcv_nxt > nsk->receiver.grant_nxt) {
+		new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
 			/* send ack pkt for new window */
-			nsk->receiver.grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+			nsk->receiver.grant_nxt = new_grant_nxt;
 			nd_conn_queue_request(construct_ack_req(sk), false, true);
+			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 		}
 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
 		// int available_space = nd_space(sk);
@@ -782,7 +790,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	// printk("start recvmsg \n");
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
-	printk("target bytes:%d\n", target);
+	// printk("target bytes:%d\n", target);
 
 	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
 	    (sk->sk_state == ND_ESTABLISH))

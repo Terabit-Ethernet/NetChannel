@@ -590,16 +590,18 @@ static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 	struct sock *sk = (struct sock*) nsk;
 	// struct inet_sock *inet = inet_sk(sk);
 	u32 delta = seq - nsk->receiver.rcv_nxt;
+	u32 new_grant_nxt;
 	// int grant_bytes = calc_grant_bytes(sk);
 
 	nsk->receiver.bytes_received += delta;
 	WRITE_ONCE(nsk->receiver.rcv_nxt, seq);
-	// printk("update the seq:%d\n", dsk->receiver.rcv_nxt);
-	if(nd_window_size(nsk) + nsk->receiver.rcv_nxt > nsk->receiver.grant_nxt) {
+	// printk("update the rcvnext :%u\n", nsk->receiver.rcv_nxt);
+	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
 		/* send ack pkt for new window */
-		 nsk->receiver.grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+		 nsk->receiver.grant_nxt = new_grant_nxt;
 		nd_conn_queue_request(construct_ack_req(sk), false, true);
-
+		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 	}
 	// if(dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch) {
 	// 	// nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
@@ -1033,34 +1035,39 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	if(sk) {
  		bh_lock_sock(sk);
 		dsk = nd_sk(sk);
-		// dsk->sender.snd_una = ah->grant_seq > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
+		// pr_info("get ack pkt:%u\n", ntohl(ah->grant_seq));
+	// 	// dsk->sender.snd_una = ah->grant_seq > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
 		if (!sock_owned_by_user(sk)) {
 			if(ntohl(ah->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
 				dsk->sender.sd_grant_nxt = ntohl(ah->grant_seq);
 			}
 			/*has to do nd push and check seq */
-			err = nd_push(sk);
+			// pr_info("receive ack: dsk->sender.sd_grant_nxt:%u \n", dsk->sender.sd_grant_nxt);
+
+			err = nd_push(sk, GFP_ATOMIC);
 			if(sk_stream_memory_free(sk)) {
+				// pr_info("invoke write space\n");
 				sk->sk_write_space(sk);
 			} else if(err == -EDQUOT){
 				/* push back since there is no space */
+				// pr_info("invoke sleep sock\n");
 				nd_conn_add_sleep_sock(nd_ctrl, dsk);
 			}
+			kfree_skb(skb);
         } else {
 			nd_add_backlog(sk, skb, true);
 	 		// test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
 	    }
-        bh_unlock_sock(sk);
+    	bh_unlock_sock(sk);
 	   
 
-		// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
+	// 	// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
 
 	} 
 
     if (refcounted) {
         sock_put(sk);
     }
- 	kfree_skb(skb);
 
 	return 0;
 }
@@ -1472,15 +1479,21 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 		sk->sk_data_ready(sk);
 	} else if (dh->type == ACK) {
 		/*do nd push and check the seq */
+		// pr_info("backlog:%u\n", ntohl(dh->grant_seq));
+		// pr_info("receive ack in backlog\n");
+
 		if(ntohl(dh->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
 			dsk->sender.sd_grant_nxt = ntohl(dh->grant_seq);
 		}
 		/*has to do nd push and check seq */
-		err = nd_push(sk);
+		err = nd_push(sk, GFP_KERNEL);
 		if(sk_stream_memory_free(sk)) {
+			// pr_info("invoke write space in backlog\n");
 			sk->sk_write_space(sk);
-		} else if(err == -EDQUOT){
+		} 
+		else if(err == -EDQUOT){
 			/* push back since there is no space */
+			// pr_info("add sleep sock in backlog\n");
 			nd_conn_add_sleep_sock(nd_ctrl, dsk);
 		}
 	} else if (dh->type == SYNC_ACK) {
@@ -1670,7 +1683,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 	int ret;
 	struct iphdr* iph;
 	// printk("pass_to_vs_layer core:%d\n", raw_smp_processor_id());
-
+	WARN_ON(queue == NULL);
 	while ((skb = skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
@@ -1734,7 +1747,7 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		// skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
-		// pr_info("seq num :%u\n", ntohl(nh->seq));
+		// pr_info("receive new ack seq num :%u\n", ntohl(nh->grant_seq));
 		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
 		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
