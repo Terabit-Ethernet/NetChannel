@@ -134,6 +134,7 @@ int nd_clean_rtx_queue(struct sock *sk);
 // void nd_flow_wait_handler(struct sock *sk);
 
 /*ND outgoing function*/
+int nd_init_request(struct sock* sk, struct nd_conn_request *req);
 struct nd_conn_request* construct_sync_req(struct sock* sk);
 struct nd_conn_request* construct_sync_ack_req(struct sock* sk);
 struct nd_conn_request* construct_fin_req(struct sock* sk);
@@ -176,6 +177,7 @@ int compat_nd_setsockopt(struct sock *sk, int level, int optname,
 int compat_nd_getsockopt(struct sock *sk, int level, int optname,
 			  char __user *optval, int __user *optlen);
 #endif
+int nd_push(struct sock *sk);
 int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 		int flags, int *addr_len);
 int nd_sendpage(struct sock *sk, struct page *page, int offset, size_t size,

@@ -1019,7 +1019,7 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	struct sock *sk;
 	int sdif = inet_sdif(skb);
 	bool refcounted = false;
-
+	int err = 0;
 	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 		kfree_skb(skb);		/* No space for header. */
 		return 0;
@@ -1027,24 +1027,35 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	ah = nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
-	// sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(&ah->common), ah->common.source,
-    //         ah->common.dest, sdif, &refcounted);
+	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(ah), ah->source,
+            ah->dest, sdif, &refcounted);
     // }
-	// if(sk) {
- 	// 	bh_lock_sock(sk);
-	// 	dsk = nd_sk(sk);
-	// 	dsk->sender.snd_una = ah->rcv_nxt > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
-	// 	if (!sock_owned_by_user(sk)) {
-	//  		nd_clean_rtx_queue(sk);
-    //     } else {
-	//  		test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
-	//     }
-    //     bh_unlock_sock(sk);
+	if(sk) {
+ 		bh_lock_sock(sk);
+		dsk = nd_sk(sk);
+		// dsk->sender.snd_una = ah->grant_seq > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
+		if (!sock_owned_by_user(sk)) {
+			if(ntohl(ah->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
+				dsk->sender.sd_grant_nxt = ntohl(ah->grant_seq);
+			}
+			/*has to do nd push and check seq */
+			err = nd_push(sk);
+			if(sk_stream_memory_free(sk)) {
+				sk->sk_write_space(sk);
+			} else if(err == -EDQUOT){
+				/* push back since there is no space */
+				nd_conn_add_sleep_sock(nd_ctrl, dsk);
+			}
+        } else {
+			nd_add_backlog(sk, skb, true);
+	 		// test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
+	    }
+        bh_unlock_sock(sk);
 	   
 
-	// 	// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
+		// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
 
-	// } 
+	} 
 
     if (refcounted) {
         sock_put(sk);
@@ -1439,7 +1450,8 @@ drop:
  */
 int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	struct ndhdr* dh;
-	// struct nd_sock *dsk = nd_sk(sk);
+    struct nd_sock *dsk = nd_sk(sk);
+	int err = 0;
 	dh = nd_hdr(skb);
 	// atomic_sub(skb->truesize, &dsk->receiver.backlog_len);
 	/* current place to set rxhash for RFS/RPS */
@@ -1459,7 +1471,18 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
 		sk->sk_data_ready(sk);
 	} else if (dh->type == ACK) {
-		WARN_ON(true);
+		/*do nd push and check the seq */
+		if(ntohl(dh->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
+			dsk->sender.sd_grant_nxt = ntohl(dh->grant_seq);
+		}
+		/*has to do nd push and check seq */
+		err = nd_push(sk);
+		if(sk_stream_memory_free(sk)) {
+			sk->sk_write_space(sk);
+		} else if(err == -EDQUOT){
+			/* push back since there is no space */
+			nd_conn_add_sleep_sock(nd_ctrl, dsk);
+		}
 	} else if (dh->type == SYNC_ACK) {
 		sk->sk_state = ND_ESTABLISH;
 		sk->sk_data_ready(sk);

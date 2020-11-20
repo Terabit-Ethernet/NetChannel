@@ -99,7 +99,7 @@ struct nd_conn_ctrl {
 	/* other member variables */
 	struct list_head	list;
 	/* socket wait list */
-	struct mutex sock_wait_lock;
+	spinlock_t sock_wait_lock;
 	struct list_head sock_wait_list;
 	struct workqueue_struct *sock_wait_wq;
 
@@ -114,7 +114,7 @@ struct nd_conn_ctrl {
 	// struct delayed_work	connect_work;
 	// struct nd_conn_request async_req;
 	u32			io_queues[32];
-	struct page_frag_cache	pf_cache;
+	// struct page_frag_cache	pf_cache;
 
 };
 
@@ -169,7 +169,7 @@ void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk);
 void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk);
 void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl);
 
-int nd_conn_init_request(struct nd_conn_request *req, int queue_id);
+// int nd_conn_init_request(struct nd_conn_request *req, int queue_id);
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req); 
 int nd_conn_try_send_data_pdu(struct nd_conn_request *req);
 int nd_conn_try_send(struct nd_conn_queue *queue);

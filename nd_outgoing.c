@@ -133,6 +133,25 @@ void nd_release_cb(struct sock *sk)
 }
 EXPORT_SYMBOL(nd_release_cb);
 
+int nd_init_request(struct sock* sk, struct nd_conn_request *req)
+{
+	// struct nd_conn_queue *queue = NULL;
+	// if(queue_id == -1) {
+	// 	queue = &nd_ctrl->queues[1];
+	// } else {
+	// 	queue =  &nd_ctrl->queues[queue_id];
+	// }
+	struct nd_sock *nsk = nd_sk(sk);
+	req->hdr = page_frag_alloc(&nsk->pf_cache,
+		sizeof(struct ndhdr), GFP_KERNEL | __GFP_ZERO);
+	if (!req->hdr){
+		pr_warn("WARNING: fail to allocat page \n");
+		return -ENOMEM;
+	}
+
+	// req->queue = queue;
+	return 0;
+}
 
 struct sk_buff* __construct_control_skb(struct sock* sk, int size) {
 
@@ -167,7 +186,7 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
-	nd_conn_init_request(req, -1);
+	nd_init_request(sk, req);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
 	// req->pdu_len = sizeof(struct ndhdr);
@@ -208,7 +227,7 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
-	nd_conn_init_request(req, -1);
+	nd_init_request(sk, req);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
 	// req->pdu_len = sizeof(struct ndhdr);
@@ -245,7 +264,7 @@ struct nd_conn_request* construct_ack_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
-	nd_conn_init_request(req, -1);
+	nd_init_request(sk, req);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	ack = req->hdr;
 	// req->pdu_len = sizeof(struct ndhdr);
@@ -281,7 +300,7 @@ struct nd_conn_request* construct_fin_req(struct sock* sk) {
 	if(unlikely(!req)) {
 		return NULL;
 	}
-	nd_conn_init_request(req, -1);
+	nd_init_request(sk, req);
 	req->state = ND_CONN_SEND_CMD_PDU;
 	sync = req->hdr;
 	// req->pdu_len = sizeof(struct ndhdr);

@@ -310,6 +310,21 @@ static int __init nd_load(void) {
         //     temp = list_entry(head, struct test_element, node);
         //     printk("value: %d\n", temp->value);
         // }   
+        spinlock_t lock;
+        spin_lock_init(&lock);
+        pr_info("in_softirq():%lu\n", in_softirq());
+        local_bh_disable();
+        pr_info("in_softirq():%lu\n", in_softirq());
+        spin_lock_bh(&lock);
+
+        pr_info("in_softirq():%lu\n", in_softirq());
+        spin_unlock_bh(&lock);
+        pr_info("in_softirq():%lu\n", in_softirq());
+
+        local_bh_enable();
+        pr_info("in_softirq():%lu\n", in_softirq());
+
+
         printk(KERN_NOTICE "ND module loading\n");
         nd_params_init(&nd_params);
 

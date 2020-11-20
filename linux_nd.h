@@ -473,7 +473,11 @@ struct nd_sock {
 	struct list_head wait_list;
 	struct work_struct tx_work;
 	int wait_cpu;
+	bool wait_on_nd_conns;
 	uint32_t default_win;
+
+	struct page_frag_cache	pf_cache;
+
     /* sender */
     struct nd_sender {
 	    /* next sequence from the user; Also equals total bytes written by user. */

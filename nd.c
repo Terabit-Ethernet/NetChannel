@@ -192,14 +192,14 @@ EXPORT_SYMBOL(sk_wait_ack);
 
 
 
-static int nd_push(struct sock *sk) {
+int nd_push(struct sock *sk) {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sk_buff *skb;
 	struct nd_sock *nsk = nd_sk(sk);
 	bool push_success;
 	struct nd_conn_request* req;
 	struct ndhdr* hdr;
-
+	int ret = 0;
 	while((skb = skb_peek(&sk->sk_write_queue)) != NULL || nsk->sender.pending_req) {
 
 		if(nsk->sender.pending_req) {
@@ -216,7 +216,7 @@ static int nd_push(struct sock *sk) {
 		if(skb->len == 0 || skb->data_len == 0) {
 			WARN_ON(true);
 		}
-		nd_conn_init_request(req, -1);
+		nd_init_request(sk, req);
 		req->state = ND_CONN_SEND_CMD_PDU;
 		// req->pdu_len = sizeof(struct ndhdr) + skb->len;
 		// req->data_len = skb->len;
@@ -250,11 +250,19 @@ static int nd_push(struct sock *sk) {
 		/*increment write seq */
 		nsk->sender.write_seq += skb->len;
 queue_req:
+		/* check the window is available */
+		if(nsk->sender.write_seq > nsk->sender.sd_grant_nxt) {
+			WARN_ON(nsk->sender.pending_req);
+			nsk->sender.pending_req = req;
+			ret = -EMSGSIZE;
+			break;
+		}
 		/* queue the request */
 		push_success = nd_conn_queue_request(req, false, false);
 		if(!push_success) {
 			WARN_ON(nsk->sender.pending_req);
 			nsk->sender.pending_req = req;
+			ret = -EDQUOT;
 			break;
 		}
 		// printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
@@ -271,12 +279,12 @@ void nd_tx_work(struct work_struct *w)
 	/* Primarily for SOCK_DGRAM sockets, also handle asynchronous tx
 	 * aborts
 	 */
-	nd_push(sk);
+	err = nd_push(sk);
 	/* Primarily for SOCK_SEQPACKET sockets */
 	if (likely(sk->sk_socket)) {
 		if(sk_stream_memory_free(sk)) {
 			sk->sk_write_space(sk);
-		} else {
+		} else if(err == -EDQUOT){
 			/* push back since there is no space */
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		}
@@ -417,12 +425,13 @@ create_new_skb:
 
 
 wait_for_memory:
-		nd_push(sk);
+		err = nd_push(sk);
 		// pr_info("start wait \n");
 		// pr_info("timeo:%ld\n", timeo);
 		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		/* hard code nd_ctrl for now */
-		nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		if(err == -EDQUOT)
+			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
 		if (err) {
@@ -650,7 +659,9 @@ int nd_init_sock(struct sock *sk)
 
 	INIT_WORK(&dsk->tx_work, nd_tx_work);
 	WRITE_ONCE(dsk->wait_cpu, 0);
+	WRITE_ONCE(dsk->wait_on_nd_conns, false);
 	INIT_LIST_HEAD(&dsk->wait_list);
+
 	// INIT_LIST_HEAD(&dsk->match_link);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
