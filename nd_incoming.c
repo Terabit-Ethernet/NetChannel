@@ -590,25 +590,44 @@ static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 	struct sock *sk = (struct sock*) nsk;
 	// struct inet_sock *inet = inet_sk(sk);
 	u32 delta = seq - nsk->receiver.rcv_nxt;
-	u32 new_grant_nxt;
+	// u32 new_grant_nxt;
 	// int grant_bytes = calc_grant_bytes(sk);
 
 	nsk->receiver.bytes_received += delta;
 	WRITE_ONCE(nsk->receiver.rcv_nxt, seq);
 	// printk("update the rcvnext :%u\n", nsk->receiver.rcv_nxt);
-	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
-	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
-		/* send ack pkt for new window */
-		 nsk->receiver.grant_nxt = new_grant_nxt;
-		nd_conn_queue_request(construct_ack_req(sk), false, true);
-		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
-	}
+	// new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+	// if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
+	// 	/* send ack pkt for new window */
+	// 	 nsk->receiver.grant_nxt = new_grant_nxt;
+	// 	nd_conn_queue_request(construct_ack_req(sk), false, true);
+	// 	// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+	// } else {
+	// 	pr_info("new_grant_nxt: %u\n", new_grant_nxt);
+	// 	pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
+	// 	pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
+	// }
 	// if(dsk->receiver.rcv_nxt >= dsk->receiver.last_ack + dsk->receiver.max_grant_batch) {
 	// 	// nd_xmit_control(construct_ack_pkt(sk, dsk->receiver.rcv_nxt), sk, inet->inet_dport); 
 	// 	dsk->receiver.last_ack = dsk->receiver.rcv_nxt;
 	// }
 }
 
+static inline nd_send_grant(struct nd_sock *nsk, bool sync) {
+	struct sock *sk = (struct sock*)nsk;
+	u32 new_grant_nxt;
+	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
+		/* send ack pkt for new window */
+		 nsk->receiver.grant_nxt = new_grant_nxt;
+		nd_conn_queue_request(construct_ack_req(sk), sync, true);
+		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+	} else {
+		pr_info("new_grant_nxt: %u\n", new_grant_nxt);
+		pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
+		pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
+	}
+}
 static void nd_drop(struct sock *sk, struct sk_buff *skb)
 {
         sk_drops_add(sk, skb);
@@ -1254,9 +1273,6 @@ queue_and_out:
 
 		if (eaten > 0)
 			kfree_skb_partial(skb, fragstolen);
-		if (!sock_flag(sk, SOCK_DEAD)) {
-			sk->sk_data_ready(sk);
-		}
 		return 0;
 	}
 	if (!after(ND_SKB_CB(skb)->end_seq, dsk->receiver.rcv_nxt)) {
@@ -1409,7 +1425,10 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		 	// sock_rps_save_rxhash(sk, skb)
 			//  printk("put into the data queue\n");
 			nd_handle_data_skb(sk, skb);
-
+			nd_send_grant(dsk, false);
+			if (!sock_flag(sk, SOCK_DEAD)) {
+				sk->sk_data_ready(sk);
+			}
 			// nd_check_flow_finished_at_receiver(dsk);;
         } else {
         	// printk("add to backlog\n");
@@ -1468,6 +1487,10 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	if(dh->type == DATA) {
 		// pr_info("handle backlog\n");
 		nd_handle_data_skb(sk, skb);
+		nd_send_grant(dsk, true);
+		if (!sock_flag(sk, SOCK_DEAD)) {
+			sk->sk_data_ready(sk);
+		}
 		return 0;
 		// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
 	} else if (dh->type == FIN) {
