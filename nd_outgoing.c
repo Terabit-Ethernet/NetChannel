@@ -184,6 +184,7 @@ struct nd_conn_request* construct_sync_req(struct sock* sk) {
 	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
 	struct ndhdr* sync;
 	if(unlikely(!req)) {
+		WARN_ON(true);
 		return NULL;
 	}
 	nd_init_request(sk, req);
@@ -251,10 +252,10 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	return req;
 }
 
-struct nd_conn_request* construct_ack_req(struct sock* sk) {
+struct nd_conn_request* construct_ack_req(struct sock* sk, gfp_t flag) {
 	// int extra_bytes = 0;
 	struct inet_sock *inet = inet_sk(sk);
-	struct nd_conn_request* req = kzalloc(sizeof(*req), GFP_KERNEL);
+	struct nd_conn_request* req = kzalloc(sizeof(*req), flag);
 	struct nd_sock *nsk = nd_sk(sk);
 	struct ndhdr* ack;
 
@@ -262,6 +263,7 @@ struct nd_conn_request* construct_ack_req(struct sock* sk) {
 	// struct nd_flow_sync_hdr* fh;
 	// struct ndhdr* dh; 
 	if(unlikely(!req)) {
+		WARN_ON(true);
 		return NULL;
 	}
 	nd_init_request(sk, req);
@@ -298,6 +300,7 @@ struct nd_conn_request* construct_fin_req(struct sock* sk) {
 	// struct nd_flow_sync_hdr* fh;
 	// struct ndhdr* dh; 
 	if(unlikely(!req)) {
+		WARN_ON(true);
 		return NULL;
 	}
 	nd_init_request(sk, req);

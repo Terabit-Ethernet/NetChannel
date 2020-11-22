@@ -211,7 +211,9 @@ int nd_push(struct sock *sk, gfp_t flag) {
 
 		/* construct nd_conn_request */
 		req = kzalloc(sizeof(*req), flag);
-
+		if(!req) {
+			WARN_ON(true);
+		}
 
 		if(skb->len == 0 || skb->data_len == 0) {
 			WARN_ON(true);
@@ -292,7 +294,7 @@ void nd_tx_work(struct work_struct *w)
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		}
 	} 	
-out:
+// out:
 	release_sock(sk);
 }
 
@@ -436,7 +438,11 @@ wait_for_memory:
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
-		}
+		} 
+		// else {
+		// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
+		// 	pr_info("nsk->sender.write_seq:%u\n", nsk->sender.write_seq);
+		// }
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
 		if (err) {
@@ -725,7 +731,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
 			/* send ack pkt for new window */
 			nsk->receiver.grant_nxt = new_grant_nxt;
-			nd_conn_queue_request(construct_ack_req(sk), false, true);
+			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 		}
 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
@@ -1356,15 +1362,15 @@ u32 nd_flow_hashrnd(void)
 }
 EXPORT_SYMBOL(nd_flow_hashrnd);
 
-static void __nd_sysctl_init(struct net *net)
-{
-	net->ipv4.sysctl_udp_rmem_min = SK_MEM_QUANTUM;
-	net->ipv4.sysctl_udp_wmem_min = SK_MEM_QUANTUM;
+// static void __nd_sysctl_init(struct net *net)
+// {
+// 	net->ipv4.sysctl_udp_rmem_min = SK_MEM_QUANTUM;
+// 	net->ipv4.sysctl_udp_wmem_min = SK_MEM_QUANTUM;
 
-#ifdef CONFIG_NET_L3_MASTER_DEV
-	net->ipv4.sysctl_udp_l3mdev_accept = 0;
-#endif
-}
+// #ifdef CONFIG_NET_L3_MASTER_DEV
+// 	net->ipv4.sysctl_udp_l3mdev_accept = 0;
+// #endif
+// }
 
 // static int __net_init nd_sysctl_init(struct net *net)
 // {

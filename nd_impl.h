@@ -138,7 +138,7 @@ int nd_init_request(struct sock* sk, struct nd_conn_request *req);
 struct nd_conn_request* construct_sync_req(struct sock* sk);
 struct nd_conn_request* construct_sync_ack_req(struct sock* sk);
 struct nd_conn_request* construct_fin_req(struct sock* sk);
-struct nd_conn_request* construct_ack_req(struct sock* sk);
+struct nd_conn_request* construct_ack_req(struct sock* sk, gfp_t flag);
 
 // struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
 // 	uint32_t message_size, __u64 start_time);

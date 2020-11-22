@@ -587,7 +587,7 @@ int nd_clean_rtx_queue(struct sock *sk)
  
 static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 {
-	struct sock *sk = (struct sock*) nsk;
+	// struct sock *sk = (struct sock*) nsk;
 	// struct inet_sock *inet = inet_sk(sk);
 	u32 delta = seq - nsk->receiver.rcv_nxt;
 	// u32 new_grant_nxt;
@@ -613,14 +613,16 @@ static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 	// }
 }
 
-static inline nd_send_grant(struct nd_sock *nsk, bool sync) {
+static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 	struct sock *sk = (struct sock*)nsk;
+	gfp_t flag = sync? GFP_KERNEL: GFP_ATOMIC;
 	u32 new_grant_nxt;
 	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+	
 	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
 		/* send ack pkt for new window */
 		 nsk->receiver.grant_nxt = new_grant_nxt;
-		nd_conn_queue_request(construct_ack_req(sk), sync, true);
+		nd_conn_queue_request(construct_ack_req(sk, flag), sync, true);
 		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 	} else {
 		pr_info("new_grant_nxt: %u\n", new_grant_nxt);
