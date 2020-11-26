@@ -43,6 +43,7 @@ struct ndt_conn_queue {
 	struct socket		*sock;
 	struct ndt_conn_port	*port;
 	struct work_struct	io_work;
+	int io_cpu;
 	// struct nvmet_cq		nvme_cq;
 	// struct nvmet_sq		nvme_sq;
 	struct sk_buff_head	receive_queue;

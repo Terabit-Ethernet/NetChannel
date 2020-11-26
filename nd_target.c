@@ -11,9 +11,12 @@ static struct ndt_conn_port * ndt_port;
 #define NDT_CONN_SEND_BUDGET		8
 #define NDT_CONN_IO_WORK_BUDGET	64
 
+static int cur_io_cpu = 0;
 static inline int queue_cpu(struct ndt_conn_queue *queue)
 {
-	return queue->sock->sk->sk_incoming_cpu;
+	return queue->io_cpu;
+	// return 0;
+	// return queue->sock->sk->sk_incoming_cpu;
 }
 
 void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
@@ -355,10 +358,10 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 			}
 			// pr_info("original skb data len:%d\n", skb->data_len);
 			// int calc_size = skb_headlen(skb), i;
-			int calc_size = 0, i;
-			for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-				calc_size +=  skb_frag_size(&skb_shinfo(skb)->frags[i]);
-			}
+			// int calc_size = 0, i;
+			// for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+			// 	calc_size +=  skb_frag_size(&skb_shinfo(skb)->frags[i]);
+			// }
 			// pr_info("real skb len:%d\n", calc_size);
 
 		}
@@ -382,7 +385,7 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 		int budget, int *recvs)
 {
-	int i, ret = 0;
+	int ret = 0;
 	struct socket *sock = queue->sock;
 	read_descriptor_t desc;
 
@@ -574,7 +577,6 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		ret = queue->idx;
 		goto out_free_queue;
 	}
-
 	// ret = nvmet_tcp_alloc_cmd(queue, &queue->connect);
 	// if (ret)
 	// 	goto out_ida_remove;
@@ -592,6 +594,9 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	ret = ndt_conn_set_queue_sock(queue);
 	if (ret)
 		goto out_destroy_sq;
+	
+	// hard code for now
+	queue->io_cpu = (cur_io_cpu + 1) * 4 % 28;
 
 	queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
 

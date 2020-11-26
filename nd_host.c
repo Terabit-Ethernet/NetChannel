@@ -448,8 +448,10 @@ int nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl)
 	// if (ret)
 	// 	return ret;
 
-	ctrl->queue_count = nr_io_queues + 1;
-	if (ctrl->queue_count < 2)
+	// ctrl->queue_count = nr_io_queues + 1;
+	ctrl->queue_count = nr_io_queues;
+
+	if (ctrl->queue_count < 1)
 		return 0;
 
 	// dev_info(ctrl->device,
@@ -464,7 +466,7 @@ int __nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl)
 {
 	int i, ret;
 
-	for (i = 1; i < ctrl->queue_count; i++) {
+	for (i = 0; i < ctrl->queue_count; i++) {
 		ret = nd_conn_alloc_queue(ctrl, i,
 				ctrl->sqsize + 1);
 		if (ret)
@@ -474,7 +476,7 @@ int __nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl)
 	return 0;
 
 out_free_queues:
-	for (i--; i >= 1; i--)
+	for (i--; i >= 0; i--)
 		nd_conn_free_queue(ctrl, i);
 
 	return ret;
@@ -715,8 +717,8 @@ void nd_conn_io_work(struct work_struct *w)
 	int ret;
 	bool pending;
 	do {
-		pending = false;
 		int result;
+		pending = false;
 		mutex_lock(&queue->send_mutex);
 		result = nd_conn_try_send(queue);
 		mutex_unlock(&queue->send_mutex);
@@ -770,7 +772,7 @@ void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
 	// pr_info("wake up all sock\n");
 	spin_lock_bh(&ctrl->sock_wait_lock);
 	list_for_each_entry(nsk, &ctrl->sock_wait_list, wait_list) {
-		WARN_ON(nsk->wait_on_nd_conns);
+		WARN_ON(!nsk->wait_on_nd_conns);
 		queue_work_on(nsk->wait_cpu, ctrl->sock_wait_wq, &nsk->tx_work);
 		nsk->wait_on_nd_conns = false;
 	}
@@ -856,6 +858,8 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	else
 		n = (qid - 1) % num_online_cpus();
 	queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
+	/* mod 28 is hard code for now. */
+	queue->io_cpu = (4 * qid) % 28;
 	queue->request = NULL;
 	// queue->data_remaining = 0;
 	// queue->ddgst_remaining = 0;
@@ -961,9 +965,9 @@ int nd_conn_setup_ctrl(struct nd_conn_ctrl *ctrl, bool new)
 	// struct nd_conn_ctrl_options *opts = ctrl->opts;
 	int ret;
 
-	ret = nd_conn_configure_admin_queue(ctrl, new);
-	if (ret)
-		return ret;
+	// ret = nd_conn_configure_admin_queue(ctrl, new);
+	// if (ret)
+	// 	return ret;
 
 	// if (ctrl->icdoff) {
 	// 	dev_err(ctrl->device, "icdoff is not supported!\n");
@@ -1121,7 +1125,7 @@ int nd_conn_init_module(void)
 		return -ENOMEM;
     /* initialiize the option */
     // pr_info("HCTX_MAX_TYPES: %d\n", HCTX_MAX_TYPES);
-    opts->nr_io_queues = 2;
+    opts->nr_io_queues = 8;
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
