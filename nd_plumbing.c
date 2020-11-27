@@ -203,7 +203,7 @@ void nd_params_init(struct nd_params* params) {
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
     params->rtt = 50;
-    params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 2;
+    params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 4;
     // params->bdp = 500000;
     // params->gso_size = 1500;
     // matchiing parameters
@@ -213,8 +213,8 @@ void nd_params_init(struct nd_params* params) {
     params->num_iters = 5;
     params->iter_size = params->beta * params->control_pkt_rtt * 1000;
     params->epoch_size = params->num_iters * params->iter_size * params->alpha;
-    params->rmem_default = 3289600;
-    params->wmem_default = 3289600;
+    params->rmem_default = 6289600;
+    params->wmem_default = 6289600;
     params->short_flow_size = params->bdp;
     params->control_pkt_bdp = params->control_pkt_rtt * params->bandwidth * 1000 / 8;
     params->data_budget = 1000000;

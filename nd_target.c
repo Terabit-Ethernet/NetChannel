@@ -596,7 +596,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		goto out_destroy_sq;
 	
 	// hard code for now
-	queue->io_cpu = (cur_io_cpu + 1) * 4 % 28;
+	queue->io_cpu = (cur_io_cpu + 1) * 4 % 32;
 
 	queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
 

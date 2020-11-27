@@ -259,12 +259,14 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 		bool sync, bool avoid_check)
 {
 	struct nd_conn_queue *queue = req->queue;
+	static u32 queue_id = 0;
 	bool empty;
 	int ret;
 	if(queue == NULL) {
-		/* hard code forr now */
-		req->queue = &nd_ctrl->queues[1];
+		/* hard code for now */
+		req->queue = &nd_ctrl->queues[(queue_id) % (nd_ctrl->opts->nr_io_queues / 4)];
 		queue = req->queue;
+		queue_id += 1;
 	}
 	WARN_ON(req == NULL);
 	if(!avoid_check){
@@ -859,7 +861,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		n = (qid - 1) % num_online_cpus();
 	queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
 	/* mod 28 is hard code for now. */
-	queue->io_cpu = (4 * qid) % 28;
+	queue->io_cpu = (4 * (qid + 1)) % 32;
 	queue->request = NULL;
 	// queue->data_remaining = 0;
 	// queue->ddgst_remaining = 0;
