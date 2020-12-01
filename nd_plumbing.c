@@ -17,7 +17,7 @@ MODULE_DESCRIPTION("ND transport protocol");
 MODULE_VERSION("0.01");
 
 #include "net_nd.h"
-
+#include "nd_data_copy.h"
 
 /* True means that the ND module is in the process of unloading itself,
  * so everyone should clean up.
@@ -90,7 +90,7 @@ struct proto nd_prot = {
     .setsockopt     = nd_setsockopt,
     .getsockopt     = nd_getsockopt,
     .sendmsg        = nd_sendmsg,
-    .recvmsg        = nd_recvmsg,
+    .recvmsg        = nd_recvmsg_new,
     .sendpage       = nd_sendpage,
     .backlog_rcv    = nd_v4_do_rcv,
     .release_cb     = nd_release_cb,
@@ -395,6 +395,12 @@ static int __init nd_load(void) {
              pr_err("failed to allocate target side\n");
              goto out_ndt_conn;
         }
+        status = nd_dcopy_init();
+        if (status != 0) {
+             pr_err("failed to allocate data copy \n");
+             goto out_nd_conn;
+        }
+
         // status = nd_conn_init_module();
         // if (status != 0) {
         //         pr_err("failed to allocate host side\n");
@@ -411,7 +417,7 @@ out_cleanup:
         //     printk(KERN_ERR "ND couldn't stop offloads\n");
         // nd_epoch_destroy(&nd_epoch);
         // rcv_core_table_destory(&rcv_core_tab);
-        // xmit_core_table_destory(&xmit_core_tab);
+        // xmit_core_table_destory(&xmit_core_tab);        
 out_nd_conn:
         // nd_conn_cleanup_module();
 out_ndt_conn:
@@ -456,6 +462,8 @@ static void __exit nd_unload(void) {
         // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
         
+        /* clean up data copy */
+        nd_dcopy_exit();
         /* clean up the target side logic */
         ndt_conn_exit();
         /* clean up the host side logic */

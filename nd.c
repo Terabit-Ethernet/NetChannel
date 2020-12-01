@@ -61,6 +61,7 @@
 // struct udp_table nd_table __read_mostly;
 // EXPORT_SYMBOL(nd_table);
 #include "nd_host.h"
+#include "nd_data_copy.h"
 
 struct nd_peertab nd_peers_table;
 EXPORT_SYMBOL(nd_peers_table);
@@ -84,6 +85,21 @@ struct inet_hashinfo nd_hashinfo;
 EXPORT_SYMBOL(nd_hashinfo);
 #define MAX_ND_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
+
+static int sk_wait_data_copy(struct sock *sk, long *timeo)
+{
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	int rc;
+	struct nd_sock* nsk = nd_sk(sk);
+	while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
+		// add_wait_queue(sk_sleep(sk), &wait);
+		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
+		// sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// remove_wait_queue(sk_sleep(sk), &wait);
+	}
+	return rc;
+}
 
 void nd_rbtree_insert(struct rb_root *root, struct sk_buff *skb)
 {
@@ -684,6 +700,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
+	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 4);
 	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
@@ -692,8 +709,8 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.prev_grant_bytes, 0);
 	// WRITE_ONCE(dsk->receiver.in_pq, false);
 	// WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
-	atomic_set(&dsk->receiver.in_flight_bytes, 0);
-	atomic_set(&dsk->receiver.backlog_len, 0);
+	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
+	// atomic_set(&dsk->receiver.backlog_len, 0);
 	// dsk->start_time = ktime_get();
 	// hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
 	// dsk->receiver.flow_wait_timer.function = &nd_flow_wait_event;
@@ -763,6 +780,278 @@ bool nd_try_send_token(struct sock *sk) {
 	return false;
 
 }
+
+int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+		int flags, int *addr_len)
+{
+
+	struct nd_sock *dsk = nd_sk(sk);
+	int copied = 0;
+	// u32 peek_seq;
+	u32 *seq;
+	unsigned long used;
+	int err;
+	// int inq;
+	int target;		/* Read at least this many bytes */
+	long timeo;
+	// int trigger_tokens = 1;
+	struct sk_buff *skb, *last, *tmp;
+	struct nd_dcopy_request *request;
+	// u32 urg_hole = 0;
+	// struct scm_timestamping_internal tss;
+	// int cmsg_flags;
+	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
+	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
+
+	nd_rps_record_flow(sk);
+	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
+	// if (unlikely(flags & MSG_ERRQUEUE))
+	// 	return inet_recv_error(sk, msg, len, addr_len);
+	// printk("start recvmsg \n");
+	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+
+	// printk("target bytes:%d\n", target);
+
+	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
+	    (sk->sk_state == ND_ESTABLISH))
+		sk_busy_loop(sk, nonblock);
+
+	lock_sock(sk);
+	err = -ENOTCONN;
+
+
+	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
+	timeo = sock_rcvtimeo(sk, nonblock);
+
+	if (sk->sk_state != ND_ESTABLISH)
+		goto out;
+
+	seq = &dsk->receiver.copied_seq;
+
+
+	do {
+		u32 offset;
+		/* Next get a buffer. */
+
+		last = skb_peek_tail(&sk->sk_receive_queue);
+		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
+			last = skb;
+
+			/* Now that we have two receive queues this
+			 * shouldn't happen.
+			 */
+			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
+				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
+				 *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt,
+				 flags))
+				break;
+
+			offset = *seq - ND_SKB_CB(skb)->seq;
+
+			if (offset < skb->len) {
+				goto found_ok_skb; 
+			}
+			else {
+				WARN_ON(true);
+			}
+		}
+
+
+		/* ToDo: we have to check whether pending requests are done */
+		/* Well, if we have backlog, try to process it now yet. */
+
+		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
+			break;
+
+		if (copied) {
+			if (sk->sk_err ||
+			    sk->sk_state == TCP_CLOSE ||
+			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+			    !timeo ||
+			    signal_pending(current))
+				break;
+		} else {
+			if (sock_flag(sk, SOCK_DONE))
+				break;
+
+			if (sk->sk_err) {
+				copied = sock_error(sk);
+				break;
+			}
+
+			if (sk->sk_shutdown & RCV_SHUTDOWN)
+				break;
+
+			if (sk->sk_state == TCP_CLOSE) {
+				/* This occurs when user tries to read
+				 * from never connected socket.
+				 */
+				copied = -ENOTCONN;
+				break;
+			}
+
+			if (!timeo) {
+				copied = -EAGAIN;
+				break;
+			}
+
+			if (signal_pending(current)) {
+				copied = sock_intr_errno(timeo);
+				break;
+			}
+		}
+
+		// tcp_cleanup_rbuf(sk, copied);
+		nd_try_send_ack(sk, copied);
+		// printk("release sock");
+		if (copied >= target) {
+			/* Do not sleep, just process backlog. */
+			/* Release sock will handle the backlog */
+			release_sock(sk);
+			lock_sock(sk);
+		} else {
+			sk_wait_data(sk, &timeo, last);
+		}
+
+		continue;
+
+found_ok_skb:
+		/* Ok so how much can we use? */
+		used = skb->len - offset;
+		if (len < used)
+			used = len;
+
+		/* construct data copy request */
+		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+		request->sk = sk;
+		request->clean_skb = (used + offset == skb->len);
+		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
+		request->skb = skb;
+		request->offset = offset;
+		request->len = used;
+		dup_iter(&request->iter, &msg->msg_iter, GFP_KERNEL);
+		// request->iter = msg->msg_iter;
+
+		// if (!(flags & MSG_TRUNC)) {
+		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
+		// 	// printk("copy data done: %d\n", used);
+		// 	if (err) {
+		// 		/* Exception. Bailout! */
+		// 		if (!copied)
+		// 			copied = -EFAULT;
+		// 		break;
+		// 	}
+		// }
+
+		WRITE_ONCE(*seq, *seq + used);
+		copied += used;
+		len -= used;
+		if (used + offset < skb->len)
+			goto queue_request;
+
+		WARN_ON(used + offset > skb->len);
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		// kfree_skb(skb);
+queue_request:
+		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
+		/* queue the data copy request */
+		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
+		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
+		nd_dcopy_queue_request(request);
+		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
+		pr_info("start wait \n");
+		sk_wait_data_copy(sk, &timeo);
+		pr_info("finish wait \n");
+
+		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
+		// if(dsk->receiver.nxt_dcopy_cpu == 0)
+		// 	dsk->receiver.nxt_dcopy_cpu = 4;
+		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
+		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
+		iov_iter_advance(&msg->msg_iter, used);
+		pr_info("advance \n");
+		continue;
+
+		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
+		// 	// nd_try_send_token(sk);
+		// 	trigger_tokens += 1;
+			
+		// }
+		// nd_try_send_token(sk);
+
+		// tcp_rcv_space_adjust(sk);
+
+// skip_copy:
+		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
+		// 	tp->urg_data = 0;
+		// 	tcp_fast_path_check(sk);
+		// }
+		// if (used + offset < skb->len)
+		// 	continue;
+
+		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
+		// 	tcp_update_recv_tstamps(skb, &tss);
+		// 	cmsg_flags |= 2;
+		// }
+		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+		// 	goto found_fin_ok;
+		// if (!(flags & MSG_PEEK))
+		// 	sk_eat_skb(sk, skb);
+		// continue;
+
+// found_fin_ok:
+		/* Process the FIN. */
+		// WRITE_ONCE(*seq, *seq + 1);
+		// if (!(flags & MSG_PEEK))
+		// 	sk_eat_skb(sk, skb);
+		// break;
+	} while (len > 0);
+
+	/* According to UNIX98, msg_name/msg_namelen are ignored
+	 * on connected socket. I was just happy when found this 8) --ANK
+	 */
+	 	/* waiting data copy to be finishede */
+	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
+		sk_wait_data_copy(sk, &timeo);
+	// }
+	/* Clean up data we have read: This will do ACK frames. */
+	// tcp_cleanup_rbuf(sk, copied);
+	nd_try_send_ack(sk, copied);
+	// if (dsk->receiver.copied_seq == dsk->total_length) {
+	// 	printk("call tcp close in the recv msg\n");
+	// 	nd_set_state(sk, TCP_CLOSE);
+	// } else {
+	// 	// nd_try_send_token(sk);
+	// }
+	release_sock(sk);
+
+	// if (cmsg_flags) {
+	// 	if (cmsg_flags & 2)
+	// 		tcp_recv_timestamp(msg, sk, &tss);
+	// 	if (cmsg_flags & 1) {
+	// 		inq = tcp_inq_hint(sk);
+	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
+	// 	}
+	// }
+	// printk("recvmsg\n");
+	pr_info("copied:%d\n", copied);
+	return copied;
+
+out:
+	release_sock(sk);
+	return err;
+
+// recv_urg:
+// 	err = tcp_recv_urg(sk, msg, len, flags);
+// 	goto out;
+
+// recv_sndq:
+// 	// err = tcp_peek_sndq(sk, msg, len);
+// 	goto out;
+}
+
+
 /*
  * 	This should be easy, if there is something there we
  * 	return it, otherwise we block.
@@ -886,6 +1175,8 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			//      *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt, flags);
 		}
 
+
+		/* ToDo: we have to check whether pending requests are done */
 		/* Well, if we have backlog, try to process it now yet. */
 
 		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
@@ -980,6 +1271,7 @@ found_ok_skb:
 			err = skb_copy_datagram_msg(skb, offset, msg, used);
 			// printk("copy data done: %d\n", used);
 			if (err) {
+				WARN_ON(true);
 				/* Exception. Bailout! */
 				if (!copied)
 					copied = -EFAULT;
@@ -1034,7 +1326,7 @@ found_ok_skb:
 	/* According to UNIX98, msg_name/msg_namelen are ignored
 	 * on connected socket. I was just happy when found this 8) --ANK
 	 */
-
+	
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
 	nd_try_send_ack(sk, copied);

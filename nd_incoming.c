@@ -725,7 +725,7 @@ static int nd_data_queue_ofo(struct sock *sk, struct sk_buff *skb)
 	/* Disable header prediction. */
 	// tp->pred_flags = 0;
 	// inet_csk_schedule_ack(sk);
-	pr_info("get outof order packet\n");
+	// pr_info("get outof order packet\n");
 	// tp->rcv_ooopack += max_t(u16, 1, skb_shinfo(skb)->gso_segs);
 	// NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPOFOQUEUE);
 	seq = ND_SKB_CB(skb)->seq;

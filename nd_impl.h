@@ -180,6 +180,10 @@ int compat_nd_getsockopt(struct sock *sk, int level, int optname,
 int nd_push(struct sock *sk, gfp_t flag);
 int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 		int flags, int *addr_len);
+/* new recvmsg syscall */
+int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+		int flags, int *addr_len);
+
 int nd_sendpage(struct sock *sk, struct page *page, int offset, size_t size,
 		 int flags);
 void nd_destroy_sock(struct sock *sk);

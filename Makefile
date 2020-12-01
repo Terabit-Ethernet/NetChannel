@@ -7,6 +7,7 @@ nd_module-y = 	 nd_host.o\
 				 nd_pq.o \
 				 nd_incoming.o\
 				 nd_outgoing.o \
+				 nd_data_copy.o\
 				 nd.o \
 				 nd_target.o\
 				 nd_plumbing.o

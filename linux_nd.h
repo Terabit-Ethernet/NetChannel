@@ -398,34 +398,34 @@ struct nd_sock {
 	struct hlist_node         icsk_listen_portaddr_node;
 	struct request_sock_queue icsk_accept_queue;
 
-	int		 pending;	/* Any pending frames ? */
-	unsigned int	 corkflag;	/* Cork is required */
-	__u8		 encap_type;	/* Is this an Encapsulation socket? */
-	unsigned char	 no_check6_tx:1,/* Send zero ND6 checksums on TX? */
-			 no_check6_rx:1,/* Allow zero ND6 checksums on RX? */
-			 encap_enabled:1, /* This socket enabled encap
-					   * processing; ND tunnels and
-					   * different encapsulation layer set
-					   * this
-					   */
-			 gro_enabled:1;	/* Can accept GRO packets */
+	// int		 pending;	/* Any pending frames ? */
+	// unsigned int	 corkflag;	/* Cork is required */
+	// __u8		 encap_type;	/* Is this an Encapsulation socket? */
+	// unsigned char	 no_check6_tx:1,/* Send zero ND6 checksums on TX? */
+	// 		 no_check6_rx:1,/* Allow zero ND6 checksums on RX? */
+	// 		 encap_enabled:1, /* This socket enabled encap
+	// 				   * processing; ND tunnels and
+	// 				   * different encapsulation layer set
+	// 				   * this
+	// 				   */
+	// 		 gro_enabled:1;	/* Can accept GRO packets */
 	/*
 	 * Following member retains the information to create a ND header
 	 * when the socket is uncorked.
 	 */
-	__u16		 len;		/* total length of pending frames */
+	// __u16		 len;		/* total length of pending frames */
 	__u16		 gso_size;
 	/*
 	 * Fields specific to ND-Lite.
 	 */
-	__u16		 pcslen;
-	__u16		 pcrlen;
+	// __u16		 pcslen;
+	// __u16		 pcrlen;
 /* indicator bits used by pcflag: */
-#define NDLITE_BIT      0x1  		/* set by ndlite proto init function */
-#define NDLITE_SEND_CC  0x2  		/* set via ndlite setsockopt         */
-#define NDLITE_RECV_CC  0x4		/* set via ndlite setsocktopt        */
-	__u8		 pcflag;        /* marks socket as ND-Lite if > 0    */
-	__u8		 unused[3];
+// #define NDLITE_BIT      0x1  		/* set by ndlite proto init function */
+// #define NDLITE_SEND_CC  0x2  		/* set via ndlite setsockopt         */
+// #define NDLITE_RECV_CC  0x4		/* set via ndlite setsocktopt        */
+// 	__u8		 pcflag;        /* marks socket as ND-Lite if > 0    */
+// 	__u8		 unused[3];
 	/*
 	 * For encapsulation sockets.
 	 */
@@ -525,7 +525,7 @@ struct nd_sock {
 	    // uint32_t max_gso_data;
 	    // uint32_t max_grant_batch;
 		uint32_t grant_nxt;
-
+		uint32_t nxt_dcopy_cpu;
 	    /* current received bytes + 1*/
 	    uint32_t rcv_nxt;
 	    uint32_t last_ack;
@@ -543,12 +543,12 @@ struct nd_sock {
 		bool in_pq;
 		// link for ND matching table
 		struct list_head match_link;
-
+		atomic_t in_flight_copy_bytes;
 		/* protected by the entry lock */
 		uint32_t grant_batch;
 		int prev_grant_bytes;
-		atomic_t backlog_len;
-		atomic_t in_flight_bytes;
+		// atomic_t backlog_len;
+		// atomic_t in_flight_bytes;
 
 		// struct work_struct token_xmit_struct;
 
@@ -585,25 +585,25 @@ static inline struct nd_sock *nd_sk(const struct sock *sk)
 	return (struct nd_sock *)sk;
 }
 
-static inline void nd_set_no_check6_tx(struct sock *sk, bool val)
-{
-	nd_sk(sk)->no_check6_tx = val;
-}
+// static inline void nd_set_no_check6_tx(struct sock *sk, bool val)
+// {
+// 	nd_sk(sk)->no_check6_tx = val;
+// }
 
-static inline void nd_set_no_check6_rx(struct sock *sk, bool val)
-{
-	nd_sk(sk)->no_check6_rx = val;
-}
+// static inline void nd_set_no_check6_rx(struct sock *sk, bool val)
+// {
+// 	nd_sk(sk)->no_check6_rx = val;
+// }
 
-static inline bool nd_get_no_check6_tx(struct sock *sk)
-{
-	return nd_sk(sk)->no_check6_tx;
-}
+// static inline bool nd_get_no_check6_tx(struct sock *sk)
+// {
+// 	return nd_sk(sk)->no_check6_tx;
+// }
 
-static inline bool nd_get_no_check6_rx(struct sock *sk)
-{
-	return nd_sk(sk)->no_check6_rx;
-}
+// static inline bool nd_get_no_check6_rx(struct sock *sk)
+// {
+// 	return nd_sk(sk)->no_check6_rx;
+// }
 
 static inline void nd_cmsg_recv(struct msghdr *msg, struct sock *sk,
 				 struct sk_buff *skb)
@@ -616,11 +616,11 @@ static inline void nd_cmsg_recv(struct msghdr *msg, struct sock *sk,
 	}
 }
 
-static inline bool nd_unexpected_gso(struct sock *sk, struct sk_buff *skb)
-{
-	return !nd_sk(sk)->gro_enabled && skb_is_gso(skb) &&
-	       skb_shinfo(skb)->gso_type & SKB_GSO_ND_L4;
-}
+// static inline bool nd_unexpected_gso(struct sock *sk, struct sk_buff *skb)
+// {
+// 	return !nd_sk(sk)->gro_enabled && skb_is_gso(skb) &&
+// 	       skb_shinfo(skb)->gso_type & SKB_GSO_ND_L4;
+// }
 
 #define nd_portaddr_for_each_entry(__sk, list) \
 	hlist_for_each_entry(__sk, list, __sk_common.skc_portaddr_node)

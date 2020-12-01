@@ -68,13 +68,13 @@ static inline int nd_win_from_space(const struct sock *sk, int space)
 }
 
 /* Note: caller must be prepared to deal with negative returns */
-static inline int nd_space(const struct sock *sk)
-{
-	struct nd_sock *dsk = nd_sk(sk);
-	return nd_win_from_space(sk, READ_ONCE(sk->sk_rcvbuf) -
-				  atomic_read(&dsk->receiver.backlog_len) -
-				  atomic_read(&sk->sk_rmem_alloc) - atomic_read(&dsk->receiver.in_flight_bytes));
-}
+// static inline int nd_space(const struct sock *sk)
+// {
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	return nd_win_from_space(sk, READ_ONCE(sk->sk_rcvbuf) -
+// 				  atomic_read(&dsk->receiver.backlog_len) -
+// 				  atomic_read(&sk->sk_rmem_alloc) - atomic_read(&dsk->receiver.in_flight_bytes));
+// }
 
 static inline int nd_full_space(const struct sock *sk)
 {
@@ -84,8 +84,10 @@ static inline int nd_full_space(const struct sock *sk)
 static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 		uint32_t win;
 		struct sock *sk = (struct sock*) nsk;
-		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq);
+		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq) - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
 		if(win > READ_ONCE(sk->sk_rcvbuf)) {
+			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
+			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 			WARN_ON(true);
 		}
 	    win = min_t (uint32_t, win, nsk->default_win);
