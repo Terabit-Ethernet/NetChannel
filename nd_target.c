@@ -117,21 +117,21 @@ int ndt_init_conn_port(struct ndt_conn_port *port)
 	port->sock->sk->sk_user_data = port;
 	port->data_ready = port->sock->sk->sk_data_ready;
 	port->sock->sk->sk_data_ready = ndt_conn_listen_data_ready;
-	opt = 1;
-	ret = kernel_setsockopt(port->sock, IPPROTO_TCP,
-			TCP_NODELAY, (char *)&opt, sizeof(opt));
-	if (ret) {
-		pr_err("failed to set TCP_NODELAY sock opt %d\n", ret);
-		goto err_sock;
-	}
-
-	ret = kernel_setsockopt(port->sock, SOL_SOCKET, SO_REUSEADDR,
-			(char *)&opt, sizeof(opt));
-	if (ret) {
-		pr_err("failed to set SO_REUSEADDR sock opt %d\n", ret);
-		goto err_sock;
-	}
-	// sock_set_reuseaddr(port->sock->sk);
+	// opt = 1;
+	// ret = kernel_setsockopt(port->sock, IPPROTO_TCP,
+	// 		TCP_NODELAY, (char *)&opt, sizeof(opt));
+	// if (ret) {
+	// 	pr_err("failed to set TCP_NODELAY sock opt %d\n", ret);
+	// 	goto err_sock;
+	// }
+	tcp_sock_set_nodelay(port->sock->sk);
+	// ret = kernel_setsockopt(port->sock, SOL_SOCKET, SO_REUSEADDR,
+	// 		(char *)&opt, sizeof(opt));
+	// if (ret) {
+	// 	pr_err("failed to set SO_REUSEADDR sock opt %d\n", ret);
+	// 	goto err_sock;
+	// }
+	sock_set_reuseaddr(port->sock->sk);
 	// tcp_sock_set_nodelay(port->sock->sk);
 	// if (so_priority > 0)
 	// 	sock_set_priority(port->sock->sk, so_priority);
@@ -290,23 +290,25 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	 * close. This is done to prevent stale data from being sent should
 	 * the network connection be restored before TCP times out.
 	 */
-	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_LINGER,
-		(char *)&sol, sizeof(sol));
-	if (ret)
-		return ret;
-
+	// ret = kernel_setsockopt(sock, SOL_SOCKET, SO_LINGER,
+	// 	(char *)&sol, sizeof(sol));
+	// if (ret)
+	// 	return ret;
+	sock_no_linger(sock->sk);
 	// if (so_priority > 0)
 	// 	sock_set_priority(sock->sk, so_priority);
 
 	/* Set socket type of service */
-	if (inet->rcv_tos > 0) {
-		int tos = inet->rcv_tos;
+	// if (inet->rcv_tos > 0) {
+	// 	int tos = inet->rcv_tos;
 
-		ret = kernel_setsockopt(sock, SOL_IP, IP_TOS,
-				(char *)&tos, sizeof(tos));
-		if (ret)
-			return ret;
-	}
+	// 	ret = kernel_setsockopt(sock, SOL_IP, IP_TOS,
+	// 			(char *)&tos, sizeof(tos));
+	// 	if (ret)
+	// 		return ret;
+	// }
+	if (inet->rcv_tos > 0)
+		ip_sock_set_tos(sock->sk, inet->rcv_tos);
 
 	write_lock_bh(&sock->sk->sk_callback_lock);
 	sock->sk->sk_user_data = queue;
@@ -596,8 +598,8 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		goto out_destroy_sq;
 	
 	// hard code for now
-	queue->io_cpu = (cur_io_cpu + 1) * 4 % 32;
-
+	queue->io_cpu = (cur_io_cpu * 4) % 32;
+	cur_io_cpu += 1;
 	queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
 
 	return 0;
@@ -636,7 +638,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.116";
+	ndt_port->local_ip = "192.168.10.117";
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);

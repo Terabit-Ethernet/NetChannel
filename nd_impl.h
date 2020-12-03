@@ -178,6 +178,8 @@ int compat_nd_getsockopt(struct sock *sk, int level, int optname,
 			  char __user *optval, int __user *optlen);
 #endif
 int nd_push(struct sock *sk, gfp_t flag);
+
+void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs);
 int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 		int flags, int *addr_len);
 /* new recvmsg syscall */

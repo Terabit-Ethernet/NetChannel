@@ -84,7 +84,7 @@ void nd_conn_free_io_queues(struct nd_conn_ctrl *ctrl)
 {
 	int i;
 
-	for (i = 1; i < ctrl->queue_count; i++)
+	for (i = 0; i < ctrl->queue_count; i++)
 		nd_conn_free_queue(ctrl, i);
 }
 
@@ -114,7 +114,7 @@ void nd_conn_stop_io_queues(struct nd_conn_ctrl *ctrl)
 {
 	int i;
 
-	for (i = 1; i < ctrl->queue_count; i++)
+	for (i = 0; i < ctrl->queue_count; i++)
 		nd_conn_stop_queue(ctrl, i);
 }
 
@@ -265,6 +265,7 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	if(queue == NULL) {
 		/* hard code for now */
 		req->queue = &nd_ctrl->queues[(queue_id) % (nd_ctrl->opts->nr_io_queues / 4)];
+		req->queue =  &nd_ctrl->queues[7];
 		queue = req->queue;
 		queue_id += 1;
 	}
@@ -579,7 +580,10 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 	// printk("nd_conn_try_send_cmd_pdu: type:%d\n", hdr->type);
 	ret = kernel_sendpage(queue->sock, virt_to_page(hdr),
 			offset_in_page(hdr) + req->offset, len,  flags);
-
+	
+	pr_info("inline_data:%d\n", inline_data);
+	pr_info("send ack grant seq:%u\n", htonl(hdr->grant_seq));
+	pr_info("ret:%d\n", ret);
 	// printk("pdu->source:%d\n", ntohs(hdr->source));
 	// printk("pdu->dest:%d\n", ntohs(hdr->dest));
 	// printk("ret :%d\n", ret);
@@ -864,7 +868,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		n = (qid - 1) % num_online_cpus();
 	queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
 	/* mod 28 is hard code for now. */
-	queue->io_cpu = (4 * (qid + 1)) % 32;
+	queue->io_cpu = (4 * qid) % 32;
 	queue->request = NULL;
 	// queue->data_remaining = 0;
 	// queue->ddgst_remaining = 0;

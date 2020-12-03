@@ -633,6 +633,9 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 // 		spin_unlock(&sk_queue->lock);
 // }
 
+uint64_t bytes_recvd[32];
+
+
 void nd_destruct_sock(struct sock *sk)
 {
 
@@ -648,6 +651,10 @@ void nd_destruct_sock(struct sock *sk)
 	// 	total += skb->truesize;
 	// 	kfree_skb(skb);
 	// }
+	pr_info("0: %llu\n", bytes_recvd[0]);
+	pr_info("4: %llu\n", bytes_recvd[4]);
+	pr_info("8: %llu\n", bytes_recvd[8]);
+
 	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	/* clean sk_forward_alloc*/
@@ -894,6 +901,7 @@ void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
 	}
 }
 
+
 int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -920,7 +928,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	// struct page *bpages[48];
 	// struct bio_vec bvec;
 	struct iov_iter biter;
-	struct bio_vec bv_arr[48];
+	struct bio_vec *bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 	ssize_t bremain = len, blen;
 	int max_segs = 48;
 	int nr_segs = 0;
@@ -1048,18 +1056,16 @@ found_ok_skb:
 		/* Ok so how much can we use? */
 		used = skb->len - offset;
 		
-		if(blen == 0) {
-			// pr_info("free bvec bv page:%d\n", __LINE__);
-			// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
-			// kfree(bv_arr);
-			// pr_info("done:%d\n", __LINE__);
-			// bv_arr = NULL;
-			sk_wait_data_copy(sk, &timeo);
-			nd_release_pages(bv_arr, true, nr_segs);
-			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bremain, max_segs);
-			nr_segs = biter.nr_segs;
-			bremain -= blen;
-		}
+		// if(blen == 0) {
+		// 	// pr_info("free bvec bv page:%d\n", __LINE__);
+		// 	// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
+		// 	// kfree(bv_arr);
+		// 	// pr_info("done:%d\n", __LINE__);
+		// 	// bv_arr = NULL;
+		// 	sk_wait_data_copy(sk, &timeo);
+		// 	nd_release_pages(bv_arr, true, nr_segs);
+		// 	kfree(bv_arr);
+		// }
 		if(blen < used)
 			used = blen;
 
@@ -1079,13 +1085,22 @@ found_ok_skb:
 		request->len = used;
 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
 		request->iter = biter;
+
+		bytes_recvd[request->io_cpu] += request->len;
 		// pr_info("request:%p\n", request);
 		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
 		// request->iter = msg->msg_iter;
-
+		// pr_info("request->len: %d\n", request->len);
 		/* update the biter */
 		iov_iter_advance(&biter, used);
 		blen -= used;
+
+		if(blen == 0) {
+			request->bv_arr = bv_arr;
+			request->max_segs = nr_segs;
+			bv_arr = NULL;
+			nr_segs = 0;
+		}
 		// if (!(flags & MSG_TRUNC)) {
 		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
 		// 	// printk("copy data done: %d\n", used);
@@ -1102,17 +1117,33 @@ found_ok_skb:
 		len -= used;
 		if (used + offset < skb->len)
 			goto queue_request;
-
+		pr_info("copied_seq:%d\n", seq);
 		WARN_ON(used + offset > skb->len);
 		__skb_unlink(skb, &sk->sk_receive_queue);
 		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
 		// kfree_skb(skb);
+
 queue_request:
 		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
 		/* queue the data copy request */
 		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
 		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
+		// pr_info("queue request\n");
 		nd_dcopy_queue_request(request);
+
+		if(blen == 0 && bremain > 0) {
+			ssize_t bsize = bremain;
+			if(used + offset < skb->len) {
+				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
+			} else {
+				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 12;
+			}
+			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
+			nr_segs = biter.nr_segs;
+			bremain -= blen;
+			// sk_wait_data_copy(sk, &timeo);
+		}
 		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
 		// pr_info("start wait \n");
 		// sk_wait_data_copy(sk, &timeo);
@@ -1175,7 +1206,7 @@ queue_request:
 
 	// pr_info("free bvec:%d\n", __LINE__);
 	// pr_info("biter.bvec:%p\n", biter.bvec);
-	nd_release_pages(bv_arr, true, nr_segs);
+	// nd_release_pages(bv_arr, true, nr_segs);
 	// kfree(bv_arr);
 	// }
 	/* Clean up data we have read: This will do ACK frames. */
