@@ -1117,7 +1117,7 @@ found_ok_skb:
 		len -= used;
 		if (used + offset < skb->len)
 			goto queue_request;
-		pr_info("copied_seq:%d\n", seq);
+		// pr_info("copied_seq:%d\n", seq);
 		WARN_ON(used + offset > skb->len);
 		__skb_unlink(skb, &sk->sk_receive_queue);
 		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
@@ -1744,7 +1744,7 @@ void nd_destroy_sock(struct sock *sk)
 
 
 int nd_setsockopt(struct sock *sk, int level, int optname,
-		   sockptr_t optval, unsigned int optlen)
+		   char __user *optval, unsigned int optlen)
 {
 	printk(KERN_WARNING "unimplemented setsockopt invoked on ND socket:"
 			" level %d, optname %d, optlen %d\n",

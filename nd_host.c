@@ -581,9 +581,9 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 	ret = kernel_sendpage(queue->sock, virt_to_page(hdr),
 			offset_in_page(hdr) + req->offset, len,  flags);
 	
-	pr_info("inline_data:%d\n", inline_data);
-	pr_info("send ack grant seq:%u\n", htonl(hdr->grant_seq));
-	pr_info("ret:%d\n", ret);
+	// pr_info("inline_data:%d\n", inline_data);
+	// pr_info("send ack grant seq:%u\n", htonl(hdr->grant_seq));
+	// pr_info("ret:%d\n", ret);
 	// printk("pdu->source:%d\n", ntohs(hdr->source));
 	// printk("pdu->dest:%d\n", ntohs(hdr->dest));
 	// printk("ret :%d\n", ret);
@@ -817,35 +817,35 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	}
 
 	/* Single syn retry */
-	// opt = 1;
-	// ret = kernel_setsockopt(queue->sock, IPPROTO_TCP, TCP_SYNCNT,
-	// 		(char *)&opt, sizeof(opt));
-	// if (ret) {
-	// 	pr_err("failed to set TCP_SYNCNT sock opt %d\n", ret);
-	// 	goto err_sock;
-	// }
-	tcp_sock_set_syncnt(queue->sock->sk, 1);
+	opt = 1;
+	ret = kernel_setsockopt(queue->sock, IPPROTO_TCP, TCP_SYNCNT,
+			(char *)&opt, sizeof(opt));
+	if (ret) {
+		pr_err("failed to set TCP_SYNCNT sock opt %d\n", ret);
+		goto err_sock;
+	}
+	// tcp_sock_set_syncnt(queue->sock->sk, 1);
 	/* Set TCP no delay */
-	// opt = 1;
-	// ret = kernel_setsockopt(queue->sock, IPPROTO_TCP,
-	// 		TCP_NODELAY, (char *)&opt, sizeof(opt));
-	// if (ret) {
-	// 	pr_err("failed to set TCP_NODELAY sock opt %d\n", ret);
-	// 	goto err_sock;
-	// }
-	tcp_sock_set_nodelay(queue->sock->sk);
+	opt = 1;
+	ret = kernel_setsockopt(queue->sock, IPPROTO_TCP,
+			TCP_NODELAY, (char *)&opt, sizeof(opt));
+	if (ret) {
+		pr_err("failed to set TCP_NODELAY sock opt %d\n", ret);
+		goto err_sock;
+	}
+	// tcp_sock_set_nodelay(queue->sock->sk);
 	/*
 	 * Cleanup whatever is sitting in the TCP transmit queue on socket
 	 * close. This is done to prevent stale data from being sent should
 	 * the network connection be restored before TCP times out.
 	 */
-	// ret = kernel_setsockopt(queue->sock, SOL_SOCKET, SO_LINGER,
-	// 		(char *)&sol, sizeof(sol));
-	// if (ret) {
-	// 	pr_err("failed to set SO_LINGER sock opt %d\n", ret);
-	// 	goto err_sock;
-	// }
-	sock_no_linger(queue->sock->sk);
+	ret = kernel_setsockopt(queue->sock, SOL_SOCKET, SO_LINGER,
+			(char *)&sol, sizeof(sol));
+	if (ret) {
+		pr_err("failed to set SO_LINGER sock opt %d\n", ret);
+		goto err_sock;
+	}
+	// sock_no_linger(queue->sock->sk);
 	/* Set socket type of service */
 	// if (ctrl->opts->tos >= 0) {
 	// 	opt = ctrl->opts->tos;
@@ -858,8 +858,8 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	// }
 	// if (so_priority > 0)
 	// 	sock_set_priority(queue->sock->sk, so_priority);
-	if (ctrl->opts->tos >= 0)
-		ip_sock_set_tos(queue->sock->sk, ctrl->opts->tos);
+	// if (ctrl->opts->tos >= 0)
+	// 	ip_sock_set_tos(queue->sock->sk, ctrl->opts->tos);
     // io cpu might be need to be changed later
 	queue->sock->sk->sk_allocation = GFP_ATOMIC;
 	if (!qid)
