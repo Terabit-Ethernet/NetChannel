@@ -204,7 +204,7 @@ static inline void nd_rtx_queue_unlink(struct sk_buff *skb, struct sock *sk)
 
 static inline void nd_wmem_free_skb(struct sock *sk, struct sk_buff *skb)
 {
-	sock_set_flag(sk, SOCK_QUEUE_SHRUNK);
+	// sock_set_flag(sk, SOCK_QUEUE_SHRUNK);
 	sk_wmem_queued_add(sk, -skb->truesize);
 	sk_mem_uncharge(sk, skb->truesize);
 	__kfree_skb(skb);

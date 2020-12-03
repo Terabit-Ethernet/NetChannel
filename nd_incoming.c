@@ -1313,7 +1313,7 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
 		// struct nd_sock *dsk = nd_sk(sk);
         u32 limit = READ_ONCE(sk->sk_rcvbuf) + READ_ONCE(sk->sk_sndbuf);
         // pr_info("put into the backlog\n:wq");
-	skb_condense(skb);
+		// skb_condense(skb);
 
         /* Only socket owner can try to collapse/prune rx queues
          * to reduce memory overhead, so add a little headroom here.

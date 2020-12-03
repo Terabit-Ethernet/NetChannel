@@ -262,6 +262,7 @@ struct nd_conn_request* construct_ack_req(struct sock* sk, gfp_t flag) {
 	// struct sk_buff* skb = __construct_control_skb(sk, 0);
 	// struct nd_flow_sync_hdr* fh;
 	// struct ndhdr* dh; 
+	// pr_info("construct ack\n");
 	if(unlikely(!req)) {
 		WARN_ON(true);
 		return NULL;

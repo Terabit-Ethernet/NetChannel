@@ -242,7 +242,7 @@ void nd_hashtable_destroy(struct inet_hashinfo* hashinfo);
 // 			 unsigned long high_limit);
 // int inet_hashinfo2_init_mod(struct inet_hashinfo *h);
 
-bool inet_ehash_insert(struct sock *sk, struct sock *osk);
+bool nd_ehash_insert(struct sock *sk, struct sock *osk);
 bool nd_ehash_nolisten(struct sock *sk, struct sock *osk);
 int __inet_hash(struct sock *sk, struct sock *osk);
 int nd_hash(struct sock *sk);
@@ -380,7 +380,7 @@ static inline struct sock *__nd_lookup_skb(struct inet_hashinfo *hashinfo,
 					     const int sdif,
 					     bool *refcounted)
 {
-	struct sock *sk = skb_steal_sock(skb);
+	struct sock *sk = skb_steal_sock(skb, refcounted);
 	const struct iphdr *iph = ip_hdr(skb);
 
 	*refcounted = true;

@@ -167,7 +167,7 @@ int nd_v4_get_port(struct sock *sk, unsigned short snum);
 void nd_v4_rehash(struct sock *sk);
 
 int nd_setsockopt(struct sock *sk, int level, int optname,
-		   char __user *optval, unsigned int optlen);
+		   sockptr_t optval, unsigned int optlen);
 int nd_getsockopt(struct sock *sk, int level, int optname,
 		   char __user *optval, int __user *optlen);
 

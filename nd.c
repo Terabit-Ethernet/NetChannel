@@ -15,6 +15,7 @@
 
 #define pr_fmt(fmt) "ND: " fmt
 
+
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
 #include <linux/memblock.h>
@@ -781,6 +782,118 @@ bool nd_try_send_token(struct sock *sk) {
 
 }
 
+static inline bool page_is_mergeable(const struct bio_vec *bv,
+		struct page *page, unsigned int len, unsigned int off,
+		bool *same_page)
+{
+	size_t bv_end = bv->bv_offset + bv->bv_len;
+	phys_addr_t vec_end_addr = page_to_phys(bv->bv_page) + bv_end - 1;
+	phys_addr_t page_addr = page_to_phys(page);
+
+	if (vec_end_addr + 1 != page_addr + off)
+		return false;
+	// if (xen_domain() && !xen_biovec_phys_mergeable(bv, page))
+	// 	return false;
+
+	*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
+	if (*same_page)
+		return true;
+	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
+}
+
+bool __nd_try_merge_page(struct bio_vec *bv_arr, int nr_segs,  struct page *page,
+		unsigned int len, unsigned int off, bool *same_page)
+{
+	if (nr_segs > 0) {
+		struct bio_vec *bv = &bv_arr[nr_segs - 1];
+
+		if (page_is_mergeable(bv, page, len, off, same_page)) {
+			// if (bio->bi_iter.bi_size > UINT_MAX - len) {
+			// 	*same_page = false;
+			// 	return false;
+			// }
+			bv->bv_len += len;
+			return true;
+		}
+	}
+	return false;
+}
+
+static ssize_t nd_dcopy_iov_init(struct msghdr *msg, struct iov_iter *iter, struct bio_vec *vec_p,
+	u32 bytes, int max_segs) {
+	ssize_t copied, offset, left;
+	struct bio_vec *bv_arr;
+	struct page *pages[48];
+	unsigned nr_segs = 0, i, len = 0;
+	bool same_page = false;
+
+	// pr_info("reach here:%d\n",  __LINE__);
+	// pages = kmalloc_array(max_segs, sizeof(struct page*), GFP_KERNEL);
+	// WARN_ON(pages == NULL);
+	// pr_info("size of pages*:%d\n",  sizeof(struct page*));
+	// *vec_p = kmalloc_array(max_segs, sizeof(struct bio_vec), GFP_KERNEL);
+	// WARN_ON(*vec_p == NULL);
+	bv_arr = vec_p;
+	// pr_info("reach here:%d\n",  __LINE__);
+
+	copied = iov_iter_get_pages(&msg->msg_iter, pages, bytes, max_segs,
+					    &offset);
+	// pr_info("reach here:%d\n",  __LINE__);
+	if(copied < 0)
+		WARN_ON(true);
+	for (left = copied, i = 0; left > 0; left -= len, i++) {
+		struct page *page = pages[i];
+
+		len = min_t(size_t, PAGE_SIZE - offset, left);
+
+		if (__nd_try_merge_page(bv_arr, nr_segs, page, len, offset, &same_page)) {
+			if (same_page)
+				put_page(page);
+			// pr_info("merge page\n");
+		} else {
+			struct bio_vec *bv = &bv_arr[nr_segs];
+			bv->bv_page = page;
+			bv->bv_offset = offset;
+			bv->bv_len = len;
+			nr_segs++;
+		}
+		offset = 0;
+	}
+	// pr_info("advance:%ld\n", copied);
+	iov_iter_bvec(iter, WRITE, bv_arr, nr_segs, copied);
+	iov_iter_advance(&msg->msg_iter, copied);
+	// kfree(pages);
+	// pr_info("kfree:%ld\n", __LINE__);
+
+	return copied;
+}
+
+static inline bool nd_next_segment(struct bio_vec* bv_arr,
+				    struct bvec_iter_all *iter, int max_segs)
+{
+	/*hard code for now */
+	if (iter->idx >= max_segs)
+		return false;
+
+	bvec_advance(&bv_arr[iter->idx], iter);
+	return true;
+}
+
+#define nd_for_each_segment_all(bvl, bv_arr, iter, max_segs) \
+	for (bvl = bvec_init_iter_all(&iter); nd_next_segment((bv_arr), &iter, max_segs); )
+
+void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
+{
+	struct bvec_iter_all iter_all;
+	struct bio_vec *bvec;
+
+	nd_for_each_segment_all(bvec, bv_arr, iter_all, max_segs) {
+		if (mark_dirty && !PageCompound(bvec->bv_page))
+			set_page_dirty_lock(bvec->bv_page);
+		put_page(bvec->bv_page);
+	}
+}
+
 int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -802,7 +915,18 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	// int cmsg_flags;
 	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
 	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
+	
+	/* hardcode for now */ 
+	// struct page *bpages[48];
+	// struct bio_vec bvec;
+	struct iov_iter biter;
+	struct bio_vec bv_arr[48];
+	ssize_t bremain = len, blen;
+	int max_segs = 48;
+	int nr_segs = 0;
 
+	// printk("convert bytes:%ld\n", ret);
+	// printk("offset:%ld\n", offset);
 	nd_rps_record_flow(sk);
 	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
 	// if (unlikely(flags & MSG_ERRQUEUE))
@@ -825,6 +949,11 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 
 	if (sk->sk_state != ND_ESTABLISH)
 		goto out;
+
+	/* init bvec page */	
+	blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
+	nr_segs = biter.nr_segs;
+	bremain -= blen;
 
 	seq = &dsk->receiver.copied_seq;
 
@@ -918,8 +1047,27 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 found_ok_skb:
 		/* Ok so how much can we use? */
 		used = skb->len - offset;
-		if (len < used)
+		
+		if(blen == 0) {
+			// pr_info("free bvec bv page:%d\n", __LINE__);
+			// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
+			// kfree(bv_arr);
+			// pr_info("done:%d\n", __LINE__);
+			// bv_arr = NULL;
+			sk_wait_data_copy(sk, &timeo);
+			nd_release_pages(bv_arr, true, nr_segs);
+			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bremain, max_segs);
+			nr_segs = biter.nr_segs;
+			bremain -= blen;
+		}
+		if(blen < used)
+			used = blen;
+
+		if (len < used) {
+			WARN_ON(true);
 			used = len;
+		}
+
 
 		/* construct data copy request */
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
@@ -929,9 +1077,15 @@ found_ok_skb:
 		request->skb = skb;
 		request->offset = offset;
 		request->len = used;
-		dup_iter(&request->iter, &msg->msg_iter, GFP_KERNEL);
+		// dup_iter(&request->iter, &biter, GFP_KERNEL);
+		request->iter = biter;
+		// pr_info("request:%p\n", request);
+		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
 		// request->iter = msg->msg_iter;
 
+		/* update the biter */
+		iov_iter_advance(&biter, used);
+		blen -= used;
 		// if (!(flags & MSG_TRUNC)) {
 		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
 		// 	// printk("copy data done: %d\n", used);
@@ -960,17 +1114,17 @@ queue_request:
 		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
 		nd_dcopy_queue_request(request);
 		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
-		pr_info("start wait \n");
-		sk_wait_data_copy(sk, &timeo);
-		pr_info("finish wait \n");
+		// pr_info("start wait \n");
+		// sk_wait_data_copy(sk, &timeo);
+		// pr_info("finish wait \n");
 
 		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
 		// if(dsk->receiver.nxt_dcopy_cpu == 0)
 		// 	dsk->receiver.nxt_dcopy_cpu = 4;
 		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
 		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
-		iov_iter_advance(&msg->msg_iter, used);
-		pr_info("advance \n");
+		// iov_iter_advance(&msg->msg_iter, used);
+		// pr_info("advance \n");
 		continue;
 
 		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
@@ -1007,13 +1161,22 @@ queue_request:
 		// 	sk_eat_skb(sk, skb);
 		// break;
 	} while (len > 0);
+	
+	/* free the bvec memory */
+
 
 	/* According to UNIX98, msg_name/msg_namelen are ignored
 	 * on connected socket. I was just happy when found this 8) --ANK
 	 */
 	 	/* waiting data copy to be finishede */
 	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
-		sk_wait_data_copy(sk, &timeo);
+
+	sk_wait_data_copy(sk, &timeo);
+
+	// pr_info("free bvec:%d\n", __LINE__);
+	// pr_info("biter.bvec:%p\n", biter.bvec);
+	nd_release_pages(bv_arr, true, nr_segs);
+	// kfree(bv_arr);
 	// }
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
@@ -1035,7 +1198,7 @@ queue_request:
 	// 	}
 	// }
 	// printk("recvmsg\n");
-	pr_info("copied:%d\n", copied);
+	// pr_info("copied:%d\n", copied);
 	return copied;
 
 out:
@@ -1550,7 +1713,7 @@ void nd_destroy_sock(struct sock *sk)
 
 
 int nd_setsockopt(struct sock *sk, int level, int optname,
-		   char __user *optval, unsigned int optlen)
+		   sockptr_t optval, unsigned int optlen)
 {
 	printk(KERN_WARNING "unimplemented setsockopt invoked on ND socket:"
 			" level %d, optname %d, optlen %d\n",

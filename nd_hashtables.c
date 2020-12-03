@@ -27,6 +27,16 @@
 #include "nd_hashtables.h"
 #include "linux_nd.h"
 #include "nd_impl.h"
+
+bool inet_rcv_saddr_any(const struct sock *sk)
+{
+// #if IS_ENABLED(CONFIG_IPV6)
+// 	if (sk->sk_family == AF_INET6)
+// 		return ipv6_addr_any(&sk->sk_v6_rcv_saddr);
+// #endif
+	return !sk->sk_rcv_saddr;
+}
+
 static u32 inet_ehashfn(const struct net *net, const __be32 laddr,
 			const __u16 lport, const __be32 faddr,
 			const __be16 fport)
@@ -329,7 +339,7 @@ static void inet_unhash2(struct inet_hashinfo *h, struct sock *sk)
 
 static inline int compute_score(struct sock *sk, struct net *net,
 				const unsigned short hnum, const __be32 daddr,
-				const int dif, const int sdif, bool exact_dif)
+				const int dif, const int sdif)
 {
 	int score = -1;
 
@@ -363,7 +373,7 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 				const __be32 daddr, const unsigned short hnum,
 				const int dif, const int sdif)
 {
-	bool exact_dif = inet_exact_dif_match(net, skb);
+	// bool exact_dif = inet_exact_dif_match(net, skb);
 	struct nd_sock *dsk;
 	struct sock *sk, *result = NULL;
 	int score, hiscore = 0;
@@ -372,7 +382,7 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 	inet_lhash2_for_each_dsk_rcu(dsk, &ilb2->head) {
 		sk = (struct sock *)dsk;
 		score = compute_score(sk, net, hnum, daddr,
-				      dif, sdif, exact_dif);
+				      dif, sdif);
 		if (score > hiscore) {
 			if (sk->sk_reuseport) {
 				phash = inet_ehashfn(net, daddr, hnum,
@@ -576,7 +586,7 @@ static u32 inet_sk_port_offset(const struct sock *sk)
 /* insert a socket into ehash, and eventually remove another one
  * (The another one can be a SYN_RECV or TIMEWAIT
  */
-bool inet_ehash_insert(struct sock *sk, struct sock *osk)
+bool nd_ehash_insert(struct sock *sk, struct sock *osk)
 {
 	struct inet_hashinfo *hashinfo = sk->sk_prot->h.hashinfo;
 	struct hlist_nulls_head *list;
@@ -604,7 +614,7 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk)
 
 bool nd_ehash_nolisten(struct sock *sk, struct sock *osk)
 {
-	bool ok = inet_ehash_insert(sk, osk);
+	bool ok = nd_ehash_insert(sk, osk);
 
 	if (ok) {
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
