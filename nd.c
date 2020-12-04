@@ -934,8 +934,8 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	int nr_segs = 0;
 
 	// printk("convert bytes:%ld\n", ret);
-	// printk("offset:%ld\n", offset);
-	nd_rps_record_flow(sk);
+
+	// nd_rps_record_flow(sk);
 	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
 	// if (unlikely(flags & MSG_ERRQUEUE))
 	// 	return inet_recv_error(sk, msg, len, addr_len);
@@ -1230,6 +1230,7 @@ queue_request:
 	// }
 	// printk("recvmsg\n");
 	// pr_info("copied:%d\n", copied);
+
 	return copied;
 
 out:
@@ -1272,7 +1273,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
 	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
 
-	nd_rps_record_flow(sk);
+	// nd_rps_record_flow(sk);
 
 	// if (unlikely(flags & MSG_ERRQUEUE))
 	// 	return inet_recv_error(sk, msg, len, addr_len);
@@ -1575,7 +1576,7 @@ int nd_disconnect(struct sock *sk, int flags)
  	sk->sk_state = TCP_CLOSE;
  	inet->inet_daddr = 0;
  	inet->inet_dport = 0;
- 	sock_rps_reset_rxhash(sk);
+ 	// sock_rps_reset_rxhash(sk);
  	sk->sk_bound_dev_if = 0;
  	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK)) {
  		inet_reset_saddr(sk);

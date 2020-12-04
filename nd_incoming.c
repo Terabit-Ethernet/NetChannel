@@ -1000,7 +1000,7 @@ int nd_handle_token_pkt(struct sk_buff *skb) {
  	// 	nd_get_sack_info(sk, skb);
 		// /* start doing transmission (this part may move to different places later)*/
 	    if(!sock_owned_by_user(sk)) {
-	    	sock_rps_save_rxhash(sk, skb);
+	    	// sock_rps_save_rxhash(sk, skb);
 	 		nd_clean_rtx_queue(sk);
 	    } else {
 	 		test_and_set_bit(ND_CLEAN_TIMER_DEFERRED, &sk->sk_tsq_flags);
@@ -1483,7 +1483,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	dh = nd_hdr(skb);
 	// atomic_sub(skb->truesize, &dsk->receiver.backlog_len);
 	/* current place to set rxhash for RFS/RPS */
- 	sock_rps_save_rxhash(sk, skb);
+ 	// sock_rps_save_rxhash(sk, skb);
 	// printk("backlog rcv\n");
 
 	if(dh->type == DATA) {

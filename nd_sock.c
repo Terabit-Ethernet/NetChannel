@@ -841,7 +841,7 @@ struct sock *nd_sk_accept(struct sock *sk, int flags, int *err, bool kern)
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
 	printk("accept core id:%d\n", raw_smp_processor_id());
-	nd_rps_record_flow(newsk);
+	// nd_rps_record_flow(newsk);
 
 	// printk("src port:%d\n", inet_sk(newsk)->inet_num);
 	// printk("src address:%d\n", inet_sk(newsk)->inet_saddr);
@@ -1155,7 +1155,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 
 	    nd_set_state(newsk, ND_ESTABLISH);
 		nd_ehash_nolisten(newsk, NULL);
-    	sock_rps_save_rxhash(newsk, skb);
+    	// sock_rps_save_rxhash(newsk, skb);
     } 
 	return newsk;
 

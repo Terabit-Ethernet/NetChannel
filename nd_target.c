@@ -204,6 +204,10 @@ void ndt_conn_data_ready(struct sock *sk)
 
 	read_lock_bh(&sk->sk_callback_lock);
 	queue = sk->sk_user_data;
+	// if(raw_smp_processor_id() != 28) {
+	// 	pr_info("the real processing core:%d\n", raw_smp_processor_id());
+	// 	pr_info("queue_cpu(queue):%d\n", queue_cpu(queue));
+	// }
 	if (likely(queue)) {
 		// pr_info("conn data ready\n");
 		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
@@ -521,6 +525,8 @@ void ndt_conn_io_work(struct work_struct *w)
 		container_of(w, struct ndt_conn_queue, io_work);
 	bool pending;
 	int ret, ops = 0;
+
+	sock_rps_record_flow(queue->sock->sk);
 	do {
 		pending = false;
 

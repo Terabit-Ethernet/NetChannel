@@ -96,27 +96,27 @@ static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 
 static inline void nd_rps_record_flow(const struct sock *sk)
 {
-	struct nd_sock *dsk = nd_sk(sk);
-	dsk->core_id = raw_smp_processor_id();
-	// printk("dsk->core_id:%u\n", dsk->core_id);
-#ifdef CONFIG_RPS
-	if (static_branch_unlikely(&rfs_needed)) {
-		/* Reading sk->sk_rxhash might incur an expensive cache line
-		 * miss.
-		 *
-		 * ND_RECEIVER | ND_SENDER does cover almost all states where RFS
-		 * might be useful, and is cheaper [1] than testing :
-		 *	IPv4: inet_sk(sk)->inet_daddr
-		 * 	IPv6: ipv6_addr_any(&sk->sk_v6_daddr)
-		 * OR	an additional socket flag
-		 * [1] : sk_state and sk_prot are in the same cache line.
-		 */
-		if (sk->sk_state == ND_ESTABLISH || sk->sk_state == ND_LISTEN) {
-			// printk("rfs:rxhash:%u\n", sk->sk_rxhash);
-			sock_rps_record_flow_hash(sk->sk_rxhash);
-		}
-	}
-#endif
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	dsk->core_id = raw_smp_processor_id();
+// 	// printk("dsk->core_id:%u\n", dsk->core_id);
+// #ifdef CONFIG_RPS
+// 	if (static_branch_unlikely(&rfs_needed)) {
+// 		/* Reading sk->sk_rxhash might incur an expensive cache line
+// 		 * miss.
+// 		 *
+// 		 * ND_RECEIVER | ND_SENDER does cover almost all states where RFS
+// 		 * might be useful, and is cheaper [1] than testing :
+// 		 *	IPv4: inet_sk(sk)->inet_daddr
+// 		 * 	IPv6: ipv6_addr_any(&sk->sk_v6_daddr)
+// 		 * OR	an additional socket flag
+// 		 * [1] : sk_state and sk_prot are in the same cache line.
+// 		 */
+// 		if (sk->sk_state == ND_ESTABLISH || sk->sk_state == ND_LISTEN) {
+// 			// printk("rfs:rxhash:%u\n", sk->sk_rxhash);
+// 			sock_rps_record_flow_hash(sk->sk_rxhash);
+// 		}
+// 	}
+// #endif
 }
 
 /**
