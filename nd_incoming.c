@@ -619,7 +619,7 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 	u32 new_grant_nxt;
 	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
 	
-	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
+	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt) {
 		/* send ack pkt for new window */
 		 nsk->receiver.grant_nxt = new_grant_nxt;
 		nd_conn_queue_request(construct_ack_req(sk, flag), sync, true);

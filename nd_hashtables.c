@@ -28,14 +28,14 @@
 #include "linux_nd.h"
 #include "nd_impl.h"
 
-bool inet_rcv_saddr_any(const struct sock *sk)
-{
-// #if IS_ENABLED(CONFIG_IPV6)
-// 	if (sk->sk_family == AF_INET6)
-// 		return ipv6_addr_any(&sk->sk_v6_rcv_saddr);
-// #endif
-	return !sk->sk_rcv_saddr;
-}
+// bool inet_rcv_saddr_any(const struct sock *sk)
+// {
+// // #if IS_ENABLED(CONFIG_IPV6)
+// // 	if (sk->sk_family == AF_INET6)
+// // 		return ipv6_addr_any(&sk->sk_v6_rcv_saddr);
+// // #endif
+// 	return !sk->sk_rcv_saddr;
+// }
 
 static u32 inet_ehashfn(const struct net *net, const __be32 laddr,
 			const __u16 lport, const __be32 faddr,

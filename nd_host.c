@@ -1,5 +1,5 @@
 #include "nd_host.h"
-
+#include "nd_impl.h"
 static LIST_HEAD(nd_conn_ctrl_list);
 static DEFINE_MUTEX(nd_conn_ctrl_mutex);
 static struct workqueue_struct *nd_conn_wq;
@@ -264,8 +264,8 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	int ret;
 	if(queue == NULL) {
 		/* hard code for now */
-		req->queue = &nd_ctrl->queues[(queue_id) % (nd_ctrl->opts->nr_io_queues / 4)];
-		req->queue =  &nd_ctrl->queues[7];
+		req->queue = &nd_ctrl->queues[(queue_id) % (nd_ctrl->opts->nr_io_queues / nd_params.nd_num_queue)];
+		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
 		queue_id += 1;
 	}

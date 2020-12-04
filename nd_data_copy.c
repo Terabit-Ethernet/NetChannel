@@ -137,11 +137,6 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
     }
     // pr_info("err:%d\n", err);
 	req_len = req->len;
-    // if(remaining_bytes == 0) {
-    //     // lock_sock(req->sk);
-    //     req->sk->sk_data_ready(req->sk);
-    //     // release_sock(req->sk);
-    // }
 	// if (req->state == ND_CONN_SEND_CMD_PDU) {
 	// 	ret = nd_conn_try_send_cmd_pdu(req);
 	// 	if (ret <= 0)
@@ -173,6 +168,11 @@ clean:
     // pr_info("remaining bytes:%d \n", remaining_bytes);
 	// if (req->state == NVME_TCP_SEND_DDGST)
 	// 	ret = nvme_tcp_try_send_ddgst(req);
+    if(remaining_bytes == 0) {
+        lock_sock(req->sk);
+        req->sk->sk_data_ready(req->sk);
+        release_sock(req->sk);
+    }
 done:
 	return ret;
 }

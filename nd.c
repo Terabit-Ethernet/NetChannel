@@ -87,17 +87,39 @@ EXPORT_SYMBOL(nd_hashinfo);
 #define MAX_ND_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
 
+
+void nd_try_send_ack(struct sock *sk, int copied) {
+	struct nd_sock *nsk = nd_sk(sk);
+	u32 new_grant_nxt;
+	// struct inet_sock *inet = inet_sk(sk);
+	if(copied > 0) {
+		new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt) {
+			/* send ack pkt for new window */
+			nsk->receiver.grant_nxt = new_grant_nxt;
+			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
+			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+		}
+		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
+		// int available_space = nd_space(sk);
+		// if(grant_len > available_space || grant_len < )
+		// 	return;
+		// printk("try to send ack \n");
+	}
+}
+
 static int sk_wait_data_copy(struct sock *sk, long *timeo)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	int rc;
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
-		// add_wait_queue(sk_sleep(sk), &wait);
-		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		// rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
-		// sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		// remove_wait_queue(sk_sleep(sk), &wait);
+		// nd_try_send_ack(sk, 1);
+		add_wait_queue(sk_sleep(sk), &wait);
+		sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
+		sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		remove_wait_queue(sk_sleep(sk), &wait);
 	}
 	return rc;
 }
@@ -746,27 +768,6 @@ int nd_ioctl(struct sock *sk, int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(nd_ioctl);
 
-
-void nd_try_send_ack(struct sock *sk, int copied) {
-	struct nd_sock *nsk = nd_sk(sk);
-	u32 new_grant_nxt;
-	// struct inet_sock *inet = inet_sk(sk);
-	if(copied > 0) {
-		new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
-		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
-			/* send ack pkt for new window */
-			nsk->receiver.grant_nxt = new_grant_nxt;
-			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
-			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
-		}
-		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
-		// int available_space = nd_space(sk);
-		// if(grant_len > available_space || grant_len < )
-		// 	return;
-		// printk("try to send ack \n");
-	}
-}
-
 bool nd_try_send_token(struct sock *sk) {
 	// if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
 	// 	// struct nd_sock *dsk = nd_sk(sk);
@@ -1136,7 +1137,7 @@ queue_request:
 			if(used + offset < skb->len) {
 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
 			} else {
-				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 12;
+				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 12 + 16;
 			}
 			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);

@@ -105,6 +105,7 @@ struct nd_params {
 	int wmem_default;
 
 	int data_budget;
+	int nd_num_queue;
 
 };
 

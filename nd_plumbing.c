@@ -168,6 +168,14 @@ static struct ctl_table nd_ctl_table[] = {
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
+        {
+                // this is only being called when unloading the module
+                .procname       = "nd_num_queue",
+                .data           = &nd_params.nd_num_queue,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
         {}
 };
 
@@ -198,6 +206,7 @@ static struct ctl_table_header *nd_ctl_header;
 
 void nd_params_init(struct nd_params* params) {
     params->nd_add_host = 0;
+    params->nd_num_queue = 1;
     params->nd_host_added = 0;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
