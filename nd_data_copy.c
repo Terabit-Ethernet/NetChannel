@@ -145,10 +145,12 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 	struct nd_dcopy_response *resp;
 	req_len = req->len; 
 	nsk = nd_sk(req->sk);
+	WARN_ON(req_len == 0);
 	while(req_len > 0) {
 		bool merge = true;
-		if (skb_page_frag_refill(32U, pfrag, req->sk->sk_allocation))
+		if (!skb_page_frag_refill(32U, pfrag, req->sk->sk_allocation)) {
 			goto wait_for_memory;
+		}
 		skb = req->skb;
 		if(!skb) 
 			goto create_new_skb;
@@ -187,6 +189,8 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 
 	create_new_skb:
 		skb = alloc_skb(0, req->sk->sk_allocation);
+		WARN_ON(req->skb != NULL);
+		req->skb = skb;
 		// printk("create new skb\n");
 		if(!skb)
 			goto wait_for_memory;
@@ -198,6 +202,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		/* push the new skb */
 		ND_SKB_CB(skb)->seq = req->seq;
 		resp = kmalloc(sizeof(struct nd_dcopy_response), GFP_KERNEL);
+		resp->skb = req->skb;
 		llist_add(&resp->lentry, &nsk->sender.response_list);
 		req->seq += skb->len;
 		req->skb = NULL;
@@ -212,8 +217,8 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		req->state = ND_DCOPY_DONE;
 		nd_release_pages(req->bv_arr, true, req->max_segs);
 	}  
-	atomic_sub_return(req->len - req_len, &nsk->receiver.in_flight_copy_bytes);
-	req->len -= req_len;
+	int size = atomic_sub_return(req->len - req_len, &nsk->sender.in_flight_copy_bytes);
+	req->len = req_len;
 // done:
 // 	return ret;
 }

@@ -1053,6 +1053,7 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(ah), ah->source,
             ah->dest, sdif, &refcounted);
     // }
+	// pr_info("receive ack:%u\n", ntohl(ah->grant_seq));
 	if(sk) {
  		bh_lock_sock(sk);
 		dsk = nd_sk(sk);

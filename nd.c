@@ -362,7 +362,6 @@ void nd_fetch_dcopy_response(struct sock *sk) {
 	struct nd_sock *nsk = nd_sk(sk);
 	struct nd_dcopy_response *resp;
 	struct llist_node *node;
-
 	for (node = llist_del_all(&nsk->sender.response_list); node;) {
 		resp = llist_entry(node, struct nd_dcopy_response, lentry);
 		/* reuse tcp_rtx_queue due to the mess-up order */
@@ -377,7 +376,7 @@ void nd_fetch_dcopy_response(struct sock *sk) {
 
 
 struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
-	struct sk_buff *skb;
+	struct sk_buff *skb = NULL;
 	struct nd_sock *nsk = nd_sk(sk);
 	/* only one queue can be non-empty */
 	WARN_ON(skb_peek(&sk->sk_write_queue) && rb_first(&sk->tcp_rtx_queue));
@@ -397,40 +396,47 @@ struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
 
 bool nd_snd_q_ready(struct sock *sk) {
 	struct sk_buff *skb;
-	if(skb_peek(&sk->sk_write_queue))
+
+	if(skb_peek(&sk->sk_write_queue)) {
 		return true;
+	}
 	if(rb_first(&sk->tcp_rtx_queue)) {
 		struct rb_node *p = rb_first(&sk->tcp_rtx_queue);
 		skb = rb_to_skb(p);
 		if(ND_SKB_CB(skb)->seq == nd_sk(sk)->sender.snd_nxt)
 			return true;
+
 	}
 	return false;
 }
 int nd_push(struct sock *sk, gfp_t flag) {
 	struct inet_sock *inet = inet_sk(sk);
-	// struct sk_buff *skb;
+	struct sk_buff *skb;
 	struct nd_sock *nsk = nd_sk(sk);
 	bool push_success;
 	struct nd_conn_request* req;
 	struct ndhdr* hdr;
 	int ret = 0;
-	while(!nd_snd_q_ready(sk) || nsk->sender.pending_req) {
+	
+	nd_fetch_dcopy_response(sk);
+	while(nd_snd_q_ready(sk) || nsk->sender.pending_req) {
 
 		if(nsk->sender.pending_req) {
 			WARN_ON(nsk->sender.pending_req == NULL);
 			req = nsk->sender.pending_req;
 			nsk->sender.pending_req = NULL;
+			skb = req->skb;
 			goto queue_req;
 		}
 
 		/* construct nd_conn_request */
+		skb = nd_dequeue_snd_q(sk);
 		req = kzalloc(sizeof(*req), flag);
 		if(!req) {
 			WARN_ON(true);
 		}
 
-		if(req->skb->len == 0 || req->skb->data_len == 0) {
+		if(skb->len == 0 || skb->data_len == 0) {
 			WARN_ON(true);
 		}
 		nd_init_request(sk, req);
@@ -447,33 +453,32 @@ int nd_push(struct sock *sk, gfp_t flag) {
 	// fh = (struct nd_flow_sync_hdr *) skb_put(skb, sizeof(struct nd_flow_sync_hdr));
 	
 	// dh = (struct ndhdr*) (&sync->common);
-		// pr_info("skb->len:%d\n", skb->len);
 		// pr_info("skb->data_len:%d\n", skb->data_len);
 		// pr_info(" htons(skb->len):%d\n",  htons(skb->len));
 
-		req->skb = nd_dequeue_snd_q(sk);
-		hdr->len = htons(req->skb->len);
+		req->skb = skb;
+
+		hdr->len = htons(skb->len);
 		hdr->type = DATA;
 		hdr->source = inet->inet_sport;
 		hdr->dest = inet->inet_dport;
 		// hdr->check = 0;
 		hdr->doff = (sizeof(struct ndhdr)) << 2;
-		hdr->seq = htonl(ND_SKB_CB(req->skb)->seq);
+		hdr->seq = htonl(ND_SKB_CB(skb)->seq);
 		// skb_dequeue(&sk->sk_write_queue);
 			// kfree_skb(skb);
-		sk_wmem_queued_add(sk, -req->skb->truesize);
-		sk_mem_uncharge(sk, req->skb->truesize);
-		WARN_ON(nsk->sender.snd_nxt != ND_SKB_CB(req->skb)->seq);
-		nsk->sender.snd_nxt += req->skb->len;
+		sk_wmem_queued_add(sk, -skb->truesize);
+		sk_mem_uncharge(sk, skb->truesize);
+		WARN_ON(nsk->sender.snd_nxt != ND_SKB_CB(skb)->seq);
+		nsk->sender.snd_nxt += skb->len;
 		// sk->sk_wmem_queued -= skb->len;
 		/*increment write seq */
 		// nsk->sender.write_seq += skb->len;
 queue_req:
 		/* check the window is available */
-		if(nsk->sender.sd_grant_nxt - nsk->sender.write_seq > nsk->default_win) {
+		if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
 			WARN_ON(nsk->sender.pending_req);
-			WARN_ON(nsk->sender.sd_grant_nxt - nsk->sender.write_seq < (1<<30));
-			// pr_info("write seq:%u sd_grant_nxt:%u \n", nsk->sender.write_seq, nsk->sender.sd_grant_nxt);
+			WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
 			nsk->sender.pending_req = req;
 			ret = -EMSGSIZE;
 			break;
@@ -537,7 +542,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 	/* hardcode for now */
 	struct nd_dcopy_request *request;
 	struct iov_iter biter;
-	struct bio_vec *bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+	struct bio_vec *bv_arr = NULL;
 	// ssize_t bremain = msg->iter->count, blen;
 	ssize_t blen;
 	int max_segs = 48;
@@ -572,6 +577,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 			goto wait_for_memory;
 
 		/* construct biov and data copy request */
+		bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 		blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  msg_data_left(msg), max_segs);
 		nr_segs = biter.nr_segs;
 
@@ -599,7 +605,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 wait_for_memory:
 		/* wait for pending requests to be done */
 		sk_wait_sender_data_copy(sk, &timeo);
-		nd_fetch_dcopy_response(sk);
+		// nd_fetch_dcopy_response(sk);
 		err = nd_push(sk, GFP_KERNEL);
 		// pr_info("start wait \n");
 		// pr_info("timeo:%ld\n", timeo);
@@ -616,12 +622,11 @@ wait_for_memory:
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
 		if (err) {
-			pr_info("out error \n");
 			goto out_error;
 		}
 	}
 	sk_wait_sender_data_copy(sk, &timeo);
-	nd_fetch_dcopy_response(sk);
+	// nd_fetch_dcopy_response(sk);
 	if (eor) {
 		// if(!skb_queue_empty(&sk->sk_write_queue)) {
 			// printk("call nd push\n");
@@ -847,7 +852,7 @@ int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int ret = 0;
 	lock_sock(sk);
 	// nd_rps_record_flow(sk);
-	ret = nd_sendmsg_locked(sk, msg, len);
+	ret = nd_sendmsg_new_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
 }
