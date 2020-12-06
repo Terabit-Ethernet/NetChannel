@@ -491,6 +491,10 @@ struct nd_sock {
 	    /* the last unack byte.*/
 	    uint32_t snd_una;
 		struct nd_conn_request* pending_req;
+		uint32_t nxt_dcopy_cpu;
+		struct llist_head	response_list;
+		atomic_t in_flight_copy_bytes;
+
 	    // uint32_t total_bytes_sent;
 	    // uint32_t bytes_from_user;
 	    // int remaining_pkts_at_sender;

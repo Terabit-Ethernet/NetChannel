@@ -625,9 +625,9 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 		nd_conn_queue_request(construct_ack_req(sk, flag), sync, true);
 		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 	} else {
-		pr_info("new_grant_nxt: %u\n", new_grant_nxt);
-		pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
-		pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
+		// pr_info("new_grant_nxt: %u\n", new_grant_nxt);
+		// pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
+		// pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
 	}
 }
 static void nd_drop(struct sock *sk, struct sk_buff *skb)

@@ -264,7 +264,8 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	int ret;
 	if(queue == NULL) {
 		/* hard code for now */
-		req->queue = &nd_ctrl->queues[(queue_id) % (nd_ctrl->opts->nr_io_queues / nd_params.nd_num_queue)];
+		// queue_id = (smp_processor_id() - 16) / 4;
+		req->queue = &nd_ctrl->queues[(queue_id) % (nd_params.nd_num_queue)];
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
 		queue_id += 1;
@@ -1144,7 +1145,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = "192.168.10.117";
     // opts->host_port = "10000";
 
-    opts->queue_size = 64;
+    opts->queue_size = 128;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

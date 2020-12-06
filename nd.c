@@ -88,6 +88,119 @@ EXPORT_SYMBOL(nd_hashinfo);
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
 
 
+static inline bool page_is_mergeable(const struct bio_vec *bv,
+		struct page *page, unsigned int len, unsigned int off,
+		bool *same_page)
+{
+	size_t bv_end = bv->bv_offset + bv->bv_len;
+	phys_addr_t vec_end_addr = page_to_phys(bv->bv_page) + bv_end - 1;
+	phys_addr_t page_addr = page_to_phys(page);
+
+	if (vec_end_addr + 1 != page_addr + off)
+		return false;
+	// if (xen_domain() && !xen_biovec_phys_mergeable(bv, page))
+	// 	return false;
+
+	*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
+	if (*same_page)
+		return true;
+	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
+}
+
+bool __nd_try_merge_page(struct bio_vec *bv_arr, int nr_segs,  struct page *page,
+		unsigned int len, unsigned int off, bool *same_page)
+{
+	if (nr_segs > 0) {
+		struct bio_vec *bv = &bv_arr[nr_segs - 1];
+
+		if (page_is_mergeable(bv, page, len, off, same_page)) {
+			// if (bio->bi_iter.bi_size > UINT_MAX - len) {
+			// 	*same_page = false;
+			// 	return false;
+			// }
+			bv->bv_len += len;
+			return true;
+		}
+	}
+	return false;
+}
+
+static ssize_t nd_dcopy_iov_init(struct msghdr *msg, struct iov_iter *iter, struct bio_vec *vec_p,
+	u32 bytes, int max_segs) {
+	ssize_t copied, offset, left;
+	struct bio_vec *bv_arr;
+	struct page *pages[48];
+	unsigned nr_segs = 0, i, len = 0;
+	bool same_page = false;
+
+	// pr_info("reach here:%d\n",  __LINE__);
+	// pages = kmalloc_array(max_segs, sizeof(struct page*), GFP_KERNEL);
+	// WARN_ON(pages == NULL);
+	// pr_info("size of pages*:%d\n",  sizeof(struct page*));
+	// *vec_p = kmalloc_array(max_segs, sizeof(struct bio_vec), GFP_KERNEL);
+	// WARN_ON(*vec_p == NULL);
+	bv_arr = vec_p;
+	// pr_info("reach here:%d\n",  __LINE__);
+
+	copied = iov_iter_get_pages(&msg->msg_iter, pages, bytes, max_segs,
+					    &offset);
+	// pr_info("reach here:%d\n",  __LINE__);
+	if(copied < 0)
+		WARN_ON(true);
+	for (left = copied, i = 0; left > 0; left -= len, i++) {
+		struct page *page = pages[i];
+
+		len = min_t(size_t, PAGE_SIZE - offset, left);
+
+		if (__nd_try_merge_page(bv_arr, nr_segs, page, len, offset, &same_page)) {
+			if (same_page)
+				put_page(page);
+			// pr_info("merge page\n");
+		} else {
+			struct bio_vec *bv = &bv_arr[nr_segs];
+			bv->bv_page = page;
+			bv->bv_offset = offset;
+			bv->bv_len = len;
+			nr_segs++;
+		}
+		offset = 0;
+	}
+	// pr_info("advance:%ld\n", copied);
+	iov_iter_bvec(iter, WRITE, bv_arr, nr_segs, copied);
+	iov_iter_advance(&msg->msg_iter, copied);
+	// kfree(pages);
+	// pr_info("kfree:%ld\n", __LINE__);
+
+	return copied;
+}
+
+static inline bool nd_next_segment(struct bio_vec* bv_arr,
+				    struct bvec_iter_all *iter, int max_segs)
+{
+	/*hard code for now */
+	if (iter->idx >= max_segs)
+		return false;
+
+	bvec_advance(&bv_arr[iter->idx], iter);
+	return true;
+}
+
+#define nd_for_each_segment_all(bvl, bv_arr, iter, max_segs) \
+	for (bvl = bvec_init_iter_all(&iter); nd_next_segment((bv_arr), &iter, max_segs); )
+
+void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
+{
+	struct bvec_iter_all iter_all;
+	struct bio_vec *bvec;
+
+	nd_for_each_segment_all(bvec, bv_arr, iter_all, max_segs) {
+		if (mark_dirty && !PageCompound(bvec->bv_page))
+			set_page_dirty_lock(bvec->bv_page);
+		put_page(bvec->bv_page);
+	}
+}
+
+
 void nd_try_send_ack(struct sock *sk, int copied) {
 	struct nd_sock *nsk = nd_sk(sk);
 	u32 new_grant_nxt;
@@ -111,15 +224,31 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 static int sk_wait_data_copy(struct sock *sk, long *timeo)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
-	int rc;
+	int rc = 0;
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
 		// nd_try_send_ack(sk, 1);
-		add_wait_queue(sk_sleep(sk), &wait);
-		sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
-		sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		remove_wait_queue(sk_sleep(sk), &wait);
+		// add_wait_queue(sk_sleep(sk), &wait);
+		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
+		// sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// remove_wait_queue(sk_sleep(sk), &wait);
+	}
+	return rc;
+}
+
+static int sk_wait_sender_data_copy(struct sock *sk, long *timeo)
+{
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	int rc= 0;
+	struct nd_sock* nsk = nd_sk(sk);
+	while(atomic_read(&nsk->sender.in_flight_copy_bytes) != 0) {
+		// nd_try_send_ack(sk, 1);
+		// add_wait_queue(sk_sleep(sk), &wait);
+		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// rc = sk_wait_event(sk, timeo, atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0, &wait);
+		// sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+		// remove_wait_queue(sk_sleep(sk), &wait);
 	}
 	return rc;
 }
@@ -229,17 +358,64 @@ int sk_wait_ack(struct sock *sk, long *timeo)
 }
 EXPORT_SYMBOL(sk_wait_ack);
 
+void nd_fetch_dcopy_response(struct sock *sk) {
+	struct nd_sock *nsk = nd_sk(sk);
+	struct nd_dcopy_response *resp;
+	struct llist_node *node;
+
+	for (node = llist_del_all(&nsk->sender.response_list); node;) {
+		resp = llist_entry(node, struct nd_dcopy_response, lentry);
+		/* reuse tcp_rtx_queue due to the mess-up order */
+		nd_rbtree_insert(&sk->tcp_rtx_queue, resp->skb);
+		node = node->next;
+		sk_wmem_queued_add(sk, resp->skb->truesize);
+		sk_mem_charge(sk, resp->skb->truesize);
+		kfree(resp);
+	}
+	return;
+}
 
 
+struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
+	struct sk_buff *skb;
+	struct nd_sock *nsk = nd_sk(sk);
+	/* only one queue can be non-empty */
+	WARN_ON(skb_peek(&sk->sk_write_queue) && rb_first(&sk->tcp_rtx_queue));
+	if(skb_peek(&sk->sk_write_queue)) {
+		skb = skb_peek(&sk->sk_write_queue);
+		ND_SKB_CB(skb)->seq = nsk->sender.write_seq;
+		nsk->sender.write_seq += skb->len;
+		skb_dequeue(&sk->sk_write_queue);
+
+	} else if(rb_first(&sk->tcp_rtx_queue)){
+		struct rb_node *p = rb_first(&sk->tcp_rtx_queue);
+		skb = rb_to_skb(p);
+		nd_rtx_queue_unlink(skb, sk);
+	}
+	return skb;
+}
+
+bool nd_snd_q_ready(struct sock *sk) {
+	struct sk_buff *skb;
+	if(skb_peek(&sk->sk_write_queue))
+		return true;
+	if(rb_first(&sk->tcp_rtx_queue)) {
+		struct rb_node *p = rb_first(&sk->tcp_rtx_queue);
+		skb = rb_to_skb(p);
+		if(ND_SKB_CB(skb)->seq == nd_sk(sk)->sender.snd_nxt)
+			return true;
+	}
+	return false;
+}
 int nd_push(struct sock *sk, gfp_t flag) {
 	struct inet_sock *inet = inet_sk(sk);
-	struct sk_buff *skb;
+	// struct sk_buff *skb;
 	struct nd_sock *nsk = nd_sk(sk);
 	bool push_success;
 	struct nd_conn_request* req;
 	struct ndhdr* hdr;
 	int ret = 0;
-	while((skb = skb_peek(&sk->sk_write_queue)) != NULL || nsk->sender.pending_req) {
+	while(!nd_snd_q_ready(sk) || nsk->sender.pending_req) {
 
 		if(nsk->sender.pending_req) {
 			WARN_ON(nsk->sender.pending_req == NULL);
@@ -254,7 +430,7 @@ int nd_push(struct sock *sk, gfp_t flag) {
 			WARN_ON(true);
 		}
 
-		if(skb->len == 0 || skb->data_len == 0) {
+		if(req->skb->len == 0 || req->skb->data_len == 0) {
 			WARN_ON(true);
 		}
 		nd_init_request(sk, req);
@@ -275,21 +451,23 @@ int nd_push(struct sock *sk, gfp_t flag) {
 		// pr_info("skb->data_len:%d\n", skb->data_len);
 		// pr_info(" htons(skb->len):%d\n",  htons(skb->len));
 
-		req->skb = skb;
-		hdr->len = htons(skb->len);
+		req->skb = nd_dequeue_snd_q(sk);
+		hdr->len = htons(req->skb->len);
 		hdr->type = DATA;
 		hdr->source = inet->inet_sport;
 		hdr->dest = inet->inet_dport;
 		// hdr->check = 0;
 		hdr->doff = (sizeof(struct ndhdr)) << 2;
-		hdr->seq = htonl(nsk->sender.write_seq);
-		skb_dequeue(&sk->sk_write_queue);
+		hdr->seq = htonl(ND_SKB_CB(req->skb)->seq);
+		// skb_dequeue(&sk->sk_write_queue);
 			// kfree_skb(skb);
-		sk_wmem_queued_add(sk, -skb->truesize);
-		sk_mem_uncharge(sk, skb->truesize);
+		sk_wmem_queued_add(sk, -req->skb->truesize);
+		sk_mem_uncharge(sk, req->skb->truesize);
+		WARN_ON(nsk->sender.snd_nxt != ND_SKB_CB(req->skb)->seq);
+		nsk->sender.snd_nxt += req->skb->len;
 		// sk->sk_wmem_queued -= skb->len;
 		/*increment write seq */
-		nsk->sender.write_seq += skb->len;
+		// nsk->sender.write_seq += skb->len;
 queue_req:
 		/* check the window is available */
 		if(nsk->sender.sd_grant_nxt - nsk->sender.write_seq > nsk->default_win) {
@@ -335,6 +513,147 @@ void nd_tx_work(struct work_struct *w)
 	} 	
 // out:
 	release_sock(sk);
+}
+
+// static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
+// {
+// 	if (READ_ONCE(sk->sk_wmem_queued) + pending >= READ_ONCE(sk->sk_sndbuf))
+// 		return false;
+
+// 	return true;
+// }
+/* copy from kcm sendmsg */
+static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len)
+{
+	struct nd_sock *nsk = nd_sk(sk);
+	// struct sk_buff *skb = NULL;
+	size_t copy, copied = 0;
+	long timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+	int eor = (sk->sk_socket->type == SOCK_DGRAM) ?
+		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
+	int err = -EPIPE;
+	// int i = 0;
+	
+	/* hardcode for now */
+	struct nd_dcopy_request *request;
+	struct iov_iter biter;
+	struct bio_vec *bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+	// ssize_t bremain = msg->iter->count, blen;
+	ssize_t blen;
+	int max_segs = 48;
+	int nr_segs = 0;
+	// int pending = 0;
+	WARN_ON(msg->msg_iter.count != len);
+
+
+	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
+		err = nd_wait_for_connect(sk, &timeo);
+		if (err != 0)
+			goto out_error;
+	}
+	/* Per tcp_sendmsg this should be in poll */
+	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
+
+	if (sk->sk_err)
+		goto out_error;
+
+	while (msg_data_left(msg)) {
+
+		if (!sk_stream_memory_free(sk)) {
+			// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+			goto wait_for_memory;
+		}
+
+		copy = min_t(int, max_segs * PAGE_SIZE, msg_data_left(msg));
+		if(copy == 0) {
+			WARN_ON(true);
+		}
+		if (!sk_wmem_schedule(sk, copy))
+			goto wait_for_memory;
+
+		/* construct biov and data copy request */
+		blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  msg_data_left(msg), max_segs);
+		nr_segs = biter.nr_segs;
+
+		/* create new request */
+		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+		request->state = ND_DCOPY_SEND;
+		request->sk = sk;
+		request->io_cpu = nsk->sender.nxt_dcopy_cpu;
+		request->len = blen;
+		request->seq = nsk->sender.write_seq;
+		request->iter = biter;
+		request->bv_arr = bv_arr;
+		request->max_segs = nr_segs;
+		
+		nd_dcopy_queue_request(request);
+
+		bv_arr = NULL;
+		nr_segs = 0;
+		atomic_add(blen, &nsk->sender.in_flight_copy_bytes);
+		nsk->sender.write_seq += blen;
+
+		copied += blen;
+		continue;
+
+wait_for_memory:
+		/* wait for pending requests to be done */
+		sk_wait_sender_data_copy(sk, &timeo);
+		nd_fetch_dcopy_response(sk);
+		err = nd_push(sk, GFP_KERNEL);
+		// pr_info("start wait \n");
+		// pr_info("timeo:%ld\n", timeo);
+		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		/* hard code nd_ctrl for now */
+		if(err == -EDQUOT){
+			// pr_info("add to sleep sock send msg\n");
+			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		} 
+		// else {
+		// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
+		// 	pr_info("nsk->sender.write_seq:%u\n", nsk->sender.write_seq);
+		// }
+		err = sk_stream_wait_memory(sk, &timeo);
+		// pr_info("end wait \n");
+		if (err) {
+			pr_info("out error \n");
+			goto out_error;
+		}
+	}
+	sk_wait_sender_data_copy(sk, &timeo);
+	nd_fetch_dcopy_response(sk);
+	if (eor) {
+		// if(!skb_queue_empty(&sk->sk_write_queue)) {
+			// printk("call nd push\n");
+			nd_push(sk, GFP_KERNEL);
+		// }
+	}
+
+	// ND_STATS_ADD(nsk->stats.tx_bytes, copied);
+
+	release_sock(sk);
+	return copied;
+
+out_error:
+	// nd_push(sk);
+
+	// if (copied && sock->type == SOCK_SEQPACKET) {
+	// 	/* Wrote some bytes before encountering an
+	// 	 * error, return partial success.
+	// 	 */
+	// 	goto partial_message;
+	// }
+
+	// if (head != nsk->seq_skb)
+	// 	kfree_skb(head);
+
+	err = sk_stream_error(sk, msg->msg_flags, err);
+
+	/* make sure we wake any epoll edge trigger waiter */
+	if (unlikely(skb_queue_len(&sk->sk_write_queue) == 0 && err == -EAGAIN))
+		sk->sk_write_space(sk);
+
+	return err;
 }
 
 /* copy from kcm sendmsg */
@@ -724,7 +1043,10 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
+	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 4);	
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
+    init_llist_head(&dsk->sender.response_list);
+
 	// WRITE_ONCE(dsk->receiver.free_flow, false);
 	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
@@ -789,119 +1111,6 @@ bool nd_try_send_token(struct sock *sk) {
 	return false;
 
 }
-
-static inline bool page_is_mergeable(const struct bio_vec *bv,
-		struct page *page, unsigned int len, unsigned int off,
-		bool *same_page)
-{
-	size_t bv_end = bv->bv_offset + bv->bv_len;
-	phys_addr_t vec_end_addr = page_to_phys(bv->bv_page) + bv_end - 1;
-	phys_addr_t page_addr = page_to_phys(page);
-
-	if (vec_end_addr + 1 != page_addr + off)
-		return false;
-	// if (xen_domain() && !xen_biovec_phys_mergeable(bv, page))
-	// 	return false;
-
-	*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
-	if (*same_page)
-		return true;
-	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
-}
-
-bool __nd_try_merge_page(struct bio_vec *bv_arr, int nr_segs,  struct page *page,
-		unsigned int len, unsigned int off, bool *same_page)
-{
-	if (nr_segs > 0) {
-		struct bio_vec *bv = &bv_arr[nr_segs - 1];
-
-		if (page_is_mergeable(bv, page, len, off, same_page)) {
-			// if (bio->bi_iter.bi_size > UINT_MAX - len) {
-			// 	*same_page = false;
-			// 	return false;
-			// }
-			bv->bv_len += len;
-			return true;
-		}
-	}
-	return false;
-}
-
-static ssize_t nd_dcopy_iov_init(struct msghdr *msg, struct iov_iter *iter, struct bio_vec *vec_p,
-	u32 bytes, int max_segs) {
-	ssize_t copied, offset, left;
-	struct bio_vec *bv_arr;
-	struct page *pages[48];
-	unsigned nr_segs = 0, i, len = 0;
-	bool same_page = false;
-
-	// pr_info("reach here:%d\n",  __LINE__);
-	// pages = kmalloc_array(max_segs, sizeof(struct page*), GFP_KERNEL);
-	// WARN_ON(pages == NULL);
-	// pr_info("size of pages*:%d\n",  sizeof(struct page*));
-	// *vec_p = kmalloc_array(max_segs, sizeof(struct bio_vec), GFP_KERNEL);
-	// WARN_ON(*vec_p == NULL);
-	bv_arr = vec_p;
-	// pr_info("reach here:%d\n",  __LINE__);
-
-	copied = iov_iter_get_pages(&msg->msg_iter, pages, bytes, max_segs,
-					    &offset);
-	// pr_info("reach here:%d\n",  __LINE__);
-	if(copied < 0)
-		WARN_ON(true);
-	for (left = copied, i = 0; left > 0; left -= len, i++) {
-		struct page *page = pages[i];
-
-		len = min_t(size_t, PAGE_SIZE - offset, left);
-
-		if (__nd_try_merge_page(bv_arr, nr_segs, page, len, offset, &same_page)) {
-			if (same_page)
-				put_page(page);
-			// pr_info("merge page\n");
-		} else {
-			struct bio_vec *bv = &bv_arr[nr_segs];
-			bv->bv_page = page;
-			bv->bv_offset = offset;
-			bv->bv_len = len;
-			nr_segs++;
-		}
-		offset = 0;
-	}
-	// pr_info("advance:%ld\n", copied);
-	iov_iter_bvec(iter, WRITE, bv_arr, nr_segs, copied);
-	iov_iter_advance(&msg->msg_iter, copied);
-	// kfree(pages);
-	// pr_info("kfree:%ld\n", __LINE__);
-
-	return copied;
-}
-
-static inline bool nd_next_segment(struct bio_vec* bv_arr,
-				    struct bvec_iter_all *iter, int max_segs)
-{
-	/*hard code for now */
-	if (iter->idx >= max_segs)
-		return false;
-
-	bvec_advance(&bv_arr[iter->idx], iter);
-	return true;
-}
-
-#define nd_for_each_segment_all(bvl, bv_arr, iter, max_segs) \
-	for (bvl = bvec_init_iter_all(&iter); nd_next_segment((bv_arr), &iter, max_segs); )
-
-void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
-{
-	struct bvec_iter_all iter_all;
-	struct bio_vec *bvec;
-
-	nd_for_each_segment_all(bvec, bv_arr, iter_all, max_segs) {
-		if (mark_dirty && !PageCompound(bvec->bv_page))
-			set_page_dirty_lock(bvec->bv_page);
-		put_page(bvec->bv_page);
-	}
-}
-
 
 int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
@@ -1078,6 +1287,7 @@ found_ok_skb:
 
 		/* construct data copy request */
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+		request->state = ND_DCOPY_RECV;
 		request->sk = sk;
 		request->clean_skb = (used + offset == skb->len);
 		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;

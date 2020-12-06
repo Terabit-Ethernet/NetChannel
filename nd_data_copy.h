@@ -13,8 +13,21 @@
 #include <crypto/hash.h>
 #include "uapi_linux_nd.h"
 
+enum nd_conn_dcopy_state {
+	ND_DCOPY_SEND = 0,
+	ND_DCOPY_RECV,
+	ND_DCOPY_DONE,
+};
+
+
+struct nd_dcopy_response {
+	struct llist_node	lentry;
+	struct sk_buff *skb;
+};
 
 struct nd_dcopy_request {
+	enum nd_conn_dcopy_state state;
+
 	bool clean_skb;
 	int io_cpu;
     struct sock *sk;
@@ -23,10 +36,13 @@ struct nd_dcopy_request {
 	struct bio_vec *bv_arr;
 	struct list_head	entry;
 	struct llist_node	lentry;
-	u32 offset;
+	union{
+		u32 offset;
+		u32 seq;
+	};
     int len;
 	int max_segs;
-
+	struct nd_dcopy_queue *queue;
 };
 
 struct nd_dcopy_queue {

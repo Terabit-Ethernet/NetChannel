@@ -13,8 +13,9 @@ static inline void nd_dcopy_free_request(struct nd_dcopy_request *req) {
 	}
 
 	if(!req->bv_arr) {
-		nd_release_pages(req->bv_arr, true, req->max_segs);
+		// nd_release_pages(req->bv_arr, true, req->max_segs);
 		kfree(req->bv_arr);
+		req->bv_arr = NULL;
 	}
 	// pr_info("reach here:%d\n", __LINE__);
     // kfree(req->iter.bvec);
@@ -22,18 +23,16 @@ static inline void nd_dcopy_free_request(struct nd_dcopy_request *req) {
     kfree(req);
 }
 
-static inline void nd_dcopy_clean_req(struct nd_dcopy_queue *queue)
-{
+// static inline void nd_dcopy_clean_req(struct nd_dcopy_request *req)
+// {
 
-	/* pdu doesn't have to be freed */
-	// kfree(queue->request->pdu);
-	// put_page(queue->request->hdr);
-	// page_frag_free(queue->request->hdr);
-	// kfree(queue->request);
-    nd_dcopy_free_request(queue->request);
-	queue->request = NULL;
-	
-}
+// 	/* pdu doesn't have to be freed */
+// 	// kfree(queue->request->pdu);
+// 	// put_page(queue->request->hdr);
+// 	// page_frag_free(queue->request->hdr);
+// 	// kfree(queue->request);
+//     nd_dcopy_free_request(request);	
+// }
 
 static void nd_dcopy_process_req_list(struct nd_dcopy_queue *queue)
 {
@@ -69,6 +68,7 @@ bool nd_dcopy_queue_request(struct nd_dcopy_request *req) {
     struct nd_dcopy_queue* queue = &nd_dcopy_q[req->io_cpu];
     bool empty = false;
     
+	req->queue = queue;
     empty = llist_add(&req->lentry, &queue->req_list) &&
 		list_empty(&queue->copy_list) && !queue->request;
     
@@ -86,12 +86,144 @@ bool nd_dcopy_queue_request(struct nd_dcopy_request *req) {
     return true;
 }
 
+void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
+    struct nd_sock *nsk;
+ 	int err, remaining_bytes, req_len;
+
+	nsk = nd_sk(req->sk);
+	err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->len);
+    if (err) {
+    /* Exception. Bailout! */
+	    skb_dump(KERN_WARNING, req->skb, false);
+        // pr_info("msg->mssg_iter.type:%ld\n", req->iter.type &4);
+		// pr_info("msg->mssg_iter.count:%ld\n", req->iter.count);
+		// pr_info("msg->mssg_iter.iov_offset:%ld\n", req->iter.iov_offset);
+		// pr_info("msg->mssg_iter.iov_offset:%p\n", req->iter.iov);
+		// pr_info("msg->mssg_iter.nr_segs:%ld\n", req->iter.nr_segs);
+		// pr_info("msg->mssg_iter.iov_base:%p\n", req->iter.iov->iov_base);
+		// pr_info("msg->mssg_iter.iov_len:%ld\n", req->iter.iov->iov_len);
+        WARN_ON(true);
+    }
+    // pr_info("err:%d\n", err);
+	req_len = req->len;
+// clean:
+    // nd_dcopy_free_request(req);
+	req->state = ND_DCOPY_DONE;
+	/* release the page before reducing the count */
+	nd_release_pages(req->bv_arr, true, req->max_segs);
+    remaining_bytes = atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
+// done:
+// 	return ret;
+}
+
+static inline int nd_copy_to_page_nocache(struct sock *sk, struct iov_iter *from,
+					   struct sk_buff *skb,
+					   struct page *page,
+					   int off, int copy)
+{
+	int err;
+
+	err = skb_do_copy_data_nocache(sk, skb, from, page_address(page) + off,
+				       copy, skb->len);
+	if (err)
+		return err;
+
+	skb->len	     += copy;
+	skb->data_len	     += copy;
+	skb->truesize	     += copy;
+	// sk_wmem_queued_add(sk, copy);
+	// sk_mem_charge(sk, copy);
+	return 0;
+}
+
+void nd_try_dcopy_send(struct nd_dcopy_request *req) {
+    struct nd_sock *nsk;
+ 	int err, remaining_bytes, req_len, i;
+	size_t copy;
+	struct page_frag *pfrag = &current->task_frag;
+	struct sk_buff *skb;
+	struct nd_dcopy_response *resp;
+	req_len = req->len; 
+	nsk = nd_sk(req->sk);
+	while(req_len > 0) {
+		bool merge = true;
+		if (skb_page_frag_refill(32U, pfrag, req->sk->sk_allocation))
+			goto wait_for_memory;
+		skb = req->skb;
+		if(!skb) 
+			goto create_new_skb;
+		if(skb->len == USHRT_MAX)
+			goto push_skb;
+		i = skb_shinfo(skb)->nr_frags;
+		if (!skb_can_coalesce(skb, i, pfrag->page,
+			 pfrag->offset)) {
+			if (i == MAX_SKB_FRAGS) {
+				goto push_skb;
+			}
+			merge = false;
+		}
+		copy = min_t(int, USHRT_MAX - skb->len, req_len);
+		copy = min_t(int, copy,
+			     pfrag->size - pfrag->offset);
+		err = nd_copy_to_page_nocache(req->sk, &req->iter, skb,
+					       pfrag->page,
+					       pfrag->offset,
+					       copy);
+		if(err)
+			WARN_ON(true);
+		/* Update the skb. */
+		if (merge) {
+			skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
+		} else {
+			skb_fill_page_desc(skb, i, pfrag->page,
+					   pfrag->offset, copy);
+			get_page(pfrag->page);
+		}
+		req_len -= copy;
+		/* last request */
+		if(req_len == 0)
+			goto push_skb;
+		continue;
+
+	create_new_skb:
+		skb = alloc_skb(0, req->sk->sk_allocation);
+		// printk("create new skb\n");
+		if(!skb)
+			goto wait_for_memory;
+
+		// __skb_queue_tail(&sk->sk_write_queue, skb);
+		continue;
+
+	push_skb:
+		/* push the new skb */
+		ND_SKB_CB(skb)->seq = req->seq;
+		resp = kmalloc(sizeof(struct nd_dcopy_response), GFP_KERNEL);
+		llist_add(&resp->lentry, &nsk->sender.response_list);
+		req->seq += skb->len;
+		req->skb = NULL;
+		resp = NULL;
+		continue;
+
+	wait_for_memory:
+		WARN_ON(true);
+		break;
+	}
+	if(req_len == 0) {
+		req->state = ND_DCOPY_DONE;
+		nd_release_pages(req->bv_arr, true, req->max_segs);
+	}  
+	atomic_sub_return(req->len - req_len, &nsk->receiver.in_flight_copy_bytes);
+	req->len -= req_len;
+// done:
+// 	return ret;
+}
+
 int nd_try_dcopy(struct nd_dcopy_queue *queue)
 {
 	struct nd_dcopy_request *req;
-    struct nd_sock *nsk;
-	int ret = 1, err, remaining_bytes, req_len;
-    u32 offset;
+    // struct nd_sock *nsk;
+	int ret = 1;
+    // u32 offset;
 
 	if (!queue->request) {
 		queue->request = nd_dcopy_fetch_request(queue);
@@ -101,7 +233,18 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
 		WARN_ON(true);
 	}
     req = queue->request;
-    nsk = nd_sk(req->sk);
+
+	if(req->state == ND_DCOPY_RECV) {
+		nd_try_dcopy_receive(req);
+
+	} 
+	if(req->state == ND_DCOPY_SEND) {
+		nd_try_dcopy_send(req);
+	}
+	if(req->state == ND_DCOPY_DONE) {
+		nd_dcopy_free_request(req);
+		queue->request = NULL;
+	}
     /*perform data copy */
     // lock_sock(req->sk);
     // pr_info("doing data copy\n");
@@ -109,71 +252,9 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
 	// pr_info("req iter:%p\n", req->iter);
 	// pr_info("req iter bvec:%p\n", req->iter.bvec);
 
-    err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->len);
+    // err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->len);
     // release_sock(req->sk);
-    if (err) {
-    /* Exception. Bailout! */
-        // if (!copied)
-		// 			copied = -EFAULT;
-		// 		break;
-        // pr_info("err:%d\n", err);
-        // pr_info("skb_headlen(skb):%d\n", skb_headlen(req->skb));
-	    // pr_info("warning core:%d\n", raw_smp_processor_id());
-        // pr_info("skb seq:%u\n", ND_SKB_CB(req->skb)->seq);
-        // pr_info("skb->len:%d\n", req->skb->len);
-        // pr_info("req->offset:%u\n", req->offset);
-        // pr_info("req->len:%d\n", req->len);
-	    skb_dump(KERN_WARNING, req->skb, false);
-        pr_info("msg->mssg_iter.type:%ld\n", req->iter.type &4);
 
-		pr_info("msg->mssg_iter.count:%ld\n", req->iter.count);
-		pr_info("msg->mssg_iter.iov_offset:%ld\n", req->iter.iov_offset);
-		pr_info("msg->mssg_iter.iov_offset:%p\n", req->iter.iov);
-		pr_info("msg->mssg_iter.nr_segs:%ld\n", req->iter.nr_segs);
-		pr_info("msg->mssg_iter.iov_base:%p\n", req->iter.iov->iov_base);
-		pr_info("msg->mssg_iter.iov_len:%ld\n", req->iter.iov->iov_len);
-
-        WARN_ON(true);
-    }
-    // pr_info("err:%d\n", err);
-	req_len = req->len;
-	// if (req->state == ND_CONN_SEND_CMD_PDU) {
-	// 	ret = nd_conn_try_send_cmd_pdu(req);
-	// 	if (ret <= 0)
-	// 		goto done;
-	// 	if (req->state == ND_CONN_PDU_DONE)
-	// 		goto clean;
-	// }
-
-	
-	// if (req->state == ND_CONN_SEND_DATA) {
-	// 	// printk("send data pdu\n");
-	// 	ret = nd_conn_try_send_data_pdu(req);
-	// 	if (ret <= 0)
-	// 		goto done;
-	// 	if (ret == 1) {
-	// 		atomic_dec(&queue->cur_queue_size);
-	// 	}
-	// }
-
-	// if (req->state == NVME_TCP_SEND_DATA) {
-	// 	ret = nvme_tcp_try_send_data(req);
-	// 	if (ret <= 0)
-	// 		goto done;
-	// }
-clean:
-	// pr_info("request->len: -%d\n", req_len);
-    nd_dcopy_clean_req(queue);
-    remaining_bytes = atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
-    // pr_info("remaining bytes:%d \n", remaining_bytes);
-	// if (req->state == NVME_TCP_SEND_DDGST)
-	// 	ret = nvme_tcp_try_send_ddgst(req);
-    if(remaining_bytes == 0) {
-        lock_sock(req->sk);
-        req->sk->sk_data_ready(req->sk);
-        release_sock(req->sk);
-    }
-done:
 	return ret;
 }
 
