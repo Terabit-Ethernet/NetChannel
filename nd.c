@@ -600,6 +600,9 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		nsk->sender.write_seq += blen;
 
 		copied += blen;
+		
+		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 4) % 8 + 16;
+
 		continue;
 
 wait_for_memory:
@@ -1048,7 +1051,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
-	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 4);	
+	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 16);	
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
     init_llist_head(&dsk->sender.response_list);
 
@@ -1057,7 +1060,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
-	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 4);
+	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 16);
 	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);

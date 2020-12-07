@@ -12,7 +12,7 @@ static inline void nd_dcopy_free_request(struct nd_dcopy_request *req) {
         kfree_skb(req->skb);
 	}
 
-	if(!req->bv_arr) {
+	if(req->bv_arr) {
 		// nd_release_pages(req->bv_arr, true, req->max_segs);
 		kfree(req->bv_arr);
 		req->bv_arr = NULL;
