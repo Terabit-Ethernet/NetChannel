@@ -1450,6 +1450,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	    printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
 	    printk("discard packet:%d\n", __LINE__);
 		sk_drops_add(sk, skb);
+		kfree_skb(skb);
 	}
 
     if (refcounted) {
