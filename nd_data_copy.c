@@ -110,7 +110,8 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
     // nd_dcopy_free_request(req);
 	req->state = ND_DCOPY_DONE;
 	/* release the page before reducing the count */
-	nd_release_pages(req->bv_arr, true, req->max_segs);
+	if(req->bv_arr)
+		nd_release_pages(req->bv_arr, true, req->max_segs);
     remaining_bytes = atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
 // done:
 // 	return ret;

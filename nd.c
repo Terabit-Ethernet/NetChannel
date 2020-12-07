@@ -569,6 +569,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 			goto wait_for_memory;
 		}
 
+		/* this part might need to change latter */
 		copy = min_t(int, max_segs * PAGE_SIZE, msg_data_left(msg));
 		if(copy == 0) {
 			WARN_ON(true);
@@ -1120,6 +1121,8 @@ bool nd_try_send_token(struct sock *sk) {
 
 }
 
+
+
 int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -1146,7 +1149,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	// struct page *bpages[48];
 	// struct bio_vec bvec;
 	struct iov_iter biter;
-	struct bio_vec *bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+	struct bio_vec *bv_arr;
 	ssize_t bremain = len, blen;
 	int max_segs = 48;
 	int nr_segs = 0;
@@ -1177,9 +1180,12 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 		goto out;
 
 	/* init bvec page */	
+	bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 	blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
 	nr_segs = biter.nr_segs;
 	bremain -= blen;
+
+
 
 	seq = &dsk->receiver.copied_seq;
 
@@ -1422,7 +1428,10 @@ queue_request:
 	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
 
 	sk_wait_data_copy(sk, &timeo);
-
+	if(bv_arr) {
+		nd_release_pages(bv_arr, true, nr_segs);
+		kfree(bv_arr);
+	}
 	// pr_info("free bvec:%d\n", __LINE__);
 	// pr_info("biter.bvec:%p\n", biter.bvec);
 	// nd_release_pages(bv_arr, true, nr_segs);
