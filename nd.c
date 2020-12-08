@@ -1061,7 +1061,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
-	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 16);
+	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 0);
 	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
@@ -1304,7 +1304,7 @@ found_ok_skb:
 		request->state = ND_DCOPY_RECV;
 		request->sk = sk;
 		request->clean_skb = (used + offset == skb->len);
-		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
+		request->io_cpu = dsk->receiver.nxt_dcopy_cpu * 4 + 12;
 		request->skb = skb;
 		request->offset = offset;
 		request->len = used;
@@ -1361,7 +1361,7 @@ queue_request:
 			if(used + offset < skb->len) {
 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
 			} else {
-				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 12 + 16;
+				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 1) % 4;
 			}
 			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
