@@ -1004,6 +1004,7 @@ void nd_destruct_sock(struct sock *sk)
 	// 	total += skb->truesize;
 	// 	kfree_skb(skb);
 	// }
+	WARN_ON(nsk->sender.pending_req);
 	pr_info("0: %llu\n", bytes_recvd[0]);
 	pr_info("4: %llu\n", bytes_recvd[4]);
 	pr_info("8: %llu\n", bytes_recvd[8]);
@@ -1944,6 +1945,11 @@ void nd_destroy_sock(struct sock *sk)
 	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pendfing_frames(sk);
+	if(up->sender.pending_req) {
+		kfree_skb(up->sender.pending_req->skb);
+		kfree(up->sender.pending_req);
+		up->sender.pending_req = NULL;
+	}
 	nd_write_queue_purge(sk);
 	nd_read_queue_purge(sk);
 	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);

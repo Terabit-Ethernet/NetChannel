@@ -77,6 +77,8 @@ void nd_conn_free_queue(struct nd_conn_ctrl *ctrl, int qid)
 	// 	nvme_tcp_free_crypto(queue);
 
 	sock_release(queue->sock);
+	if(queue->request)
+		nd_conn_done_send_req(queue);
 	// kfree(queue->pdu);
 }
 
@@ -346,7 +348,9 @@ void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl)
 	flush_workqueue(ctrl->sock_wait_wq);
 	destroy_workqueue(ctrl->sock_wait_wq);
     /* free option here */
+	kfree(ctrl->queues);
     kfree(ctrl->opts);
+	kfree(ctrl);
 }
 
 // static void nvme_reset_ctrl_work(struct work_struct *work)
@@ -1114,13 +1118,15 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 	return ctrl;
 
 out_uninit_ctrl:
+	/* To Do: handle it corrrectly */
+	WARN_ON(true);
 	// nvme_uninit_ctrl(&ctrl->ctrl);
 	// nvme_put_ctrl(&ctrl->ctrl);
 	if (ret > 0)
 		ret = -EIO;
-	return ERR_PTR(ret);
-// out_kfree_queues:
-	// kfree(ctrl->queues);
+	// return ERR_PTR(ret);
+out_kfree_queues:
+	kfree(ctrl->queues);
 out_free_ctrl:
 	kfree(ctrl);
 	return ERR_PTR(ret);
@@ -1139,10 +1145,10 @@ int nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.116";
+    opts->traddr = "192.168.10.117";
     opts->trsvcid = "9000";
     /* src address */
-    opts->host_traddr = "192.168.10.117";
+    opts->host_traddr = "192.168.10.116";
     // opts->host_port = "10000";
 
     opts->queue_size = 128;
@@ -1155,12 +1161,12 @@ int nd_conn_init_module(void)
 
 void nd_conn_cleanup_module(void)
 {
-	struct nd_conn_ctrl *ctrl;
+	struct nd_conn_ctrl *ctrl, *temp;
 
 	// nvmf_unregister_transport(&nvme_tcp_transport);
 
 	mutex_lock(&nd_conn_ctrl_mutex);
-	list_for_each_entry(ctrl, &nd_conn_ctrl_list, list)
+	list_for_each_entry_safe(ctrl, temp, &nd_conn_ctrl_list, list)
 		nd_conn_delete_ctrl(ctrl);
 	mutex_unlock(&nd_conn_ctrl_mutex);
 	// flush_workqueue(nvme_delete_wq);

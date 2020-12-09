@@ -1085,7 +1085,9 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 
 	// 	// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
 
-	} 
+	} else {
+		kfree_skb(skb);
+	}
 
     if (refcounted) {
         sock_put(sk);
@@ -1133,6 +1135,7 @@ int nd_handle_sync_ack_pkt(struct sk_buff *skb) {
 		}
 		return 0;
 	} else {
+		kfree_skb(skb);
 		printk("didn't find the socket\n");
 	}
 	return 0;
