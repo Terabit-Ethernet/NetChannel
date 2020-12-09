@@ -182,6 +182,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 					   pfrag->offset, copy);
 			get_page(pfrag->page);
 		}
+		pfrag->offset += copy;
 		req_len -= copy;
 		/* last request */
 		if(req_len == 0)

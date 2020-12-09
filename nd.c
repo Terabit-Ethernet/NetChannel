@@ -471,6 +471,9 @@ int nd_push(struct sock *sk, gfp_t flag) {
 		sk_mem_uncharge(sk, skb->truesize);
 		WARN_ON(nsk->sender.snd_nxt != ND_SKB_CB(skb)->seq);
 		nsk->sender.snd_nxt += skb->len;
+		// if(ND_SKB_CB(skb)->seq == 0)
+		// 	skb_dump(KERN_WARNING, skb, true);
+
 		// sk->sk_wmem_queued -= skb->len;
 		/*increment write seq */
 		// nsk->sender.write_seq += skb->len;
@@ -586,7 +589,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
 		request->state = ND_DCOPY_SEND;
 		request->sk = sk;
-		request->io_cpu = nsk->sender.nxt_dcopy_cpu;
+		request->io_cpu = nsk->sender.nxt_dcopy_cpu * 4 + 12;
 		request->len = blen;
 		request->seq = nsk->sender.write_seq;
 		request->iter = biter;
@@ -602,7 +605,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		copied += blen;
 		
-		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 4) % 8 + 16;
+		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 1) % 4;
 
 		continue;
 
@@ -1052,7 +1055,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
-	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 16);	
+	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 0);	
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
     init_llist_head(&dsk->sender.response_list);
 
