@@ -169,9 +169,15 @@ static struct ctl_table nd_ctl_table[] = {
                 .proc_handler   = nd_dointvec
         },
         {
-                // this is only being called when unloading the module
                 .procname       = "nd_num_queue",
                 .data           = &nd_params.nd_num_queue,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+                {
+                .procname       = "nd_num_dc_thread",
+                .data           = &nd_params.nd_num_dc_thread,
                 .maxlen         = sizeof(int),
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
@@ -207,12 +213,13 @@ static struct ctl_table_header *nd_ctl_header;
 void nd_params_init(struct nd_params* params) {
     params->nd_add_host = 0;
     params->nd_num_queue = 1;
+    params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
     params->rtt = 50;
-    params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 4;
+    params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 8;
     // params->bdp = 500000;
     // params->gso_size = 1500;
     // matchiing parameters
@@ -222,8 +229,8 @@ void nd_params_init(struct nd_params* params) {
     params->num_iters = 5;
     params->iter_size = params->beta * params->control_pkt_rtt * 1000;
     params->epoch_size = params->num_iters * params->iter_size * params->alpha;
-    params->rmem_default = 6289600;
-    params->wmem_default = 6289600;
+    params->rmem_default = 12289600;
+    params->wmem_default = 12289600;
     params->short_flow_size = params->bdp;
     params->control_pkt_bdp = params->control_pkt_rtt * params->bandwidth * 1000 / 8;
     params->data_budget = 1000000;

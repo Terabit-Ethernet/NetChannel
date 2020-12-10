@@ -106,7 +106,7 @@ struct nd_params {
 
 	int data_budget;
 	int nd_num_queue;
-
+	int nd_num_dc_thread;
 };
 
 struct nd_pq {

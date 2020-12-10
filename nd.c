@@ -605,7 +605,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		copied += blen;
 		
-		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 1) % 4;
+		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 1) % nd_params.nd_num_dc_thread;
 
 		continue;
 
@@ -1365,7 +1365,7 @@ queue_request:
 			if(used + offset < skb->len) {
 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
 			} else {
-				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 1) % 4;
+				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 1) % nd_params.nd_num_dc_thread;
 			}
 			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
