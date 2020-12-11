@@ -221,12 +221,31 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 	}
 }
 
+void nd_clean_dcopy_pages(struct sock *sk) {
+	struct nd_sock *nsk = nd_sk(sk);
+	struct nd_dcopy_page *resp;
+	struct llist_node *node;
+	for (node = llist_del_all(&nsk->receiver.clean_page_list); node;) {
+		resp = llist_entry(node, struct nd_dcopy_page, lentry);
+		node = node->next;
+		if(resp->bv_arr) {
+			nd_release_pages(resp->bv_arr, true, resp->max_segs);
+			kfree(resp->bv_arr);
+		}
+		if(resp->skb)
+			kfree_skb(resp->skb);
+		kfree(resp);
+	}
+	return;
+}
+
 static int sk_wait_data_copy(struct sock *sk, long *timeo)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	int rc = 0;
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
+		nd_clean_dcopy_pages(sk);
 		// nd_try_send_ack(sk, 1);
 		// add_wait_queue(sk_sleep(sk), &wait);
 		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
@@ -234,6 +253,7 @@ static int sk_wait_data_copy(struct sock *sk, long *timeo)
 		// sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 		// remove_wait_queue(sk_sleep(sk), &wait);
 	}
+	nd_clean_dcopy_pages(sk);
 	return rc;
 }
 
@@ -1075,6 +1095,7 @@ int nd_init_sock(struct sock *sk)
 	// WRITE_ONCE(dsk->receiver.in_pq, false);
 	// WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
 	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
+	init_llist_head(&dsk->receiver.clean_page_list);
 	// atomic_set(&dsk->receiver.backlog_len, 0);
 	// dsk->start_time = ktime_get();
 	// hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);

@@ -7,7 +7,7 @@ static struct nd_dcopy_queue nd_dcopy_q[NR_CPUS];
 
 
 static inline void nd_dcopy_free_request(struct nd_dcopy_request *req) {
-    if(req->clean_skb){
+    if(req->clean_skb && req->skb){
 		// pr_info("reach here:%d\n", __LINE__);
         kfree_skb(req->skb);
 	}
@@ -110,8 +110,24 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
     // nd_dcopy_free_request(req);
 	req->state = ND_DCOPY_DONE;
 	/* release the page before reducing the count */
-	if(req->bv_arr)
-		nd_release_pages(req->bv_arr, true, req->max_segs);
+	if(req->bv_arr || req->clean_skb) {
+		struct nd_dcopy_page* resp = kmalloc(sizeof(struct nd_dcopy_page), GFP_KERNEL);
+		if(req->bv_arr) {
+			resp->max_segs = req->max_segs;
+			resp->bv_arr = req->bv_arr;
+			req->bv_arr = NULL;
+		} else {
+			resp->bv_arr = NULL;
+		}
+		if(req->clean_skb) {
+			resp->skb = req->skb;
+			req->skb = NULL;
+		} else {
+			resp->skb = NULL;
+		}
+		llist_add(&resp->lentry, &nsk->receiver.clean_page_list);
+		// nd_release_pages(req->bv_arr, true, req->max_segs);
+	} 
     remaining_bytes = atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
 // done:
 // 	return ret;

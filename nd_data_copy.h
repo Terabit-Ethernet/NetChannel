@@ -25,6 +25,13 @@ struct nd_dcopy_response {
 	struct sk_buff *skb;
 };
 
+struct nd_dcopy_page {
+	struct llist_node	lentry;
+	struct bio_vec *bv_arr;
+	struct sk_buff* skb;
+	int max_segs;
+};
+
 struct nd_dcopy_request {
 	enum nd_conn_dcopy_state state;
 

@@ -552,6 +552,7 @@ struct nd_sock {
 		/* protected by the entry lock */
 		uint32_t grant_batch;
 		int prev_grant_bytes;
+		struct llist_head	clean_page_list;
 		// atomic_t backlog_len;
 		// atomic_t in_flight_bytes;
 
