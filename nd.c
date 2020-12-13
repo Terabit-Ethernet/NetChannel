@@ -263,6 +263,7 @@ static int sk_wait_sender_data_copy(struct sock *sk, long *timeo)
 	int rc= 0;
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->sender.in_flight_copy_bytes) != 0) {
+		nd_push(sk, GFP_KERNEL);
 		// nd_try_send_ack(sk, 1);
 		// add_wait_queue(sk_sleep(sk), &wait);
 		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
@@ -389,6 +390,8 @@ void nd_fetch_dcopy_response(struct sock *sk) {
 		node = node->next;
 		sk_wmem_queued_add(sk, resp->skb->truesize);
 		sk_mem_charge(sk, resp->skb->truesize);
+		nsk->sender.pending_queue -= resp->skb->len;
+		WARN_ON(nsk->sender.pending_queue < 0);
 		kfree(resp);
 	}
 	return;
@@ -506,6 +509,7 @@ queue_req:
 			ret = -EMSGSIZE;
 			break;
 		}
+		u32 seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
 		push_success = nd_conn_queue_request(req, false, false);
 		if(!push_success) {
@@ -515,6 +519,7 @@ queue_req:
 			ret = -EDQUOT;
 			break;
 		}
+		nsk->sender.snd_nxt = seq;
 		// printk(" dequeue forward alloc:%d\n", sk->sk_forward_alloc);
 	}
 	return ret;
@@ -543,13 +548,13 @@ void nd_tx_work(struct work_struct *w)
 	release_sock(sk);
 }
 
-// static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
-// {
-// 	if (READ_ONCE(sk->sk_wmem_queued) + pending >= READ_ONCE(sk->sk_sndbuf))
-// 		return false;
+static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
+{
+	if (READ_ONCE(sk->sk_wmem_queued) + pending >= READ_ONCE(sk->sk_sndbuf))
+		return false;
 
-// 	return true;
-// }
+	return true;
+}
 /* copy from kcm sendmsg */
 static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len)
 {
@@ -587,7 +592,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 	while (msg_data_left(msg)) {
 
-		if (!sk_stream_memory_free(sk)) {
+		if (!nd_stream_memory_free(sk, nsk->sender.pending_queue)) {
 			// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 			goto wait_for_memory;
 		}
@@ -597,13 +602,16 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		if(copy == 0) {
 			WARN_ON(true);
 		}
-		if (!sk_wmem_schedule(sk, copy))
+		if (!sk_wmem_schedule(sk, copy)) {
+			WARN_ON_ONCE(true);
 			goto wait_for_memory;
 
+		}
 		/* construct biov and data copy request */
 		bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 		blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  msg_data_left(msg), max_segs);
 		nr_segs = biter.nr_segs;
+		nsk->sender.pending_queue += blen;
 
 		/* create new request */
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
@@ -634,18 +642,13 @@ wait_for_memory:
 		sk_wait_sender_data_copy(sk, &timeo);
 		// nd_fetch_dcopy_response(sk);
 		err = nd_push(sk, GFP_KERNEL);
-		// pr_info("start wait \n");
-		// pr_info("timeo:%ld\n", timeo);
+		WARN_ON(nsk->sender.pending_queue != 0);
 		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		} 
-		// else {
-		// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
-		// 	pr_info("nsk->sender.write_seq:%u\n", nsk->sender.write_seq);
-		// }
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
 		if (err) {
@@ -1051,7 +1054,7 @@ int nd_init_sock(struct sock *sk)
 	skb_queue_head_init(&nd_sk(sk)->reader_queue);
 	dsk->core_id = raw_smp_processor_id();
 	printk("init sock\n");
-
+	printk("sk_has_account(sk):%d\n", sk_has_account(sk));
 	// next_going_id 
 	// printk("remaining tokens:%d\n", nd_epoch.remaining_tokens);
 	// atomic64_set(&dsk->next_outgoing_id, 1);
@@ -1078,6 +1081,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
 	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 0);	
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
+	WRITE_ONCE(dsk->sender.pending_queue, 0);
     init_llist_head(&dsk->sender.response_list);
 
 	// WRITE_ONCE(dsk->receiver.free_flow, false);

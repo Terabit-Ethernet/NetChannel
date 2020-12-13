@@ -487,7 +487,7 @@ struct nd_sock {
 	    uint32_t snd_nxt;
 		/* sender side grant nxt from the receiver*/
 		uint32_t sd_grant_nxt;
-
+		int pending_queue;
 	    /* the last unack byte.*/
 	    uint32_t snd_una;
 		struct nd_conn_request* pending_req;

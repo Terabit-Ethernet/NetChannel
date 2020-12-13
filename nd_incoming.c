@@ -1057,24 +1057,19 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	if(sk) {
  		bh_lock_sock(sk);
 		dsk = nd_sk(sk);
-		// pr_info("get ack pkt:%u\n", ntohl(ah->grant_seq));
 	// 	// dsk->sender.snd_una = ah->grant_seq > dsk->sender.snd_una ? ah->rcv_nxt: dsk->sender.snd_una;
 		if (!sock_owned_by_user(sk)) {
 			if(ntohl(ah->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
 				dsk->sender.sd_grant_nxt = ntohl(ah->grant_seq);
+				err = nd_push(sk, GFP_ATOMIC);
+				if(sk_stream_memory_free(sk)) {
+					sk->sk_write_space(sk);
+				} else if(err == -EDQUOT){
+					/* push back since there is no space */
+					nd_conn_add_sleep_sock(nd_ctrl, dsk);
+				}
 			}
-			/*has to do nd push and check seq */
-			// pr_info("receive ack: dsk->sender.sd_grant_nxt:%u \n", dsk->sender.sd_grant_nxt);
 
-			err = nd_push(sk, GFP_ATOMIC);
-			if(sk_stream_memory_free(sk)) {
-				// pr_info("invoke write space\n");
-				sk->sk_write_space(sk);
-			} else if(err == -EDQUOT){
-				/* push back since there is no space */
-				// pr_info("invoke sleep sock\n");
-				nd_conn_add_sleep_sock(nd_ctrl, dsk);
-			}
 			kfree_skb(skb);
         } else {
 			nd_add_backlog(sk, skb, true);
@@ -1082,9 +1077,6 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 	    }
     	bh_unlock_sock(sk);
 	   
-
-	// 	// printk("socket address: %p LINE:%d\n", dsk,  __LINE__);
-
 	} else {
 		kfree_skb(skb);
 	}
@@ -1511,7 +1503,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 		/*do nd push and check the seq */
 		// pr_info("backlog:%u\n", ntohl(dh->grant_seq));
 		// pr_info("receive ack in backlog\n");
-
+		// pr_info("handle ack in backlog\n");
 		if(ntohl(dh->grant_seq) - dsk->sender.sd_grant_nxt <= dsk->default_win) {
 			dsk->sender.sd_grant_nxt = ntohl(dh->grant_seq);
 		}
