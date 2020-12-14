@@ -282,6 +282,8 @@ struct nd_conn_request* construct_ack_req(struct sock* sk, gfp_t flag) {
 	// sync->check = 0;
 	ack->doff = (sizeof(struct ndhdr)) << 2;
 	ack->grant_seq = htonl(nsk->receiver.grant_nxt);
+	if(nd_params.nd_debug)
+		pr_info("ack grant seq:%u\n", htonl(ack->grant_seq));
 	// pr_info("ack grant seq:%u\n", htonl(ack->grant_seq));
 	// fh->flow_id = message_id;
 	// fh->flow_size = htonl(message_size);

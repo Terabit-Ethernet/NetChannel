@@ -81,6 +81,7 @@ enum ndcsq_flags {
 };
 
 struct nd_params {
+	bool nd_debug;
 	int nd_add_host;
 	int nd_host_added;
 

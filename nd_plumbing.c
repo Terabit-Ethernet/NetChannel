@@ -175,10 +175,17 @@ static struct ctl_table nd_ctl_table[] = {
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
-                {
+        {
                 .procname       = "nd_num_dc_thread",
                 .data           = &nd_params.nd_num_dc_thread,
                 .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+        {
+                .procname       = "nd_debug",
+                .data           = &nd_params.nd_debug,
+                .maxlen         = sizeof(bool),
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
@@ -215,6 +222,7 @@ void nd_params_init(struct nd_params* params) {
     params->nd_num_queue = 1;
     params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
+    params->nd_debug = false;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
