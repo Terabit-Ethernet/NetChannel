@@ -617,7 +617,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
 		request->state = ND_DCOPY_SEND;
 		request->sk = sk;
-		request->io_cpu = nsk->sender.nxt_dcopy_cpu * 4;
+		request->io_cpu = nsk->sender.nxt_dcopy_cpu * 4 + 12;
 		request->len = blen;
 		request->seq = nsk->sender.write_seq;
 		request->iter = biter;
@@ -1333,7 +1333,7 @@ found_ok_skb:
 		request->state = ND_DCOPY_RECV;
 		request->sk = sk;
 		request->clean_skb = (used + offset == skb->len);
-		request->io_cpu = dsk->receiver.nxt_dcopy_cpu * 4;
+		request->io_cpu = dsk->receiver.nxt_dcopy_cpu * 4 + 12;
 		request->skb = skb;
 		request->offset = offset;
 		request->len = used;
