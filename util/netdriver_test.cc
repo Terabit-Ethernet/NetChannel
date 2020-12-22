@@ -39,6 +39,7 @@
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <inttypes.h>
 
 #include <thread>
 
@@ -834,17 +835,17 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 
 void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
-	struct sockaddr_in* in = (struct sockaddr_in*) dest;
-	uint32_t buffer_size = 67000;
-	uint32_t flow_size = 3000000000;
-	uint32_t write_len = 0;
+	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
+	uint32_t buffer_size = 65535 * 100;
+	uint64_t flow_size = 100000000000;
+	uint64_t write_len = 0;
 	// int i = 0;
 	// uint32_t offset = write_len % flow_size;
 
-	in->sin_zero[0] = flow_size >> 24 & 0xFF;
-	in->sin_zero[1] = flow_size >> 16 & 0xFF;
-	in->sin_zero[2] = flow_size >> 8 & 0xFF;
-	in->sin_zero[3] = flow_size & 0xFF;
+//	in->sin_zero[0] = flow_size >> 24 & 0xFF;
+//	in->sin_zero[1] = flow_size >> 16 & 0xFF;
+//	in->sin_zero[2] = flow_size >> 8 & 0xFF;
+//	in->sin_zero[3] = flow_size & 0xFF;
 	// struct addrinfo hints;
 	// struct addrinfo *matching_addresses;
 	// struct sockaddr *dest;
@@ -906,7 +907,8 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 			// 	offset = 0;
 			// 	cur_write_len = flow_size - write_len;
 			// }
-	    	int result = write(fd, buffer, buffer_size);			
+	    	int result = write(fd, buffer, buffer_size);	
+
 			if( result < 0 ) {
 				if(errno == EMSGSIZE) {
 					// printf("Socket write failed: %s %d\n", strerror(errno), result);
@@ -922,7 +924,7 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 			}
 		}
 	// }
-
+		printf("%" PRIu64 "\n", write_len);
 		// printf("end\n");
 		 //    result = write(fd, buffer, 10000);			
 			// if( result < 0 ) {
@@ -1109,7 +1111,7 @@ int main(int argc, char** argv)
 	struct sockaddr *dest;
 	struct addrinfo hints;
 	char *host, *port_name;
-	char buffer[1000000] = "abcdefgh\n";
+	char buffer[8000000] = "abcdefgh\n";
 	buffer[63999] = 'H';
 	int status;
 	int fd;
@@ -1119,7 +1121,8 @@ int main(int argc, char** argv)
 		print_help(argv[0]);
 		exit(0);
 	}
-	
+	// for (i = 0; i < 1000000; i++)
+	// 	buffer[i] = (i) % 26 + 'a';
 	if (argc < 3) {
 		printf("Usage: %s host:port [options] op op ...\n", argv[0]);
 		exit(1);
@@ -1207,7 +1210,7 @@ int main(int argc, char** argv)
 		// }
 		memset(&addr_in, 0, sizeof(addr_in));
 		addr_in.sin_family = AF_INET;
-		addr_in.sin_port = htons(srcPort);
+		addr_in.sin_port = htons(srcPort + i);
 		addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
 
 

@@ -504,7 +504,11 @@ queue_req:
 		/* check the window is available */
 		if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
 			WARN_ON(nsk->sender.pending_req);
-			WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
+			// WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
+			// if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30)) {
+			// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
+			// 	pr_info(" (ND_SKB_CB(skb)->seq + skb->len):%u\n",  (ND_SKB_CB(skb)->seq + skb->len));
+			// }
 			nsk->sender.pending_req = req;
 			ret = -EMSGSIZE;
 			break;
@@ -598,7 +602,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		}
 
 		/* this part might need to change latter */
-		copy = min_t(int, max_segs * PAGE_SIZE, msg_data_left(msg));
+		copy = min_t(int, max_segs * PAGE_SIZE / 65535 * 65535, msg_data_left(msg));
 		if(copy == 0) {
 			WARN_ON(true);
 		}
@@ -609,7 +613,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		}
 		/* construct biov and data copy request */
 		bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
-		blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  msg_data_left(msg), max_segs);
+		blen = nd_dcopy_iov_init(msg, &biter, bv_arr, copy, max_segs);
 		nr_segs = biter.nr_segs;
 		nsk->sender.pending_queue += blen;
 
@@ -617,7 +621,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
 		request->state = ND_DCOPY_SEND;
 		request->sk = sk;
-		request->io_cpu = nsk->sender.nxt_dcopy_cpu * 4 + 12;
+		request->io_cpu = nsk->sender.nxt_dcopy_cpu;
 		request->len = blen;
 		request->seq = nsk->sender.write_seq;
 		request->iter = biter;
@@ -633,7 +637,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		copied += blen;
 		
-		nsk->sender.nxt_dcopy_cpu = (nsk->sender.nxt_dcopy_cpu + 1) % nd_params.nd_num_dc_thread;
+		nsk->sender.nxt_dcopy_cpu = -1;
 
 		continue;
 
@@ -1010,8 +1014,8 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 // }
 
 uint64_t bytes_recvd[32];
-
-
+extern u64 bytes_sent[8];
+extern int max_queue_length;
 void nd_destruct_sock(struct sock *sk)
 {
 
@@ -1032,6 +1036,10 @@ void nd_destruct_sock(struct sock *sk)
 	pr_info("4: %llu\n", bytes_recvd[4]);
 	pr_info("8: %llu\n", bytes_recvd[8]);
 
+	pr_info("byte sent 0: %llu\n", bytes_sent[0]);
+	pr_info("byte sent 1: %llu\n", bytes_sent[1]);
+	pr_info("byte sent 2: %llu\n", bytes_sent[2]);
+	pr_info("max queue length:%d\n", max_queue_length);
 	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	/* clean sk_forward_alloc*/
@@ -1079,7 +1087,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
-	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, 0);	
+	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, -1);	
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
 	WRITE_ONCE(dsk->sender.pending_queue, 0);
     init_llist_head(&dsk->sender.response_list);
@@ -1089,7 +1097,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
-	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, 0);
+	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, -1);
 	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
@@ -1182,7 +1190,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	ssize_t bremain = len, blen;
 	int max_segs = 48;
 	int nr_segs = 0;
-
+	int qid;
 	// printk("convert bytes:%ld\n", ret);
 
 	// nd_rps_record_flow(sk);
@@ -1333,7 +1341,7 @@ found_ok_skb:
 		request->state = ND_DCOPY_RECV;
 		request->sk = sk;
 		request->clean_skb = (used + offset == skb->len);
-		request->io_cpu = dsk->receiver.nxt_dcopy_cpu * 4 + 12;
+		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
 		request->skb = skb;
 		request->offset = offset;
 		request->len = used;
@@ -1383,14 +1391,16 @@ queue_request:
 		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
 		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
 		// pr_info("queue request\n");
-		nd_dcopy_queue_request(request);
-
+		
+		qid = nd_dcopy_queue_request(request);
+		if(dsk->receiver.nxt_dcopy_cpu == -1)
+			dsk->receiver.nxt_dcopy_cpu = qid;
 		if(blen == 0 && bremain > 0) {
 			ssize_t bsize = bremain;
 			if(used + offset < skb->len) {
 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
 			} else {
-				dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 1) % nd_params.nd_num_dc_thread;
+				dsk->receiver.nxt_dcopy_cpu = -1;
 			}
 			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
