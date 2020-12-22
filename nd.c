@@ -246,6 +246,8 @@ static int sk_wait_data_copy(struct sock *sk, long *timeo)
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
 		nd_clean_dcopy_pages(sk);
+		schedule();
+		// schedule();
 		// nd_try_send_ack(sk, 1);
 		// add_wait_queue(sk_sleep(sk), &wait);
 		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
@@ -264,6 +266,7 @@ static int sk_wait_sender_data_copy(struct sock *sk, long *timeo)
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->sender.in_flight_copy_bytes) != 0) {
 		nd_push(sk, GFP_KERNEL);
+		schedule();
 		// nd_try_send_ack(sk, 1);
 		// add_wait_queue(sk_sleep(sk), &wait);
 		// sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
