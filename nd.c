@@ -1013,9 +1013,9 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 // 		spin_unlock(&sk_queue->lock);
 // }
 
-uint64_t bytes_recvd[32];
-extern u64 bytes_sent[8];
-extern int max_queue_length;
+// uint64_t bytes_recvd[32];
+// extern u64 bytes_sent[8];
+// extern int max_queue_length;
 void nd_destruct_sock(struct sock *sk)
 {
 
@@ -1032,14 +1032,14 @@ void nd_destruct_sock(struct sock *sk)
 	// 	kfree_skb(skb);
 	// }
 	WARN_ON(nsk->sender.pending_req);
-	pr_info("0: %llu\n", bytes_recvd[0]);
-	pr_info("4: %llu\n", bytes_recvd[4]);
-	pr_info("8: %llu\n", bytes_recvd[8]);
+	// pr_info("0: %llu\n", bytes_recvd[0]);
+	// pr_info("4: %llu\n", bytes_recvd[4]);
+	// pr_info("8: %llu\n", bytes_recvd[8]);
 
-	pr_info("byte sent 0: %llu\n", bytes_sent[0]);
-	pr_info("byte sent 1: %llu\n", bytes_sent[1]);
-	pr_info("byte sent 2: %llu\n", bytes_sent[2]);
-	pr_info("max queue length:%d\n", max_queue_length);
+	// pr_info("byte sent 0: %llu\n", bytes_sent[0]);
+	// pr_info("byte sent 1: %llu\n", bytes_sent[1]);
+	// pr_info("byte sent 2: %llu\n", bytes_sent[2]);
+	// pr_info("max queue length:%d\n", max_queue_length);
 	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	/* clean sk_forward_alloc*/
