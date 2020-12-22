@@ -1348,7 +1348,7 @@ found_ok_skb:
 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
 		request->iter = biter;
 
-		bytes_recvd[request->io_cpu] += request->len;
+		// bytes_recvd[request->io_cpu] += request->len;
 		// pr_info("request:%p\n", request);
 		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
 		// request->iter = msg->msg_iter;
