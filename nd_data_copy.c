@@ -64,26 +64,65 @@ nd_dcopy_fetch_request(struct nd_dcopy_queue *queue)
 	return req;
 }
 
-bool nd_dcopy_queue_request(struct nd_dcopy_request *req) {
-    struct nd_dcopy_queue* queue = &nd_dcopy_q[req->io_cpu];
+/* select smallest queue whose queue size is less than threshold first */
+int nd_dcopy_sche_sqf(void) {
+	struct nd_dcopy_queue *queue;
+	static u32 last_q = 0;
+	int i = 0, qid;
+	bool find = false;
+	for (i = 0; i < nd_params.nd_num_dc_thread; i++) {
+
+		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
+		queue =  &nd_dcopy_q[qid * 4 + 12];
+		// if(nd_params.nd_debug)
+		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
+		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size)
+			continue;
+		find = true;
+		last_q = qid;
+		break;
+		// return qid * 4 + 12;
+	}
+	if(!find) {
+		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
+		last_q = qid;
+	}
+	return last_q * 4 + 12;
+	// }
+	// return -1;
+}
+
+int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
+	int qid;
+    struct nd_dcopy_queue* queue;  
     bool empty = false;
-    
+    if(req->io_cpu >= 0){
+		qid = req->io_cpu;
+		queue = &nd_dcopy_q[req->io_cpu];
+	}
+	else {
+		qid = nd_dcopy_sche_sqf();
+		queue = &nd_dcopy_q[qid];
+	}
+	atomic_add(1, &queue->cur_queue_size);
+	// if(nd_params.nd_debug)
+	// 	pr_info("qid:%d\n",qid);
 	req->queue = queue;
     empty = llist_add(&req->lentry, &queue->req_list) &&
 		list_empty(&queue->copy_list) && !queue->request;
     
-	if (queue->io_cpu == smp_processor_id() &&
-	     empty && mutex_trylock(&queue->copy_mutex)) {
-		// queue->more_requests = !last;
-		nd_try_dcopy(queue);
-		// if(ret == -EAGAIN)
-		// 	queue->more_requests = false;
-		mutex_unlock(&queue->copy_mutex);
-	} else {
+	// if (queue->io_cpu == smp_processor_id() &&
+	//      empty && mutex_trylock(&queue->copy_mutex)) {
+	// 	// queue->more_requests = !last;
+	// 	nd_try_dcopy(queue);
+	// 	// if(ret == -EAGAIN)
+	// 	// 	queue->more_requests = false;
+	// 	mutex_unlock(&queue->copy_mutex);
+	// } else {
 		/* data packets always go here */	
 		queue_work_on(queue->io_cpu, nd_dcopy_wq, &queue->io_work);
-	}
-    return true;
+	// }
+    return qid;
 }
 
 void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
@@ -265,6 +304,7 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
 		nd_try_dcopy_send(req);
 	}
 	if(req->state == ND_DCOPY_DONE) {
+		atomic_dec(&queue->cur_queue_size);
 		nd_dcopy_free_request(req);
 		queue->request = NULL;
 	}
@@ -344,8 +384,9 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
+	queue->queue_size = 1;
 	// queue->queue_size = queue_size;
-	// atomic_set(&queue->cur_queue_size, 0);
+	atomic_set(&queue->cur_queue_size, 0);
 	return 0;
 }
 

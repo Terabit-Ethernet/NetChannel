@@ -257,27 +257,61 @@ done:
 	read_unlock(&sk->sk_callback_lock);
 }
 
+// u64 bytes_sent[8];
+// int max_queue_length;
+/* select mini queue whose queue size is less than threshold */
+int nd_conn_sche_smq(bool avoid_check) {
+	struct nd_conn_queue *queue;
+	static u32 last_q = 0;
+	int i = 0, qid;
+	for (i = 1; i < nd_params.nd_num_queue; i++) {
+
+		qid = (i + last_q) % (nd_params.nd_num_queue);
+		queue =  &nd_ctrl->queues[qid];
+		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
+			== queue->queue_size) {
+			continue;
+		}
+		last_q = qid;
+		return qid;
+	}
+	if(avoid_check) {
+		qid = (1 + last_q) % (nd_params.nd_num_queue);
+		queue =  &nd_ctrl->queues[qid];
+		atomic_add(1, &queue->cur_queue_size);
+		last_q = qid;
+		return last_q;
+	}
+	return -1;
+}
+
 bool nd_conn_queue_request(struct nd_conn_request *req,
 		bool sync, bool avoid_check)
 {
 	struct nd_conn_queue *queue = req->queue;
-	static u32 queue_id = 0;
+	// static u32 queue_id = 0;
 	bool empty;
 	int ret;
+	int qid = 0;
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		req->queue = &nd_ctrl->queues[(queue_id) % (nd_params.nd_num_queue)];
+		qid = nd_conn_sche_smq(avoid_check);
+		if(qid >= 0)
+			req->queue = &nd_ctrl->queues[qid];
+		else
+			return false;
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
-		queue_id += 1;
+		// queue_id += 1;
 	}
-	WARN_ON(req == NULL);
-	if(!avoid_check){
-		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
-		== queue->queue_size)
-			return false;
-	}
+	// bytes_sent[qid] += 1;
+	WARN_ON(req->queue == NULL);
+	// if(!avoid_check){
+	// 	if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
+	// 	== queue->queue_size)
+	// 		return false;
+	// }
 	empty = llist_add(&req->lentry, &queue->req_list) &&
 		list_empty(&queue->send_list) && !queue->request;
 
@@ -633,7 +667,7 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 			}
 			frag = &skb_shinfo(skb)->frags[fragidx];
 		}
-		if(fragidx == skb_shinfo(skb)->nr_frags - 1) {
+		if(fragidx == skb_shinfo(skb)->nr_frags - 1 && atomic_read(&queue->cur_queue_size) == 0) {
 			flags |= MSG_EOR;
 		} else {
 			flags |= MSG_MORE;
@@ -692,6 +726,8 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 	if (req->state == ND_CONN_SEND_DATA) {
 		// printk("send data pdu\n");
 		ret = nd_conn_try_send_data_pdu(req);
+		// if(max_queue_length < atomic_read(&queue->cur_queue_size))
+		// 	max_queue_length = atomic_read(&queue->cur_queue_size);
 		if (ret <= 0)
 			goto done;
 		if (ret == 1) {
@@ -727,6 +763,9 @@ void nd_conn_io_work(struct work_struct *w)
 	unsigned long deadline = jiffies + msecs_to_jiffies(1);
 	int ret;
 	bool pending;
+	// int bufsize;
+	// int optlen = sizeof(bufsize);
+	// pr_info("queue size:%u\n", atomic_read(&queue->cur_queue_size));
 	do {
 		int result;
 		pending = false;
@@ -748,6 +787,11 @@ void nd_conn_io_work(struct work_struct *w)
 			break;
 
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
+	// pr_info("queue size after:%u\n", atomic_read(&queue->cur_queue_size));
+	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
+	// 	(char *)&bufsize, &optlen);
+	// pr_info("ret value:%d\n", ret);
+	// pr_info("buffer size receive:%d\n", bufsize);
 	if(pending)
 		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	nd_conn_wake_up_all_socks(queue->ctrl);
@@ -798,7 +842,8 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	struct nd_conn_queue *queue = &ctrl->queues[qid];
 	struct linger sol = { .l_onoff = 1, .l_linger = 0 };
 	int ret, opt, n;
-
+	int bufsize = 1000000;
+	int optlen = sizeof(bufsize);
 	queue->ctrl = ctrl;
     init_llist_head(&queue->req_list);
 	INIT_LIST_HEAD(&queue->send_list);
@@ -866,6 +911,13 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	// if (ctrl->opts->tos >= 0)
 	// 	ip_sock_set_tos(queue->sock->sk, ctrl->opts->tos);
     // io cpu might be need to be changed later
+	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
+	// 	(char *)&bufsize, &optlen);
+	// pr_info("ret value:%d\n", ret);
+	// pr_info("buffer size sender:%d\n", bufsize);
+	// bufsize = 4000000;
+	// ret = kernel_setsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
+	// 		(char *)&bufsize, sizeof(bufsize));
 	queue->sock->sk->sk_allocation = GFP_ATOMIC;
 	if (!qid)
 		n = 0;

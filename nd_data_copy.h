@@ -61,6 +61,9 @@ struct nd_dcopy_queue {
 
     struct nd_dcopy_request *request;
     size_t			offset;
+	int queue_size;
+	atomic_t	cur_queue_size;
+
 };
 
 // inline void nd_init_data_copy_request(struct nd_dcopy_request *request) {
@@ -69,7 +72,7 @@ struct nd_dcopy_queue {
 //     // init_llist_head
 // }
 
-bool nd_dcopy_queue_request(struct nd_dcopy_request *req);
+int nd_dcopy_queue_request(struct nd_dcopy_request *req);
 int nd_try_dcopy(struct nd_dcopy_queue *queue);
 void nd_dcopy_io_work(struct work_struct *w);
 void nd_dcopy_flush_req_list(struct nd_dcopy_queue *queue);
