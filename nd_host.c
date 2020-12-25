@@ -264,7 +264,7 @@ int nd_conn_sche_smq(bool avoid_check) {
 	struct nd_conn_queue *queue;
 	static u32 last_q = 0;
 	int i = 0, qid;
-	for (i = 1; i < nd_params.nd_num_queue; i++) {
+	for (i = 0; i < nd_params.nd_num_queue; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
@@ -842,8 +842,8 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	struct nd_conn_queue *queue = &ctrl->queues[qid];
 	struct linger sol = { .l_onoff = 1, .l_linger = 0 };
 	int ret, opt, n;
-	int bufsize = 1000000;
-	int optlen = sizeof(bufsize);
+	// int bufsize = 1000000;
+	// int optlen = sizeof(bufsize);
 	queue->ctrl = ctrl;
     init_llist_head(&queue->req_list);
 	INIT_LIST_HEAD(&queue->send_list);
@@ -1177,7 +1177,7 @@ out_uninit_ctrl:
 	if (ret > 0)
 		ret = -EIO;
 	// return ERR_PTR(ret);
-out_kfree_queues:
+// out_kfree_queues:
 	kfree(ctrl->queues);
 out_free_ctrl:
 	kfree(ctrl);
@@ -1197,10 +1197,10 @@ int nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.117";
+    opts->traddr = "192.168.10.116";
     opts->trsvcid = "9000";
     /* src address */
-    opts->host_traddr = "192.168.10.116";
+    opts->host_traddr = "192.168.10.117";
     // opts->host_port = "10000";
 
     opts->queue_size = 128;

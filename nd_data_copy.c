@@ -127,7 +127,7 @@ int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 
 void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
     struct nd_sock *nsk;
- 	int err, remaining_bytes, req_len;
+ 	int err, req_len;
 
 	nsk = nd_sk(req->sk);
 	err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->len);
@@ -167,7 +167,7 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
 		llist_add(&resp->lentry, &nsk->receiver.clean_page_list);
 		// nd_release_pages(req->bv_arr, true, req->max_segs);
 	} 
-    remaining_bytes = atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
+    atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
 // done:
 // 	return ret;
 }
@@ -194,7 +194,7 @@ static inline int nd_copy_to_page_nocache(struct sock *sk, struct iov_iter *from
 
 void nd_try_dcopy_send(struct nd_dcopy_request *req) {
     struct nd_sock *nsk;
- 	int err, remaining_bytes, req_len, i;
+ 	int err, req_len, i;
 	size_t copy;
 	struct page_frag *pfrag = &current->task_frag;
 	struct sk_buff *skb;
@@ -274,7 +274,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		req->state = ND_DCOPY_DONE;
 		nd_release_pages(req->bv_arr, true, req->max_segs);
 	}  
-	int size = atomic_sub_return(req->len - req_len, &nsk->sender.in_flight_copy_bytes);
+	atomic_sub_return(req->len - req_len, &nsk->sender.in_flight_copy_bytes);
 	req->len = req_len;
 // done:
 // 	return ret;

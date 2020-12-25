@@ -443,6 +443,7 @@ int nd_push(struct sock *sk, gfp_t flag) {
 	struct nd_conn_request* req;
 	struct ndhdr* hdr;
 	int ret = 0;
+	u32 seq;
 	
 	nd_fetch_dcopy_response(sk);
 	while(nd_snd_q_ready(sk) || nsk->sender.pending_req) {
@@ -516,7 +517,7 @@ queue_req:
 			ret = -EMSGSIZE;
 			break;
 		}
-		u32 seq = ND_SKB_CB(skb)->seq + skb->len;
+		seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
 		push_success = nd_conn_queue_request(req, false, false);
 		if(!push_success) {

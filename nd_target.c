@@ -345,8 +345,8 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 		     unsigned int orig_offset, size_t orig_len)
 {
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
-	struct sk_buff *skb, *list_skb, *list_skb_next;
-	bool state;
+	struct sk_buff *skb;
+	// bool state;
 	// skb_dump(KERN_WARNING, orig_skb, false);
 	// pr_info("orignal skb address:%p\n", orig_skb);
 	// pr_info("origianl skb has fraglist:%d\n", skb_has_frag_list(orig_skb));
@@ -470,14 +470,14 @@ int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 	desc.arg.data = queue;
 	desc.error = 0;
 	desc.count = budget; /* give more than one skb per call */
-recv:
+// recv:
 	lock_sock(sock->sk);
 	/* sk should be locked here, so okay to do read_sock */
 	ret = sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
 	release_sock(sock->sk);
 
 	(*recvs) += budget - desc.count;
-done:
+// done:
 	return ret;
 }
 
