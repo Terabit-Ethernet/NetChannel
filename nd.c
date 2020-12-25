@@ -239,6 +239,27 @@ void nd_clean_dcopy_pages(struct sock *sk) {
 	return;
 }
 
+void nd_fetch_dcopy_response(struct sock *sk) {
+	struct nd_sock *nsk = nd_sk(sk);
+	struct nd_dcopy_response *resp;
+	struct llist_node *node;
+	for (node = llist_del_all(&nsk->sender.response_list); node;) {
+		resp = llist_entry(node, struct nd_dcopy_response, lentry);
+		/* reuse tcp_rtx_queue due to the mess-up order */
+		nd_rbtree_insert(&sk->tcp_rtx_queue, resp->skb);
+		node = node->next;
+		sk_wmem_queued_add(sk, resp->skb->truesize);
+		sk_mem_charge(sk, resp->skb->truesize);
+		nsk->sender.pending_queue -= resp->skb->len;
+		WARN_ON(nsk->sender.pending_queue < 0);
+		kfree(resp);
+		if(nd_params.nd_debug) {
+			pr_info("push seq:%d\n", ND_SKB_CB(resp->skb)->seq);
+		}
+	}
+	return;
+}
+
 static int sk_wait_data_copy(struct sock *sk, long *timeo)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
@@ -266,6 +287,7 @@ static int sk_wait_sender_data_copy(struct sock *sk, long *timeo)
 	struct nd_sock* nsk = nd_sk(sk);
 	while(atomic_read(&nsk->sender.in_flight_copy_bytes) != 0) {
 		nd_push(sk, GFP_KERNEL);
+		// nd_fetch_dcopy_response(sk);
 		schedule();
 		// nd_try_send_ack(sk, 1);
 		// add_wait_queue(sk_sleep(sk), &wait);
@@ -382,23 +404,6 @@ int sk_wait_ack(struct sock *sk, long *timeo)
 }
 EXPORT_SYMBOL(sk_wait_ack);
 
-void nd_fetch_dcopy_response(struct sock *sk) {
-	struct nd_sock *nsk = nd_sk(sk);
-	struct nd_dcopy_response *resp;
-	struct llist_node *node;
-	for (node = llist_del_all(&nsk->sender.response_list); node;) {
-		resp = llist_entry(node, struct nd_dcopy_response, lentry);
-		/* reuse tcp_rtx_queue due to the mess-up order */
-		nd_rbtree_insert(&sk->tcp_rtx_queue, resp->skb);
-		node = node->next;
-		sk_wmem_queued_add(sk, resp->skb->truesize);
-		sk_mem_charge(sk, resp->skb->truesize);
-		nsk->sender.pending_queue -= resp->skb->len;
-		WARN_ON(nsk->sender.pending_queue < 0);
-		kfree(resp);
-	}
-	return;
-}
 
 
 struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
@@ -415,7 +420,11 @@ struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
 	} else if(rb_first(&sk->tcp_rtx_queue)){
 		struct rb_node *p = rb_first(&sk->tcp_rtx_queue);
 		skb = rb_to_skb(p);
-		nd_rtx_queue_unlink(skb, sk);
+		if(nsk->sender.snd_una == ND_SKB_CB(skb)->seq) {
+			nsk->sender.snd_una += skb->len;
+			nd_rtx_queue_unlink(skb, sk);
+		} else
+			skb = NULL;
 	}
 	return skb;
 }
@@ -458,6 +467,10 @@ int nd_push(struct sock *sk, gfp_t flag) {
 
 		/* construct nd_conn_request */
 		skb = nd_dequeue_snd_q(sk);
+		/* out-of-order pkt */
+		if(skb == NULL) {
+			return  -EMSGSIZE;
+		}
 		req = kzalloc(sizeof(*req), flag);
 		if(!req) {
 			WARN_ON(true);
@@ -509,10 +522,10 @@ queue_req:
 		if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
 			WARN_ON(nsk->sender.pending_req);
 			// WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
-			// if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30)) {
-			// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
-			// 	pr_info(" (ND_SKB_CB(skb)->seq + skb->len):%u\n",  (ND_SKB_CB(skb)->seq + skb->len));
-			// }
+			if(nd_params.nd_debug) {
+				pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
+				pr_info(" (ND_SKB_CB(skb)->seq + skb->len):%u\n",  (ND_SKB_CB(skb)->seq + skb->len));
+			}
 			nsk->sender.pending_req = req;
 			ret = -EMSGSIZE;
 			break;
@@ -1981,10 +1994,15 @@ void nd_destroy_sock(struct sock *sk)
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}      
 	printk("reach here:%d", __LINE__);
+	pr_info("up->sender.snd_una:%u\n", up->sender.snd_una);
+	pr_info("up->sender.grant_nxt:%u\n", up->sender.sd_grant_nxt);
+	pr_info("up->sender.write_seq:%u\n", up->sender.write_seq);
+	pr_info("up->receiver.grant_nxt:%u\n", up->receiver.grant_nxt);
 	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pendfing_frames(sk);
 	if(up->sender.pending_req) {
+		pr_info("up->sender.pending_req seq:%u\n", ND_SKB_CB(up->sender.pending_req->skb)->seq);
 		kfree_skb(up->sender.pending_req->skb);
 		kfree(up->sender.pending_req);
 		up->sender.pending_req = NULL;
