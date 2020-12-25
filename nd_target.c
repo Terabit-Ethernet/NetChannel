@@ -9,7 +9,7 @@ static struct ndt_conn_port * ndt_port;
 
 #define NDT_CONN_RECV_BUDGET		8
 #define NDT_CONN_SEND_BUDGET		8
-#define NDT_CONN_IO_WORK_BUDGET	64
+#define NDT_CONN_IO_WORK_BUDGET	128
 
 static int cur_io_cpu = 0;
 static inline int queue_cpu(struct ndt_conn_queue *queue)
@@ -278,6 +278,8 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	struct inet_sock *inet = inet_sk(sock->sk);
 	struct linger sol = { .l_onoff = 1, .l_linger = 0 };
 	int ret;
+	// int bufsize = 3145728;
+	// int optlen = sizeof(bufsize);
 
 	ret = kernel_getsockname(sock,
 		(struct sockaddr *)&queue->sockaddr);
@@ -302,6 +304,15 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	// if (so_priority > 0)
 	// 	sock_set_priority(sock->sk, so_priority);
 
+	/* set buff size */
+	// ret = kernel_setsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
+	// 	(char *)&bufsize, sizeof(bufsize));
+	// ret = kernel_setsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
+	// 		(char *)&bufsize, sizeof(bufsize));
+	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
+	// 	(char *)&bufsize, &optlen);
+	// pr_info("ret value:%d\n", ret);
+	// pr_info("buffer size receiver:%d\n", bufsize);
 	/* Set socket type of service */
 	if (inet->rcv_tos > 0) {
 		int tos = inet->rcv_tos;
@@ -327,41 +338,97 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 	return 0;
 }
 
+
+// bool  manual_create = true;
 // uint32_t max_pkts = 0;
 static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 		     unsigned int orig_offset, size_t orig_len)
 {
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb, *list_skb, *list_skb_next;
+	bool state;
 	// skb_dump(KERN_WARNING, orig_skb, false);
 	// pr_info("orignal skb address:%p\n", orig_skb);
 	// pr_info("origianl skb has fraglist:%d\n", skb_has_frag_list(orig_skb));
 	// pr_info("origianl skb fraglist:%p\n", skb_shinfo(orig_skb)->frag_list);
 	// if(max_pkts == 0) {
-		skb = skb_clone(orig_skb, GFP_KERNEL);
-		__skb_queue_tail(&queue->receive_queue, skb);
+	// if(manual_create && orig_len > 10000 && orig_offset == 0) {
+	// 	struct sk_buff* cloned = skb_copy(orig_skb, GFP_KERNEL);
+	// 	WARN_ON(!cloned);
+	// 	manual_create = false;
+	// 	int split_len = orig_len / 2;
+	// 	orig_offset = split_len;
+	// 	pskb_trim(cloned, split_len);
+
+	// 	__skb_queue_tail(&queue->receive_queue, cloned);
+	// 	ND_SKB_CB(cloned)->orig_offset = 0;
+	// }
+	// if(orig_offset > 0) {
+	// 	// pr_info("orig_offset:%d\n", orig_offset);
+	// 	// ND_SKB_CB(skb)->orig_offset = orig_offset;
+	// 	// skb = pskb_extract(orig_skb, orig_offset, orig_len, GFP_KERNEL);
+	// 	// WARN_ON(!skb);
+	// 	// state = pskb_may_pull(orig_skb, orig_offset);
+	// 	// pr_info("pskb may pull:%d\n", state);
+	// 	// __skb_pull(orig_skb, orig_offset);
+	// } else  {
+		
+	// 	// pr_info("offset:%d\n", orig_offset);
+	// 	// pr_info("len:%lmd\n", orig_len);
+
+	// 	// skb = pskb_extract(orig_skb, orig_offset, orig_len, GFP_KERNEL);
+	// 	// WARN_ON(!skb);
+
+	// 	// skb = skb_clone(orig_skb, GFP_KERNEL);
+	// }
+	
+	skb = skb_clone(orig_skb, GFP_KERNEL);
+	__skb_queue_tail(&queue->receive_queue, skb);
+
+	ND_SKB_CB(skb)->orig_offset = orig_offset;
+
 	// pr_info("skb has fraglist:%d\n", skb_has_frag_list(skb));
 	// pr_info("skb fraglist:%p\n", skb_shinfo(skb)->frag_list);
 	// max_pkts += orig_len;
 	// pr_info("max pkts:%u\n", max_pkts);
 	// skb_dump(KERN_WARNING, skb, true);
-
+		// pr_info("tcp skb cb seq:%u\n", TCP_SKB_CB(skb)->seq);
+		// if(skb_has_frag_list(orig_skb)) {
+		// 	list_skb = skb_shinfo(orig_skb)->frag_list;
+		// 	pr_info("origin list skb ref count:%d\n", refcount_read(&list_skb->users));
+		// 	pr_info("list_skb == list_skb:%d\n", list_skb == skb_shinfo(skb)->frag_list);
+		// 	kfree_skb_list(skb_shinfo(orig_skb)->frag_list);
+		// 	skb_shinfo(orig_skb)->frag_list = NULL;
+		// }
 		if(skb_has_frag_list(skb)) {
-			list_skb = skb_shinfo(skb)->frag_list;
-			skb_shinfo(skb)->frag_list = NULL;
+			// list_skb = skb_shinfo(skb)->frag_list;
+			// skb_shinfo(skb)->frag_list = NULL;
+			// pr_info("origin skb ref count:%d\n", refcount_read(&orig_skb->users));
+			// pr_info("len diff:%d %d\n", skb->len, orig_skb->len);
+			// pr_info("true size diff :%d %d\n", skb->truesize, orig_skb->truesize);
+			// pr_info("data len diff:%d %d\n", skb->data_len, orig_skb->data_len );
+		 	// skb_dump(KERN_WARNING, skb, false);
+			// pr_info("new ip header src:%u, old ip header src:%u\n", ip_hdr(skb)->saddr, ip_hdr(orig_skb)->saddr);
+		 	// pr_info("skb_end_offset:%u , %u\n", skb_end_offset(skb), skb_end_offset(orig_skb));
+			// pr_info("headlen:%u, %u\n", skb_headlen(skb), skb_headlen(orig_skb));
+			 // skb_dump(KERN_WARNING, orig_skb, false);
+
+			ND_SKB_CB(skb)->has_old_frag_list = 1;
+			// pr_info("skb seq at frag :%u\n", ND_SKB_CB(skb)->seq);
 			/* clone each skb */
-			while(list_skb) {
-				// pr_info("clone skb\n");
-				/* fraglist don't have to clone */
-				// list_skb_clone = skb_clone(list_skb, GFP_KERNEL);
-				// skb_dump(KERN_WARNING, list_skb, true);
-				list_skb_next = list_skb->next;
-				skb->truesize -= list_skb->truesize;
-				skb->data_len -= list_skb->len;
-				skb->len -= list_skb->len;
-				__skb_queue_tail(&queue->receive_queue, list_skb);
-				list_skb = list_skb_next;
-			}
+			// while(list_skb) {
+			// 	// pr_info("clone skb\n");
+			// 	/* fraglist don't have to clone */
+			// 	// list_skb_clone = skb_clone(list_skb, GFP_KERNEL);
+			// 	// skb_dump(KERN_WARNING, list_skb, true);
+			// 	pr_info("list skb ref count:%d\n", refcount_read(&list_skb->users));
+			// 	list_skb_next = list_skb->next;
+			// 	skb->truesize -= list_skb->truesize;
+			// 	skb->data_len -= list_skb->len;
+			// 	skb->len -= list_skb->len;
+			// 	__skb_queue_tail(&queue->receive_queue, list_skb);
+			// 	list_skb = list_skb_next;
+			// }
 			// pr_info("original skb data len:%d\n", skb->data_len);
 			// int calc_size = skb_headlen(skb), i;
 			// int calc_size = 0, i;
@@ -370,6 +437,8 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 			// }
 			// pr_info("real skb len:%d\n", calc_size);
 
+		} else {
+			ND_SKB_CB(skb)->has_old_frag_list = 0;
 		}
 	// 	max_pkts += 1;
 	// } else {
@@ -525,7 +594,7 @@ void ndt_conn_io_work(struct work_struct *w)
 		container_of(w, struct ndt_conn_queue, io_work);
 	bool pending;
 	int ret, ops = 0;
-
+	// int optlen, bufsize;
 	sock_rps_record_flow(queue->sock->sk);
 	do {
 		pending = false;
@@ -548,7 +617,10 @@ void ndt_conn_io_work(struct work_struct *w)
 			// return;
 
 	} while (pending && ops < NDT_CONN_IO_WORK_BUDGET);
-
+	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
+	// 	(char *)&bufsize, &optlen);
+	// pr_info("ret value:%d\n", ret);
+	// pr_info("buffer size receiver:%d\n", bufsize);
 	// /*
 	//  * We exahusted our budget, requeue our selves
 	//  */

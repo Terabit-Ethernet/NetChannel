@@ -49,7 +49,10 @@ struct nd_skb_cb {
 	__u32       total_len; /* this for aggregating packts */
 	__u32       count; /* the number of skbs in fraglist */
 	__u32 		total_size;
+	__u32 orig_offset;
+
 	struct sk_buff* tail; /* tail of skb's fraglist */
+	__u8 		has_old_frag_list;
 // 	union {
 // 		struct inet_skb_parm	h4;
 // #if IS_ENABLED(CONFIG_IPV6)
@@ -86,6 +89,8 @@ static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 		struct sock *sk = (struct sock*) nsk;
 		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq) - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
 		if(win > READ_ONCE(sk->sk_rcvbuf)) {
+			pr_info("win: %u\n", win);
+			pr_info("(u32)atomic_read(&nsk->receiver.in_flight_copy_bytes:%u\n", atomic_read(&nsk->receiver.in_flight_copy_bytes));
 			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
 			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 			WARN_ON(true);

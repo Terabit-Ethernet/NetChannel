@@ -623,11 +623,14 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 		/* send ack pkt for new window */
 		 nsk->receiver.grant_nxt = new_grant_nxt;
 		nd_conn_queue_request(construct_ack_req(sk, flag), sync, true);
-		// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+		if(nd_params.nd_debug)
+			pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 	} else {
-		// pr_info("new_grant_nxt: %u\n", new_grant_nxt);
-		// pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
-		// pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
+		// if(nd_params.nd_debug) {
+		// 	pr_info("new_grant_nxt: %u\n", new_grant_nxt);
+		// 	pr_info("old grant nxt:%u\n", nsk->receiver.grant_nxt);
+		// 	pr_info("nd_window_size(nsk):%u\n", nd_window_size(nsk));
+		// }
 	}
 }
 static void nd_drop(struct sock *sk, struct sk_buff *skb)
@@ -1345,13 +1348,19 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 		/* handle the first packet which contains the header */
 		count = ND_SKB_CB(skb)->count;
 		total_len = ND_SKB_CB(skb)->total_len;
-		
+
+
 		skb_shinfo(skb)->frag_list = NULL;
 		ND_SKB_CB(skb)->count = 0;
 		ND_SKB_CB(skb)->total_len = 0;
 		ND_SKB_CB(skb)->total_size = 0;
 		nd_v4_fill_cb(skb, iph, dh);
+		if(nd_params.nd_debug) {
+			pr_info("ND_SKB_CB(head)->seq = seq:%u\n", ND_SKB_CB(skb)->seq);
+			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
+		}
 		seq = ND_SKB_CB(skb)->end_seq;
+	
 		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
 		nd_data_queue(sk, skb);
 		
@@ -1362,7 +1371,11 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 			ND_SKB_CB(head)->end_seq = seq + head->len;
 			temp = head->next;
 			head->next = NULL;
-			// pr_info("ND_SKB_CB(head)->seq = seq:%u\n", seq);
+			if(nd_params.nd_debug) {
+				pr_info("ND_SKB_CB(head)->seq = seq:%u\n", seq);
+				// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(head)->end_seq);
+
+			}
 			// pr_info("ND_SKB_CB(head)->end_seq = seq + head->len:%u\n", seq + head->len);
 			/* update the seq */
 			seq = ND_SKB_CB(head)->end_seq;
@@ -1445,6 +1458,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	if (discard) {
 	    printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
 	    printk("discard packet:%d\n", __LINE__);
+		// skb_dump(KERN_WARNING, skb, false);
+
 		sk_drops_add(sk, skb);
 		kfree_skb(skb);
 	}
@@ -1619,6 +1634,37 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	return 0; 
 }
 
+/* handle the skb when they first inserted into the queue; note we have to do this in a delayed manner which allows 
+	TCP to clean the cloned skbs;
+*/
+static void nd_queue_origin_skb(struct sk_buff_head* queue, struct sk_buff *skb) {
+	struct sk_buff *list_skb, *list_skb_next, *list_skb_prev = NULL;
+	if(ND_SKB_CB(skb)->orig_offset) {
+		/* fraglist could change */
+	 	WARN_ON(!pskb_pull(skb, ND_SKB_CB(skb)->orig_offset));
+		// __skb_pull(skb, ND_SKB_CB(skb)->orig_offset);
+		ND_SKB_CB(skb)->orig_offset = 0;
+	}
+	if(ND_SKB_CB(skb)->has_old_frag_list) {
+		ND_SKB_CB(skb)->has_old_frag_list = 0;
+		list_skb = skb_shinfo(skb)->frag_list;
+		skb_shinfo(skb)->frag_list = NULL;
+		while(list_skb) {
+			WARN_ON(refcount_read(&list_skb->users) > 1);
+			list_skb_next = list_skb->next;
+			skb->truesize -= list_skb->truesize;
+			skb->data_len -= list_skb->len;
+			skb->len -= list_skb->len;
+			if(list_skb_prev == NULL)
+				 __skb_queue_head(queue, list_skb);
+			else
+				__skb_queue_after(queue, list_skb_prev, list_skb);
+			list_skb_prev = list_skb;
+			list_skb = list_skb_next;
+		}
+	}
+
+}
 int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes, bool coalesce) {
 	struct sk_buff* new_skb, *head;
 	int delta = 0;
@@ -1634,6 +1680,7 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		if(!new_skb)
 			return -ENOMEM;
 		WARN_ON(skb_cloned(new_skb));
+		nd_queue_origin_skb(queue, new_skb);
 		// pr_info("new_skb->len:%d\n", new_skb->len);
 		if(new_skb->len > need_bytes)
 			nd_split(queue, new_skb, need_bytes);
@@ -1711,6 +1758,8 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
 		WARN_ON(skb_cloned(skb));
+		nd_queue_origin_skb(queue, skb);
+
 		// pr_info("start processing\n");
 		// pr_info("skb->len:%d\n", skb->len);
 		if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
@@ -1770,6 +1819,11 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 		// skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
+		if(nh->type == 0) {
+			pr_info("receive skb:%u\n", ntohl(nh->seq));
+			pr_info("type:%d\n", nh->type);
+		}
+
 		// pr_info("receive new ack seq num :%u\n", ntohl(nh->grant_seq));
 		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
 		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));

@@ -237,8 +237,8 @@ void nd_params_init(struct nd_params* params) {
     params->num_iters = 5;
     params->iter_size = params->beta * params->control_pkt_rtt * 1000;
     params->epoch_size = params->num_iters * params->iter_size * params->alpha;
-    params->rmem_default = 12289600;
-    params->wmem_default = 12289600;
+    params->rmem_default = 20289600;
+    params->wmem_default = 20289600;
     params->short_flow_size = params->bdp;
     params->control_pkt_bdp = params->control_pkt_rtt * params->bandwidth * 1000 / 8;
     params->data_budget = 1000000;
