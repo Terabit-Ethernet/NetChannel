@@ -64,13 +64,13 @@ nd_dcopy_fetch_request(struct nd_dcopy_queue *queue)
 	return req;
 }
 
-/* select smallest queue whose queue size is less than threshold first */
-int nd_dcopy_sche_sqf(void) {
+/* round-robin */
+int nd_dcopy_sche_rr(void) {
 	struct nd_dcopy_queue *queue;
 	static u32 last_q = 0;
 	int i = 0, qid;
 	bool find = false;
-	for (i = 0; i < nd_params.nd_num_dc_thread; i++) {
+	for (i = 1; i <= nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
 		queue =  &nd_dcopy_q[qid * 4 + 12];
@@ -92,6 +92,35 @@ int nd_dcopy_sche_sqf(void) {
 	// return -1;
 }
 
+/* compact */
+int nd_dcopy_sche_compact(void) {
+	struct nd_dcopy_queue *queue;
+	static u32 last_q = 0;
+	int i = 0, qid;
+	bool find = false;
+	for (i = 0; i < nd_params.nd_num_dc_thread; i++) {
+
+		qid = (i) % (nd_params.nd_num_dc_thread);
+		queue =  &nd_dcopy_q[qid * 4 + 12];
+		// if(nd_params.nd_debug)
+		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
+		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size)
+			continue;
+		find = true;
+		last_q = qid;
+		break;
+		// return qid * 4 + 12;
+	}
+	/* if all queue is full; do round-robin */
+	if(!find) {
+		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
+		last_q = qid;
+	}
+	return last_q * 4 + 12;
+	// }
+	// return -1;
+}
+
 int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 	int qid;
     struct nd_dcopy_queue* queue;  
@@ -101,7 +130,7 @@ int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 		queue = &nd_dcopy_q[req->io_cpu];
 	}
 	else {
-		qid = nd_dcopy_sche_sqf();
+		qid = nd_dcopy_sche_compact();
 		queue = &nd_dcopy_q[qid];
 	}
 	atomic_add(1, &queue->cur_queue_size);
@@ -130,7 +159,7 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
  	int err, req_len;
 
 	nsk = nd_sk(req->sk);
-	err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->len);
+	err = skb_copy_datagram_iter(req->skb, req->offset, &req->iter, req->remain_len);
     if (err) {
     /* Exception. Bailout! */
 	    skb_dump(KERN_WARNING, req->skb, false);
@@ -144,7 +173,7 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
         WARN_ON(true);
     }
     // pr_info("err:%d\n", err);
-	req_len = req->len;
+	req_len = req->remain_len;
 // clean:
     // nd_dcopy_free_request(req);
 	req->state = ND_DCOPY_DONE;
@@ -199,7 +228,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 	struct page_frag *pfrag = &current->task_frag;
 	struct sk_buff *skb;
 	struct nd_dcopy_response *resp;
-	req_len = req->len; 
+	req_len = req->remain_len; 
 	nsk = nd_sk(req->sk);
 	WARN_ON(req_len == 0);
 	while(req_len > 0) {
@@ -274,8 +303,8 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		req->state = ND_DCOPY_DONE;
 		nd_release_pages(req->bv_arr, true, req->max_segs);
 	}  
-	atomic_sub_return(req->len - req_len, &nsk->sender.in_flight_copy_bytes);
-	req->len = req_len;
+	atomic_sub_return(req->remain_len - req_len, &nsk->sender.in_flight_copy_bytes);
+	req->remain_len = req_len;
 // done:
 // 	return ret;
 }
@@ -384,7 +413,7 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
-	queue->queue_size = 1;
+	queue->queue_size = 20;
 	// queue->queue_size = queue_size;
 	atomic_set(&queue->cur_queue_size, 0);
 	return 0;

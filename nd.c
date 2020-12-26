@@ -640,6 +640,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		request->sk = sk;
 		request->io_cpu = nsk->sender.nxt_dcopy_cpu;
 		request->len = blen;
+		request->remain_len = blen;
 		request->seq = nsk->sender.write_seq;
 		request->iter = biter;
 		request->bv_arr = bv_arr;
@@ -1362,6 +1363,7 @@ found_ok_skb:
 		request->skb = skb;
 		request->offset = offset;
 		request->len = used;
+		request->remain_len = used;
 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
 		request->iter = biter;
 

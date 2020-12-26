@@ -48,6 +48,7 @@ struct nd_dcopy_request {
 		u32 seq;
 	};
     int len;
+	int remain_len;
 	int max_segs;
 	struct nd_dcopy_queue *queue;
 };
