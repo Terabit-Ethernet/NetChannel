@@ -104,8 +104,10 @@ int nd_dcopy_sche_compact(void) {
 		queue =  &nd_dcopy_q[qid * 4 + 12];
 		// if(nd_params.nd_debug)
 		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
-		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size)
+		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size) {
+			// pr_info(" queue size is larger than limit:%d %d\n", i, atomic_read(&queue->cur_queue_size));
 			continue;
+		}
 		find = true;
 		last_q = qid;
 		break;
@@ -133,7 +135,7 @@ int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 		qid = nd_dcopy_sche_compact();
 		queue = &nd_dcopy_q[qid];
 	}
-	atomic_add(1, &queue->cur_queue_size);
+	atomic_add(req->remain_len, &queue->cur_queue_size);
 	// if(nd_params.nd_debug)
 	// 	pr_info("qid:%d\n",qid);
 	req->queue = queue;
@@ -197,6 +199,7 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
 		// nd_release_pages(req->bv_arr, true, req->max_segs);
 	} 
     atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
+	atomic_sub(req_len, &req->queue->cur_queue_size);
 // done:
 // 	return ret;
 }
@@ -304,6 +307,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		nd_release_pages(req->bv_arr, true, req->max_segs);
 	}  
 	atomic_sub_return(req->remain_len - req_len, &nsk->sender.in_flight_copy_bytes);
+	atomic_sub(req->remain_len - req_len, &req->queue->cur_queue_size);
 	req->remain_len = req_len;
 // done:
 // 	return ret;
@@ -333,7 +337,7 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
 		nd_try_dcopy_send(req);
 	}
 	if(req->state == ND_DCOPY_DONE) {
-		atomic_dec(&queue->cur_queue_size);
+		// atomic_dec(&queue->cur_queue_size);
 		nd_dcopy_free_request(req);
 		queue->request = NULL;
 	}
@@ -413,7 +417,7 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
-	queue->queue_size = 20;
+	queue->queue_size = 40 * 3 * 65536;
 	// queue->queue_size = queue_size;
 	atomic_set(&queue->cur_queue_size, 0);
 	return 0;
