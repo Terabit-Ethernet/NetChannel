@@ -259,12 +259,14 @@ done:
 
 // u64 bytes_sent[8];
 // int max_queue_length;
-/* select mini queue whose queue size is less than threshold */
-int nd_conn_sche_smq(bool avoid_check) {
+/* round-robin; will not select the previous one except if there is only one channel. */
+int nd_conn_sche_rr(bool avoid_check) {
 	struct nd_conn_queue *queue;
 	static u32 last_q = 0;
-	int i = 0, qid;
-	for (i = 0; i < nd_params.nd_num_queue; i++) {
+	int i = 1, qid;
+	if(nd_params.nd_num_queue == 1)
+		i = 0;
+	for (; i < nd_params.nd_num_queue; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
@@ -273,8 +275,49 @@ int nd_conn_sche_smq(bool avoid_check) {
 			continue;
 		}
 		last_q = qid;
-		return qid;
+		return last_q;
 	}
+	if(avoid_check) {
+		qid = (1 + last_q) % (nd_params.nd_num_queue);
+		queue =  &nd_ctrl->queues[qid];
+		atomic_add(1, &queue->cur_queue_size);
+		last_q = qid;
+		return last_q;
+	}
+	return -1;
+}
+
+/* stick on one queue if the queue size is below than threshold; */
+int nd_conn_sche_compact(bool avoid_check) {
+	struct nd_conn_queue *queue;
+	static u32 last_q = 0;
+	int i = 1, qid;
+	/* try low threshold first */
+	for (i = 0; i < nd_params.nd_num_queue; i++) {
+
+		qid = (i) % (nd_params.nd_num_queue);
+		queue =  &nd_ctrl->queues[qid];
+		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_low_thre) 
+			== queue->compact_low_thre) {
+			continue;
+		}
+		last_q = qid;
+		return last_q;
+	}
+	/* then try high threshold*/
+	for (i = 0; i < nd_params.nd_num_queue; i++) {
+
+		qid = (i) % (nd_params.nd_num_queue);
+		queue =  &nd_ctrl->queues[qid];
+		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_high_thre) 
+			== queue->compact_high_thre) {
+			continue;
+		}
+		last_q = qid;
+		return last_q;
+	}
+	/* when all queues become full and avoid check is true */
+	/* do rr */
 	if(avoid_check) {
 		qid = (1 + last_q) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
@@ -296,7 +339,7 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		qid = nd_conn_sche_smq(avoid_check);
+		qid = nd_conn_sche_compact(avoid_check);
 		if(qid >= 0)
 			req->queue = &nd_ctrl->queues[qid];
 		else
@@ -509,8 +552,7 @@ int __nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl)
 	int i, ret;
 
 	for (i = 0; i < ctrl->queue_count; i++) {
-		ret = nd_conn_alloc_queue(ctrl, i,
-				ctrl->sqsize + 1);
+		ret = nd_conn_alloc_queue(ctrl, i);
 		if (ret)
 			goto out_free_queues;
 	}
@@ -836,7 +878,7 @@ void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
 }
 
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
-		int qid, size_t queue_size)
+		int qid)
 {
 	// struct nvme_tcp_ctrl *ctrl = to_tcp_ctrl(nctrl);
 	struct nd_conn_queue *queue = &ctrl->queues[qid];
@@ -850,7 +892,9 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	// spin_lock_init(&queue->lock);
     mutex_init(&queue->send_mutex);
 	INIT_WORK(&queue->io_work, nd_conn_io_work);
-	queue->queue_size = queue_size;
+	queue->queue_size = ctrl->opts->queue_size;
+	queue->compact_low_thre = ctrl->opts->compact_low_thre;
+	queue->compact_high_thre = ctrl->opts->compact_high_thre;
 	atomic_set(&queue->cur_queue_size, 0);
 
 	// if (qid > 0)
@@ -1011,7 +1055,7 @@ int nd_conn_alloc_admin_queue(struct nd_conn_ctrl *ctrl)
 {
 	int ret;
 
-	ret = nd_conn_alloc_queue(ctrl, 0, ND_CONN_AQ_DEPTH);
+	ret = nd_conn_alloc_queue(ctrl, 0);
 	if (ret)
 		return ret;
 
@@ -1092,7 +1136,7 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 	ctrl->opts = opts;
 	ctrl->queue_count = opts->nr_io_queues + opts->nr_write_queues +
 				opts->nr_poll_queues + 1;
-	ctrl->sqsize = opts->queue_size - 1;
+	// ctrl->sqsize = opts->queue_size - 1;
 	// ctrl->ctrl.kato = opts->kato;
     // pr_info("queue count: %u\n", ctrl->queue_count);
 	// INIT_DELAYED_WORK(&ctrl->connect_work,
@@ -1203,7 +1247,9 @@ int nd_conn_init_module(void)
     opts->host_traddr = "192.168.10.117";
     // opts->host_port = "10000";
 
-    opts->queue_size = 128;
+    opts->queue_size = 8;
+	opts->compact_high_thre = 256;
+	opts->compact_low_thre = 8;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

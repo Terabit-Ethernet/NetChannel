@@ -48,6 +48,8 @@ struct nd_conn_ctrl_options {
 	char			*host_traddr;
     // char            *host_port;
 	size_t			queue_size;
+	size_t 			compact_low_thre;
+	size_t			compact_high_thre;
 	unsigned int		nr_io_queues;
 	// unsigned int		reconnect_delay;
 	// bool			discovery_nqn;
@@ -108,7 +110,7 @@ struct nd_conn_ctrl {
 	struct sockaddr_storage src_addr;
 	// struct nvme_ctrl	ctrl;
     struct nd_conn_ctrl_options *opts;
-    uint32_t sqsize;
+    // uint32_t sqsize;
 	struct mutex		teardown_lock;
 	// struct work_struct	err_work;
 	// struct delayed_work	connect_work;
@@ -140,6 +142,8 @@ struct nd_conn_queue {
 	struct nd_conn_request *request;
 	atomic_t	cur_queue_size;
 	int			queue_size;
+	int			compact_high_thre;
+	int 		compact_low_thre;
 	// int			cur_queue_size;
 	// size_t			cmnd_capsule_len;
 	struct nd_conn_ctrl	*ctrl;
@@ -190,7 +194,7 @@ void nd_conn_write_space(struct sock *sk);
 void nd_conn_state_change(struct sock *sk);
 void nd_conn_data_ready(struct sock *sk);
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
-		int qid, size_t queue_size);
+		int qid);
 bool nd_conn_queue_request(struct nd_conn_request *req,
 		bool sync, bool avoid_check);
 // void nd_conn_error_recovery_work(struct work_struct *work);
