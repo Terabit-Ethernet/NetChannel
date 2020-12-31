@@ -301,21 +301,25 @@ int nd_conn_sche_compact(bool avoid_check) {
 			== queue->compact_low_thre) {
 			continue;
 		}
+		WARN_ON(atomic_read(&queue->cur_queue_size) > queue->compact_low_thre);
+		// if(qid == 1){
+		// 	printk("qid 1 is being used\n");
+		// }
 		last_q = qid;
 		return last_q;
 	}
 	/* then try high threshold*/
-	for (i = 0; i < nd_params.nd_num_queue; i++) {
+	// for (i = 0; i < nd_params.nd_num_queue; i++) {
 
-		qid = (i) % (nd_params.nd_num_queue);
-		queue =  &nd_ctrl->queues[qid];
-		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_high_thre) 
-			== queue->compact_high_thre) {
-			continue;
-		}
-		last_q = qid;
-		return last_q;
-	}
+	// 	qid = (i) % (nd_params.nd_num_queue);
+	// 	queue =  &nd_ctrl->queues[qid];
+	// 	if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_high_thre) 
+	// 		== queue->compact_high_thre) {
+	// 		continue;
+	// 	}
+	// 	last_q = qid;
+	// 	return last_q;
+	// }
 	/* when all queues become full and avoid check is true */
 	/* do rr */
 	if(avoid_check) {
@@ -772,9 +776,9 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 		// 	max_queue_length = atomic_read(&queue->cur_queue_size);
 		if (ret <= 0)
 			goto done;
-		if (ret == 1) {
-			atomic_dec(&queue->cur_queue_size);
-		}
+		// if (ret == 1) {
+		// 	atomic_dec(&queue->cur_queue_size);
+		// }
 	}
 
 	// if (req->state == NVME_TCP_SEND_DATA) {
@@ -783,6 +787,7 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 	// 		goto done;
 	// }
 clean:
+	atomic_dec(&queue->cur_queue_size);
 	nd_conn_done_send_req(queue);
 	// if (req->state == NVME_TCP_SEND_DDGST)
 	// 	ret = nvme_tcp_try_send_ddgst(req);
@@ -1241,15 +1246,15 @@ int nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.116";
+    opts->traddr = "192.168.10.117";
     opts->trsvcid = "9000";
     /* src address */
-    opts->host_traddr = "192.168.10.117";
+    opts->host_traddr = "192.168.10.116";
     // opts->host_port = "10000";
 
-    opts->queue_size = 8;
+    opts->queue_size = 128;
 	opts->compact_high_thre = 256;
-	opts->compact_low_thre = 8;
+	opts->compact_low_thre = 16;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);
