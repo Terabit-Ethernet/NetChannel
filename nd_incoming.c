@@ -718,7 +718,7 @@ static bool nd_try_coalesce(struct sock *sk,
 	return true;
 }
 
-
+// u32 ofo_queue = 0;
 static int nd_data_queue_ofo(struct sock *sk, struct sk_buff *skb)
 {
 	struct nd_sock *dsk = nd_sk(sk);
@@ -846,6 +846,8 @@ end:
 		skb->destructor = nd_rfree;
 		atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 		// sk_mem_charge(sk, skb->truesize);
+		// ofo_queue += skb->len;
+		// pr_info("ofo queue length:%u\n", ofo_queue);
 	}
 	return 0;
 	// if (skb) {
@@ -863,12 +865,14 @@ static void nd_ofo_queue(struct sock *sk)
 	// bool fin;
 	struct sk_buff *skb, *tail;
 	struct rb_node *p;
-
+	// bool first = true;
+	// u32 start = 0, end = 0;
 	p = rb_first(&dsk->out_of_order_queue);
 	while (p) {
 		skb = rb_to_skb(p);
 		if (after(ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt))
 			break;
+		// ofo_queue -= skb->len;
 
 		// if (before(ND_SKB_CB(skb)->seq, dsack_high)) {
 		// 	// __u32 dsack = dsack_high;
@@ -878,13 +882,16 @@ static void nd_ofo_queue(struct sock *sk)
 		// }
 		p = rb_next(p);
 		rb_erase(&skb->rbnode, &dsk->out_of_order_queue);
-
 		if (unlikely(!after(ND_SKB_CB(skb)->end_seq, dsk->receiver.rcv_nxt))) {
 			nd_rmem_free_skb(sk, skb);
 			nd_drop(sk, skb);
 			continue;
 		}
-
+		// if (first) {
+		// 	first = false;
+		// 	start =  ND_SKB_CB(skb)->seq;
+		// }
+		// end = ND_SKB_CB(skb)->end_seq;
 		tail = skb_peek_tail(&sk->sk_receive_queue);
 		eaten = tail && nd_try_coalesce(sk, tail, skb, &fragstolen);
 		nd_rcv_nxt_update(dsk, ND_SKB_CB(skb)->end_seq);
@@ -902,6 +909,8 @@ static void nd_ofo_queue(struct sock *sk)
 		// 	break;
 		// }
 	}
+	// if(end - start != 0)
+	// 	pr_info("diff:%d\n", end - start);
 }
 
 // void nd_data_ready(struct sock *sk)
@@ -1411,6 +1420,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	dh =  nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
+	WARN_ON(skb_dst(skb) == NULL);
+	WARN_ON(skb_dst(skb)->dev == NULL);
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(dh), dh->source,
             dh->dest, sdif, &refcounted);
     if(!sk) {
@@ -1644,6 +1655,7 @@ static void nd_queue_origin_skb(struct sk_buff_head* queue, struct sk_buff *skb)
 	 	WARN_ON(!pskb_pull(skb, ND_SKB_CB(skb)->orig_offset));
 		// __skb_pull(skb, ND_SKB_CB(skb)->orig_offset);
 		ND_SKB_CB(skb)->orig_offset = 0;
+		pr_info("handle non-offset pkt \n");
 	}
 	if(ND_SKB_CB(skb)->has_old_frag_list) {
 		ND_SKB_CB(skb)->has_old_frag_list = 0;
@@ -1746,7 +1758,8 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		return -ENOMEM;
 	return 0;
 }
-void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
+void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue) {
+	struct sock *sk = ndt_queue->sock->sk;
 	struct sk_buff *skb;
 	struct ndhdr* nh;
 	int need_bytes = 0;
@@ -1826,7 +1839,8 @@ void pass_to_vs_layer(struct sock* sk, struct sk_buff_head* queue) {
 
 		// pr_info("receive new ack seq num :%u\n", ntohl(nh->grant_seq));
 		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
-		skb_dst_set_noref(skb, READ_ONCE(sk->sk_rx_dst));
+		WARN_ON(READ_ONCE(sk->sk_rx_dst) == NULL);
+		skb_dst_set_noref(skb, ndt_queue->dst);
 		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
 		// if(nh->type == DATA) {
 		// 	printk("skb: nh segment length:%d\n", nh->segment_length);

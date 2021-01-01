@@ -300,6 +300,14 @@ int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue)
 		(char *)&sol, sizeof(sol));
 	if (ret)
 		return ret;
+	
+	WARN_ON( READ_ONCE(sock->sk->sk_rx_dst) == NULL);
+	if(queue->dst == NULL && READ_ONCE(sock->sk->sk_rx_dst) != NULL) {
+		queue->dst = READ_ONCE(sock->sk->sk_rx_dst);
+		dst_hold(queue->dst);
+	}
+	// pr_info("sk dst is null or not:%d\n", READ_ONCE(sock->sk->sk_rx_dst) != NULL);
+
 	// sock_no_linger(sock->sk);
 	// if (so_priority > 0)
 	// 	sock_set_priority(sock->sk, so_priority);
@@ -381,7 +389,7 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 
 	// 	// skb = skb_clone(orig_skb, GFP_KERNEL);
 	// }
-	
+	// WARN_ON(skb_dst(orig_skb) == NULL);
 	skb = skb_clone(orig_skb, GFP_KERNEL);
 	__skb_queue_tail(&queue->receive_queue, skb);
 
@@ -608,7 +616,7 @@ void ndt_conn_io_work(struct work_struct *w)
 			return;
 		}
 		/* parsing packet; not sure if it should includes in while loop when accounting budget */
-		pass_to_vs_layer(queue->sock->sk, &queue->receive_queue);
+		pass_to_vs_layer(queue, &queue->receive_queue);
 		// pr_info("ops:%d\n", ops);
 		// ret = ndt_conn_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
@@ -738,8 +746,11 @@ void ndt_conn_exit(void)
 
 	flush_scheduled_work();
 	mutex_lock(&ndt_conn_queue_mutex);
-	list_for_each_entry(queue, &ndt_conn_queue_list, queue_list)
+	list_for_each_entry(queue, &ndt_conn_queue_list, queue_list) {
 		kernel_sock_shutdown(queue->sock, SHUT_RDWR);
+		dst_release(queue->dst);
+		queue->dst = NULL;
+	}
 	mutex_unlock(&ndt_conn_queue_mutex);
 	flush_scheduled_work();
 

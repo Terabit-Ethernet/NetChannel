@@ -60,6 +60,7 @@ struct ndt_conn_queue {
 	int			offset;
 	int			left;
 	enum ndt_conn_recv_state rcv_state;
+	struct dst_entry *dst;
 	// struct nvmet_tcp_cmd	*cmd;
 	// union nvme_tcp_pdu	pdu;
 	// struct vs_hdr vs_hdr;
