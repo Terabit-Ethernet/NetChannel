@@ -1140,7 +1140,7 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 	INIT_LIST_HEAD(&ctrl->sock_wait_list);
 	ctrl->opts = opts;
 	ctrl->queue_count = opts->nr_io_queues + opts->nr_write_queues +
-				opts->nr_poll_queues + 1;
+				opts->nr_poll_queues;
 	// ctrl->sqsize = opts->queue_size - 1;
 	// ctrl->ctrl.kato = opts->kato;
     // pr_info("queue count: %u\n", ctrl->queue_count);
@@ -1242,7 +1242,7 @@ int nd_conn_init_module(void)
 		return -ENOMEM;
     /* initialiize the option */
     // pr_info("HCTX_MAX_TYPES: %d\n", HCTX_MAX_TYPES);
-    opts->nr_io_queues = 8;
+    opts->nr_io_queues = nd_params.num_nd_queues;
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */

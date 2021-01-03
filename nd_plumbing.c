@@ -234,6 +234,7 @@ void nd_params_init(struct nd_params* params) {
     params->local_ip = "192.168.10.117";
     params->remote_ip = "192.168.10.116";
     params->data_cpy_core = 12;
+    params->num_nd_queues = 8;
     params->alpha = 2;
     params->beta = 5;
     params->min_iter = 1;

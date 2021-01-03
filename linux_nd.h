@@ -112,6 +112,7 @@ struct nd_params {
 	char* local_ip;
 	char* remote_ip;
 	int data_cpy_core;
+	int num_nd_queues;
 };
 
 struct nd_pq {

@@ -41,7 +41,7 @@
 #include <netinet/ip.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
+#include <inttypes.h>
 #include <thread>
 #include <vector>
 // #include "homa.h"
@@ -354,7 +354,7 @@ void tcp_server(int port)
 void nd_connection(int fd, struct sockaddr_in source)
 {
 	// int flag = 1;
-	char buffer[2000000];
+	char *buffer = (char*)malloc(250000000);
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
@@ -372,16 +372,26 @@ void nd_connection(int fd, struct sockaddr_in source)
 	    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
+	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
 		int result = read(fd, buffer,
-				sizeof(buffer));
+				25000000);
+		// setbuf(stdout, NULL);
+		// printf("result:%d\n", result);
+		
+		// printf("'%.*s'\n", result, buffer);
+		// fflush(stdout);
+		// while(1) {
+					
+		// }
 		if (result < 0) {
 			// if (errno == ECONNRESET)
 				break;
-
+		
 			// return;
 		}
-		// printf("buffer:%s\n", buffer);
+		// if (total_length == 0)
+		// 	printf("buffer:%s\n", buffer);
 		total_length += result;
 		count++;
 		if (result == 0)
@@ -447,10 +457,12 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// 	};
 		// }
 	}
+		printf( "total len:%" PRIu64 "\n", total_length);
 		printf("done!");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);
+	free(buffer);
 }
 
 /**
