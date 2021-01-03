@@ -12,12 +12,12 @@ Assuming we have two servers,
    ```
    make
    sudo insmod nd_module.ko
-   '''
+   ```
 3. Initiate the number of ND Conns and data copy cores for being used.
    ```
    sudo ./run_module.sh
    ```
-4. Compile sample apps from /util
+4. Compile sample apps from /util; Make sure you change the host IP adddress inside the netdriver_test.cc
    ```
    cd util
    make
