@@ -343,7 +343,7 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		qid = nd_conn_sche_compact(avoid_check);
+		qid = nd_conn_sche_rr(avoid_check);
 		if(qid >= 0)
 			req->queue = &nd_ctrl->queues[qid];
 		else
@@ -1246,10 +1246,10 @@ int nd_conn_init_module(void)
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */
-    opts->traddr = "192.168.10.117";
+    opts->traddr = nd_params.remote_ip;
     opts->trsvcid = "9000";
     /* src address */
-    opts->host_traddr = "192.168.10.116";
+    opts->host_traddr = nd_params.local_ip;
     // opts->host_port = "10000";
 
     opts->queue_size = 128;

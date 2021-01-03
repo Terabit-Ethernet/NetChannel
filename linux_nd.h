@@ -108,6 +108,10 @@ struct nd_params {
 	int data_budget;
 	int nd_num_queue;
 	int nd_num_dc_thread;
+
+	char* local_ip;
+	char* remote_ip;
+	int data_cpy_core;
 };
 
 struct nd_pq {

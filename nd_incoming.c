@@ -1688,7 +1688,7 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		/* skb_split only handles non-header part */
 		fragstolen = false;
 		delta = 0;
-		new_skb =  skb_dequeue(queue);
+		new_skb =  __skb_dequeue(queue);
 		if(!new_skb)
 			return -ENOMEM;
 		WARN_ON(skb_cloned(new_skb));
@@ -1767,7 +1767,7 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 	struct iphdr* iph;
 	// printk("pass_to_vs_layer core:%d\n", raw_smp_processor_id());
 	WARN_ON(queue == NULL);
-	while ((skb = skb_dequeue(queue)) != NULL) {
+	while ((skb = __skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
 		WARN_ON(skb_cloned(skb));

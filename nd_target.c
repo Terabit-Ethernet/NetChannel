@@ -724,7 +724,7 @@ int __init ndt_conn_init(void)
 	if (!ndt_conn_wq)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
-	ndt_port->local_ip = "192.168.10.117";
+	ndt_port->local_ip = nd_params.local_ip;
 	ndt_port->local_port = "9000";
 	ret = ndt_init_conn_port(ndt_port);
 	// ret = nvmet_register_transport(&nvmet_tcp_ops);

@@ -227,10 +227,13 @@ void nd_params_init(struct nd_params* params) {
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
     params->rtt = 50;
-    params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 14;
-    // params->bdp = 500000;
+//     params->bdp  = params->rtt * params->bandwidth / 8 * 1000 * 14;
+    params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
+    params->local_ip = "192.168.10.117";
+    params->remote_ip = "192.168.10.116";
+    params->data_cpy_core = 12;
     params->alpha = 2;
     params->beta = 5;
     params->min_iter = 1;

@@ -73,7 +73,7 @@ int nd_dcopy_sche_rr(void) {
 	for (i = 1; i <= nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
-		queue =  &nd_dcopy_q[qid * 4 + 12];
+		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
 		// if(nd_params.nd_debug)
 		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
 		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size)
@@ -81,13 +81,13 @@ int nd_dcopy_sche_rr(void) {
 		find = true;
 		last_q = qid;
 		break;
-		// return qid * 4 + 12;
+		// return qid * 4 + nd_params.data_cpy_core;
 	}
 	if(!find) {
 		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
 		last_q = qid;
 	}
-	return last_q * 4 + 12;
+	return last_q * 4 + nd_params.data_cpy_core;
 	// }
 	// return -1;
 }
@@ -101,7 +101,7 @@ int nd_dcopy_sche_compact(void) {
 	for (i = 0; i < nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i) % (nd_params.nd_num_dc_thread);
-		queue =  &nd_dcopy_q[qid * 4 + 12];
+		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
 		// if(nd_params.nd_debug)
 		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
 		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size) {
@@ -111,14 +111,14 @@ int nd_dcopy_sche_compact(void) {
 		find = true;
 		last_q = qid;
 		break;
-		// return qid * 4 + 12;
+		// return qid * 4 + nd_params.data_cpy_core;
 	}
 	/* if all queue is full; do round-robin */
 	if(!find) {
 		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
 		last_q = qid;
 	}
-	return last_q * 4 + 12;
+	return last_q * 4 + nd_params.data_cpy_core;
 	// }
 	// return -1;
 }
@@ -132,7 +132,7 @@ int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 		queue = &nd_dcopy_q[req->io_cpu];
 	}
 	else {
-		qid = nd_dcopy_sche_compact();
+		qid = nd_dcopy_sche_rr();
 		queue = &nd_dcopy_q[qid];
 	}
 	atomic_add(req->remain_len, &queue->cur_queue_size);
@@ -417,7 +417,7 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
-	queue->queue_size = 40 * 3 * 65536;
+	queue->queue_size = 128 * 65536;
 	// queue->queue_size = queue_size;
 	atomic_set(&queue->cur_queue_size, 0);
 	return 0;
