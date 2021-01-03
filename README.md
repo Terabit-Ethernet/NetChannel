@@ -6,7 +6,7 @@ Assuming we have two servers,
     params->remote_ip = "192.168.10.117";
     params->data_cpy_core = 12;
     params->num_nd_queues = 8;
-   '''
+   ```
 2. Compile and Load net-driver kernel module:
  
    ```
