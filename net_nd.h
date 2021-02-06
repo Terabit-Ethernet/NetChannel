@@ -90,6 +90,8 @@ static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq) - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
 		if(win > READ_ONCE(sk->sk_rcvbuf)) {
 			pr_info("win: %u\n", win);
+			pr_info("READ_ONCE(sk->sk_rcvbuf):%d\n", READ_ONCE(sk->sk_rcvbuf));
+			pr_info("grant nxt:%u\n", nsk->receiver.grant_nxt);
 			pr_info("(u32)atomic_read(&nsk->receiver.in_flight_copy_bytes:%u\n", atomic_read(&nsk->receiver.in_flight_copy_bytes));
 			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
 			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);

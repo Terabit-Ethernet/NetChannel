@@ -577,6 +577,7 @@ static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
 	return true;
 }
 /* copy from kcm sendmsg */
+extern struct nd_conn_ctrl* nd_ctrl;
 static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct nd_sock *nsk = nd_sk(sk);
@@ -598,8 +599,6 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 	int nr_segs = 0;
 	// int pending = 0;
 	WARN_ON(msg->msg_iter.count != len);
-
-
 	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
 		err = nd_wait_for_connect(sk, &timeo);
 		if (err != 0)
@@ -1089,7 +1088,7 @@ int nd_init_sock(struct sock *sk)
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
-	WRITE_ONCE(dsk->default_win , nd_params.bdp);
+	WRITE_ONCE(dsk->default_win , min_t(uint32_t,nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
 	// WRITE_ONCE(dsk->grant_nxt, 0);
 	// WRITE_ONCE(dsk->prev_grant_nxt, 0);
 	// WRITE_ONCE(dsk->new_grant_nxt, 0);
@@ -1934,8 +1933,11 @@ int nd_rcv(struct sk_buff *skb)
 	// skb_dump(KERN_WARNING, skb, false);
 	struct ndhdr* dh;
 	// printk("skb->len:%d\n", skb->len);
+	WARN_ON(skb == NULL);
+
 	if (!pskb_may_pull(skb, sizeof(struct ndhdr)))
 		goto drop;		/* No space for header. */
+
 	dh = nd_hdr(skb);
 	// printk("dh == NULL?: %d\n", dh == NULL);
 	// printk("receive pkt: %d\n", dh->type);
