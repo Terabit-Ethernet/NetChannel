@@ -1104,7 +1104,6 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.snd_una, 0);
 	WRITE_ONCE(dsk->sender.pending_req, NULL);
 	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, -1);	
-	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
 	WRITE_ONCE(dsk->sender.pending_queue, 0);
     init_llist_head(&dsk->sender.response_list);
 
@@ -1132,6 +1131,8 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
 	WRITE_ONCE(sk->sk_rcvbuf, nd_params.rmem_default);
 	WRITE_ONCE(dsk->default_win , min_t(uint32_t, nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
+	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
+
 	printk("dsk->default_win:%u\n", dsk->default_win);
 	kfree_skb(sk->sk_tx_skb_cache);
 	sk->sk_tx_skb_cache = NULL;
