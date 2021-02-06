@@ -836,9 +836,12 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
-	uint32_t buffer_size = 65535 * 100;
+	uint32_t buffer_size = 250000000;
 	uint64_t flow_size = 100000000000;
 	uint64_t write_len = 0;
+	// setbuf(stdout, NULL);
+	// printf("buffer size:%d\n", buffer_size);
+	//  printf("'%.*s'\n", buffer_size, buffer);
 	// int i = 0;
 	// uint32_t offset = write_len % flow_size;
 
@@ -1111,8 +1114,9 @@ int main(int argc, char** argv)
 	struct sockaddr *dest;
 	struct addrinfo hints;
 	char *host, *port_name;
-	char buffer[8000000] = "abcdefgh\n";
-	buffer[63999] = 'H';
+	// char buffer[8000000] = "abcdefgh\n";
+	char *buffer = (char*)malloc(250000000);
+	// buffer[63999] = 'H';
 	int status;
 	int fd;
 	int i;
@@ -1121,8 +1125,8 @@ int main(int argc, char** argv)
 		print_help(argv[0]);
 		exit(0);
 	}
-	// for (i = 0; i < 1000000; i++)
-	// 	buffer[i] = (i) % 26 + 'a';
+	// for (i = 0; i < 8000000; i++)
+	// 	buffer[i] = (rand()) % 26 + 'a';
 	if (argc < 3) {
 		printf("Usage: %s host:port [options] op op ...\n", argv[0]);
 		exit(1);
@@ -1264,7 +1268,7 @@ int main(int argc, char** argv)
 		close(fd);
 		printf("i:%d\n", i);
 	}
-
+	free(buffer);
 	exit(0);
 }
 

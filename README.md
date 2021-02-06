@@ -1,23 +1,38 @@
 # net-driver_impl
 Assuming we have two servers,
-1. Compile and Load net-driver kernel module:
+1. Change the IP address inside the nd_plumbing.c file. data_cpy_core refers to the first core for doing the data copy. In this case, core 12 will be the first core  doing the data copy. num_nd_queues specifies the total number of ND conns.
+   ```
+    params->local_ip = "192.168.10.116";
+    params->remote_ip = "192.168.10.117";
+    params->data_cpy_core = 12;
+    params->num_nd_queues = 8;
+   ```
+2. Compile and Load net-driver kernel module:
  
    ```
    make
    sudo insmod nd_module.ko
-   '''
-2. Initiate ND Conns
+   ```
+3. Initiate the number of ND Conns and data copy cores for being used.
    ```
    sudo ./run_module.sh
    ```
-3. Compile sample apps from /util
-4. In the server side, 
+4. Compile sample apps from /util; Make sure you change the host IP adddress inside the netdriver_test.cc
+   ```
+   cd util
+   make
+   ```
+5. In the server side, 
    ```
    taskset -c $CORE ./server --ip 192.168.10.117 --port 4000
    ```
-5. In the client side,
+6. In the client side,
   ```
   sudo -s
   taskset -c 28 ./netdriver_test 192.168.10.117:4000 --sp 1000 --count 10  ndping
   ```
-6. 
+7. You can tune the number of ND connections and the data copy cores:
+ ```
+ sudo sysctl /net/nd/nd_num_queue=1
+ sudo sysctl /net/nd/nd_num_dc_thread=1
+ ```
