@@ -1088,7 +1088,6 @@ int nd_init_sock(struct sock *sk)
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
-	WRITE_ONCE(dsk->default_win , min_t(uint32_t,nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
 	// WRITE_ONCE(dsk->grant_nxt, 0);
 	// WRITE_ONCE(dsk->prev_grant_nxt, 0);
 	// WRITE_ONCE(dsk->new_grant_nxt, 0);
@@ -1132,6 +1131,7 @@ int nd_init_sock(struct sock *sk)
 
 	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
 	WRITE_ONCE(sk->sk_rcvbuf, nd_params.rmem_default);
+	WRITE_ONCE(dsk->default_win , min_t(uint32_t,nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
 	kfree_skb(sk->sk_tx_skb_cache);
 	sk->sk_tx_skb_cache = NULL;
 	/* reuse tcp rtx queue*/
