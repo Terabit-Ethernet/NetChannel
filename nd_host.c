@@ -262,20 +262,32 @@ done:
 /* round-robin; will not select the previous one except if there is only one channel. */
 int nd_conn_sche_rr(bool avoid_check) {
 	struct nd_conn_queue *queue;
-	static u32 last_q = 0;
-	int i = 1, qid;
-	if(nd_params.nd_num_queue == 1)
-		i = 0;
+	/* cur_count tracks how many skbs has been sent for the current queue before going to the next queue */
+	static u32 last_q = 0, cur_count = 0;
+	int i = 0, qid = last_q;
+	// if(nd_params.nd_num_queue == 1)
+	// 	i = 0;
 	for (; i < nd_params.nd_num_queue; i++) {
-
-		qid = (i + last_q) % (nd_params.nd_num_queue);
+		/* select queue */
+		qid = (last_q + i) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
+		WARN_ON(cur_count >= queue->compact_low_thre);
+
 		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
 			== queue->queue_size) {
+			/* update the count */
+			cur_count = 0;
 			continue;
+		} else {
+			cur_count++;
 		}
 		last_q = qid;
-		return last_q;
+		/* advance to the next queue */
+		if(cur_count == queue->compact_low_thre) {
+			last_q = (last_q + 1) % (nd_params.nd_num_queue);
+			cur_count = 0;
+		}
+		return qid;
 	}
 	if(avoid_check) {
 		qid = (1 + last_q) % (nd_params.nd_num_queue);
@@ -871,7 +883,6 @@ void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
 
 void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
 	struct nd_sock *nsk; 
-	// pr_info("wake up all sock\n");
 	spin_lock_bh(&ctrl->sock_wait_lock);
 	list_for_each_entry(nsk, &ctrl->sock_wait_list, wait_list) {
 		WARN_ON(!nsk->wait_on_nd_conns);
@@ -1254,7 +1265,7 @@ int nd_conn_init_module(void)
 
     opts->queue_size = 128;
 	opts->compact_high_thre = 256;
-	opts->compact_low_thre = 16;
+	opts->compact_low_thre = 1;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

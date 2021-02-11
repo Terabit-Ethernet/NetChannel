@@ -552,6 +552,9 @@ void nd_tx_work(struct work_struct *w)
 	struct sock *sk = (struct sock*)nsk;
 	int err;
 	lock_sock(sk);
+	if(sk->sk_state == TCP_CLOSE) {
+		 goto out;
+	}
 	/* Primarily for SOCK_DGRAM sockets, also handle asynchronous tx
 	 * aborts
 	 */
@@ -565,7 +568,7 @@ void nd_tx_work(struct work_struct *w)
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		}
 	} 	
-// out:
+out:
 	release_sock(sk);
 }
 
@@ -2017,11 +2020,11 @@ void nd_destroy_sock(struct sock *sk)
 	nd_read_queue_purge(sk);
 	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 
+	release_sock(sk);
 	/* remove from sleep wait queue */
 	nd_conn_remove_sleep_sock(nd_ctrl, up);
 	cancel_work_sync(&up->tx_work);
 	/*  */
-	release_sock(sk);
 	// bh_unlock_sock(sk);
 	// local_bh_enable();
 
