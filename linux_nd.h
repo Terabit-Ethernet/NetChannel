@@ -528,7 +528,7 @@ struct nd_sock {
 		int rmem_exhausted;
 		/* short flow waiting timer or long flow waiting timer; after all tokens arer granted */
 		// struct hrtimer flow_wait_timer;
-	    ktime_t last_rtx_time;
+	    // ktime_t last_rtx_time;
 
 		uint32_t copied_seq;
 	    uint32_t bytes_received;
@@ -551,14 +551,15 @@ struct nd_sock {
 		// struct list_head ready_link;
 
 		/* protected by entry lock */
-		bool in_pq;
+		// bool in_pq;
 		// link for ND matching table
-		struct list_head match_link;
+		// struct list_head match_link;
 		atomic_t in_flight_copy_bytes;
 		/* protected by the entry lock */
 		uint32_t grant_batch;
 		int prev_grant_bytes;
 		struct llist_head	clean_page_list;
+		uint64_t free_skb_num;
 		// atomic_t backlog_len;
 		// atomic_t in_flight_bytes;
 

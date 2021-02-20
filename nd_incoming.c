@@ -684,7 +684,6 @@ static bool nd_try_coalesce(struct sock *sk,
 	int delta;
 	// int skb_truesize = from->truesize;
 	*fragstolen = false;
-
 	/* Its possible this segment overlaps with prior segment in queue */
 	if (ND_SKB_CB(from)->seq != ND_SKB_CB(to)->end_seq)
 		return false;
@@ -698,7 +697,7 @@ static bool nd_try_coalesce(struct sock *sk,
 	// 	delta = from->truesize - SKB_TRUESIZE(skb_end_offset(from);
 	// }
 	// pr_info("from skb len :%d\n", from->len);
-	// pr_info(" SKB_TRUESIZE(skb_end_offset(from):%d\n", skb_end_offset(from));
+	// pr_info(" SKB_TRUESIZE(skb_end_offset(from):%d\n", skb_end_offset(from));s
 	if (!skb_try_coalesce(to, from, fragstolen, &delta))
 		return false;
 	/* assume we have alrady add true size beforehand*/
@@ -1369,10 +1368,9 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
 		}
 		seq = ND_SKB_CB(skb)->end_seq;
-	
+
 		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
 		nd_data_queue(sk, skb);
-		
 		/* handle the rest of packets */
 		for(i = 0; i < count; i++) {
 			WARN_ON(!head);
@@ -1393,6 +1391,42 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 		}
 	return ;
 }
+static void nd_handle_data_skb_new(struct sock* sk, struct sk_buff* skb) {
+		uint32_t count, total_len, i, seq;
+		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
+		struct iphdr *iph;
+		struct ndhdr *dh;
+	
+		iph = ip_hdr(skb);
+		dh =  nd_hdr(skb);
+		/* handle the first packet which contains the header */
+		count = ND_SKB_CB(skb)->count;
+		total_len = ND_SKB_CB(skb)->total_len;
+
+		ND_SKB_CB(skb)->count = 0;
+		ND_SKB_CB(skb)->total_len = 0;
+		ND_SKB_CB(skb)->total_size = 0;
+		if(nd_params.nd_debug) {
+			pr_info("ND_SKB_CB(head)->seq = seq:%u\n", ND_SKB_CB(skb)->seq);
+			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
+		}
+		/* handle the rest of packets */
+		for(i = 0; i < count; i++) {
+			WARN_ON(!head);
+			// head->next = NULL;
+
+			/* update the len, data_len, truesize */
+			skb->truesize += head->truesize;
+			skb->data_len += head->len;
+			skb->len += head->len;
+			head = head->next;
+		}
+		nd_v4_fill_cb(skb, iph, dh);
+		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
+		nd_data_queue(sk, skb);
+	return ;
+}
+
 /**
  * nd_data_pkt() - Handler for incoming DATA packets
  * @skb:     Incoming packet; size known to be large enough for the header.
@@ -1447,7 +1481,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 			// printk("skb->hash:%u\n", skb->hash);
 		 	// sock_rps_save_rxhash(sk, skb)
 			//  printk("put into the data queue\n");
-			nd_handle_data_skb(sk, skb);
+			nd_handle_data_skb_new(sk, skb);
 			nd_send_grant(dsk, false);
 			if (!sock_flag(sk, SOCK_DEAD)) {
 				sk->sk_data_ready(sk);
@@ -1512,7 +1546,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 
 	if(dh->type == DATA) {
 		// pr_info("handle backlog\n");
-		nd_handle_data_skb(sk, skb);
+		nd_handle_data_skb_new(sk, skb);
 		nd_send_grant(dsk, true);
 		if (!sock_flag(sk, SOCK_DEAD)) {
 			sk->sk_data_ready(sk);
@@ -1832,10 +1866,10 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 		// skb_dump(KERN_WARNING, skb, false);
 		iph = ip_hdr(skb);
 		nh = nd_hdr(skb);
-		if(nh->type == 0) {
-			pr_info("receive skb:%u\n", ntohl(nh->seq));
-			pr_info("type:%d\n", nh->type);
-		}
+		// if(nh->type == 0) {
+		// 	pr_info("receive skb:%u\n", ntohl(nh->seq));
+		// 	pr_info("type:%d\n", nh->type);
+		// }
 
 		// pr_info("receive new ack seq num :%u\n", ntohl(nh->grant_seq));
 		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
@@ -1843,8 +1877,7 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 		skb_dst_set_noref(skb, ndt_queue->dst);
 		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
 		// if(nh->type == DATA) {
-		// 	printk("skb: nh segment length:%d\n", nh->segment_length);
-
+		// 	pr_info("receive skb:%u CORE:%d\n", ntohl(nh->seq), raw_smp_processor_id());
 		// }
 		/* disable irq since it is in the process context */
 		// if(nh->type != DATA) {
