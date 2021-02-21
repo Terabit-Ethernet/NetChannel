@@ -836,7 +836,7 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
-	uint32_t buffer_size = 250000000;
+	uint32_t buffer_size = 10000000;
 	uint64_t flow_size = 100000000000;
 	uint64_t write_len = 0;
 	// setbuf(stdout, NULL);
@@ -1115,7 +1115,7 @@ int main(int argc, char** argv)
 	struct addrinfo hints;
 	char *host, *port_name;
 	// char buffer[8000000] = "abcdefgh\n";
-	char *buffer = (char*)malloc(250000000);
+	char *buffer = (char*)malloc(10000000);
 	// buffer[63999] = 'H';
 	int status;
 	int fd;
