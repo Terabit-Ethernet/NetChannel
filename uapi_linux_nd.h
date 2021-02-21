@@ -24,6 +24,8 @@
 #define ND_HEADER_MAX_SIZE 128 +  MAX_HEADER
 
 #define ND_MAX_MESSAGE_LENGTH 1000000
+/* 62236 - sizeof(struct ndhdr)*/
+#define ND_MAX_SKB_LEN 62620
 /**
  * enum nd_packet_type - Defines the possible types of ND packets.
  * 
