@@ -232,8 +232,10 @@ void nd_clean_dcopy_pages(struct sock *sk) {
 			nd_release_pages(resp->bv_arr, true, resp->max_segs);
 			kfree(resp->bv_arr);
 		}
-		if(resp->skb)
+		if(resp->skb){
 			kfree_skb(resp->skb);
+			nsk->receiver.free_skb_num += 1;
+		}
 		kfree(resp);
 	}
 	return;
@@ -621,7 +623,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 		}
 
 		/* this part might need to change latter */
-		copy = min_t(int, max_segs * PAGE_SIZE / 65535 * 65535, msg_data_left(msg));
+		copy = min_t(int, max_segs * PAGE_SIZE / ND_MAX_SKB_LEN * ND_MAX_SKB_LEN, msg_data_left(msg));
 		if(copy == 0) {
 			WARN_ON(true);
 		}
@@ -787,7 +789,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 		if (!sk_page_frag_refill(sk, pfrag))
 			goto wait_for_memory;
 		skb = nd_write_queue_tail(sk);
-		if(!skb || skb->len == USHRT_MAX) 
+		if(!skb || skb->len == ND_MAX_SKB_LEN) 
 			goto create_new_skb;
 		i = skb_shinfo(skb)->nr_frags;
 		if (!skb_can_coalesce(skb, i, pfrag->page,
@@ -797,7 +799,7 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 			}
 			merge = false;
 		}
-		copy = min_t(int, USHRT_MAX - skb->len, msg_data_left(msg));
+		copy = min_t(int, ND_MAX_SKB_LEN - skb->len, msg_data_left(msg));
 		copy = min_t(int, copy,
 			     pfrag->size - pfrag->offset);
 		
@@ -1125,6 +1127,7 @@ int nd_init_sock(struct sock *sk)
 	// WRITE_ONCE(dsk->receiver.in_pq, false);
 	// WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
 	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
+	dsk->receiver.free_skb_num = 0;
 	init_llist_head(&dsk->receiver.clean_page_list);
 	// atomic_set(&dsk->receiver.backlog_len, 0);
 	// dsk->start_time = ktime_get();
@@ -1201,7 +1204,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	// u32 urg_hole = 0;
 	// struct scm_timestamping_internal tss;
 	// int cmsg_flags;
-	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
+	// printk("recvmsg start \n");
 	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
 	
 	/* hardcode for now */ 
@@ -1217,6 +1220,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 
 	// nd_rps_record_flow(sk);
 	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
+	WARN_ON(!llist_empty(&dsk->receiver.clean_page_list));
 	// if (unlikely(flags & MSG_ERRQUEUE))
 	// 	return inet_recv_error(sk, msg, len, addr_len);
 	// printk("start recvmsg \n");
@@ -1370,7 +1374,7 @@ found_ok_skb:
 		request->remain_len = used;
 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
 		request->iter = biter;
-
+		// printk("cpu:%d req bytes:%d skb bytes:%d frags:%d\n", request->io_cpu,  request->len, skb->len, skb_shinfo(skb)->nr_frags);
 		// bytes_recvd[request->io_cpu] += request->len;
 		// pr_info("request:%p\n", request);
 		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
@@ -2007,6 +2011,7 @@ void nd_destroy_sock(struct sock *sk)
 	pr_info("up->sender.grant_nxt:%u\n", up->sender.sd_grant_nxt);
 	pr_info("up->sender.write_seq:%u\n", up->sender.write_seq);
 	pr_info("up->receiver.grant_nxt:%u\n", up->receiver.grant_nxt);
+	pr_info("up->receiver.free_skb_num:%llu\n", up->receiver.free_skb_num);
 	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pendfing_frames(sk);
