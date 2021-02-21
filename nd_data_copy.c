@@ -242,7 +242,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		skb = req->skb;
 		if(!skb) 
 			goto create_new_skb;
-		if(skb->len == USHRT_MAX)
+		if(skb->len == ND_MAX_SKB_LEN)
 			goto push_skb;
 		i = skb_shinfo(skb)->nr_frags;
 		if (!skb_can_coalesce(skb, i, pfrag->page,
@@ -252,7 +252,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 			}
 			merge = false;
 		}
-		copy = min_t(int, USHRT_MAX - skb->len, req_len);
+		copy = min_t(int, ND_MAX_SKB_LEN - skb->len, req_len);
 		copy = min_t(int, copy,
 			     pfrag->size - pfrag->offset);
 		err = nd_copy_to_page_nocache(req->sk, &req->iter, skb,
