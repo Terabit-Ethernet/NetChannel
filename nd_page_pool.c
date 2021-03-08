@@ -87,14 +87,12 @@ void nd_page_pool_recycle_skb_pages(struct sk_buff *skb, struct page_pool* page_
         refcnt = page_ref_count(page);
         /* Todo: solve the the corner case: when page ref count = 2, the race condition could happen; */
         if(refcnt > 1) {
-            empty_page_pool_count++;
             put_page(page);
         } else {
             if(!nd_page_pool_dma_map_page(page_pool, page)) {
                 goto normal_path;
             }
             // printk("put into page pool:%p\n", page);
-            nonempty_page_pool_count++;
             if(ptr_ring_produce_bh(&page_pool->ring, page) != 0) {
                 // printk("ring is full\n");
                 goto dma_unmap;
