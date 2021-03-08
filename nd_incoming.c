@@ -83,6 +83,8 @@ static void nd_rfree(struct sk_buff *skb)
 	// struct kcm_mux *mux = kcm->mux;
 	unsigned int len = skb->truesize;
 
+	/* recycle to the page pool */
+	nd_page_pool_recycle_pages(skb);
 	// sk_mem_uncharge(sk, len);
 	atomic_sub(len, &sk->sk_rmem_alloc);
 
@@ -1373,7 +1375,7 @@ static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
 		nd_data_queue(sk, skb);
 		/* handle the rest of packets */
 		for(i = 0; i < count; i++) {
-			WARN_ON(!head);
+			// WARN_ON(!head);
 			ND_SKB_CB(head)->seq = seq;
 			ND_SKB_CB(head)->end_seq = seq + head->len;
 			temp = head->next;
@@ -1412,7 +1414,7 @@ static void nd_handle_data_skb_new(struct sock* sk, struct sk_buff* skb) {
 		}
 		/* handle the rest of packets */
 		for(i = 0; i < count; i++) {
-			WARN_ON(!head);
+			// WARN_ON(!head);
 			// head->next = NULL;
 
 			/* update the len, data_len, truesize */
@@ -1454,8 +1456,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	dh =  nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
-	WARN_ON(skb_dst(skb) == NULL);
-	WARN_ON(skb_dst(skb)->dev == NULL);
+	// WARN_ON(skb_dst(skb) == NULL);
+	// WARN_ON(skb_dst(skb)->dev == NULL);
 	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(dh), dh->source,
             dh->dest, sdif, &refcounted);
     if(!sk) {
@@ -1657,9 +1659,13 @@ int nd_split(struct sk_buff_head* queue, struct sk_buff* skb, int need_bytes) {
 	}
 	// printk("alloc bytes:%d\n", bytes);
 	new_skb = alloc_skb(bytes, GFP_ATOMIC);
-	WARN_ON(!new_skb);
+	if(!new_skb)
+		WARN_ON(true);
 	// pr_info("reach here:%d\n", __LINE__);
 	// skb_dump(KERN_WARNING, skb, false);
+
+	/* set page pool for new_skb */
+	skb_shinfo(new_skb)->page_pool = skb_shinfo(skb)->page_pool;
 	/* set the network header, but not tcp header */
 	skb_put(new_skb, sizeof(struct iphdr));
 
@@ -1696,7 +1702,8 @@ static void nd_queue_origin_skb(struct sk_buff_head* queue, struct sk_buff *skb)
 		list_skb = skb_shinfo(skb)->frag_list;
 		skb_shinfo(skb)->frag_list = NULL;
 		while(list_skb) {
-			WARN_ON(refcount_read(&list_skb->users) > 1);
+			if(refcount_read(&list_skb->users) > 1)
+				WARN_ON(true);
 			list_skb_next = list_skb->next;
 			skb->truesize -= list_skb->truesize;
 			skb->data_len -= list_skb->len;
@@ -1715,7 +1722,6 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 	struct sk_buff* new_skb, *head;
 	int delta = 0;
  	bool fragstolen = false;
-	WARN_ON(!skb);
 	head = skb;
 	// pr_info("reach here:%d\n", __LINE__);
 	while(need_bytes > 0) {
@@ -1725,7 +1731,8 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		new_skb =  __skb_dequeue(queue);
 		if(!new_skb)
 			return -ENOMEM;
-		WARN_ON(skb_cloned(new_skb));
+		if(skb_cloned(new_skb))
+			WARN_ON(true);
 		nd_queue_origin_skb(queue, new_skb);
 		// pr_info("new_skb->len:%d\n", new_skb->len);
 		if(new_skb->len > need_bytes)
@@ -1770,8 +1777,8 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 
 			} else {
 				// pr_info("reach here:%d\n", __LINE__);
-				WARN_ON(!skb_has_frag_list(skb));
-				WARN_ON(ND_SKB_CB(head)->tail == NULL);
+				if(!skb_has_frag_list(skb) || ND_SKB_CB(head)->tail == NULL)
+					WARN_ON(true);
 				// pr_info("!skb_has_frag_list(skb):%d\n",(!skb_has_frag_list(skb)));
                 //                 pr_info("ND_SKB_CB(head)->tail:%p\n", ND_SKB_CB(head)->tail);
                 //                 pr_info("ND_SKB_CB(head)->tail->next:%p\n", ND_SKB_CB(head)->tail->next);
@@ -1800,18 +1807,21 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 	int ret;
 	struct iphdr* iph;
 	// printk("pass_to_vs_layer core:%d\n", raw_smp_processor_id());
-	WARN_ON(queue == NULL);
+	// WARN_ON(queue == NULL);
 	while ((skb = __skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
-		WARN_ON(skb_cloned(skb));
+		if(skb_cloned(skb))
+			WARN_ON(true);
 		nd_queue_origin_skb(queue, skb);
 
 		// pr_info("start processing\n");
 		// pr_info("skb->len:%d\n", skb->len);
 		if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
 			need_bytes = sizeof(struct ndhdr) - skb->len;
-			WARN_ON(need_bytes < 0);
+			if(need_bytes < 0)
+				WARN_ON(true);
+			// WARN_ON(need_bytes < 0);
 			// pr_info("skb->len:%d\n", skb->len);
 			// pr_info("reach here: %d\n", __LINE__);
 			ret = nd_split_and_merge(queue, skb, need_bytes, true);
@@ -1873,7 +1883,7 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 
 		// pr_info("receive new ack seq num :%u\n", ntohl(nh->grant_seq));
 		// pr_info("total len:%u\n", ND_SKB_CB(skb)->total_len);
-		WARN_ON(READ_ONCE(sk->sk_rx_dst) == NULL);
+		// WARN_ON(READ_ONCE(sk->sk_rx_dst) == NULL);
 		skb_dst_set_noref(skb, ndt_queue->dst);
 		// pr_info("ND_SKB_CB(skb)->total_len:%u\n", ND_SKB_CB(skb)->total_len);
 		// if(nh->type == DATA) {

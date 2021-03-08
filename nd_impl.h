@@ -131,6 +131,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb);
 // void nd_token_timer_defer_handler(struct sock *sk);
 int nd_clean_rtx_queue(struct sock *sk);
 
+void nd_page_pool_recycle_pages(struct sk_buff *skb);
 // enum hrtimer_restart nd_flow_wait_event(struct hrtimer *timer);
 // void nd_flow_wait_handler(struct sock *sk);
 
