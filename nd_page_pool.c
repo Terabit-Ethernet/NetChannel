@@ -98,7 +98,7 @@ void nd_page_pool_recycle_skb_pages(struct sk_buff *skb, struct page_pool* page_
                 goto dma_unmap;
             }
             /* this part is needed to change */
-            page_pool->pages_state_hold_cnt++;
+            atomic_inc(&page_pool->pages_state_hold_cnt);
             continue;
 dma_unmap:
             /* ring buffer is full; go to the normal path */
@@ -113,6 +113,12 @@ normal_path:
     }
     skb_shinfo(skb)->nr_frags = 0;
 }
+
+/* this method assumes page pool is still valid; If the recv queue of NIC driver
+ * is frequently recreated, then this optimization should be off. 
+ * ToDo: Rather than piggybacking page pool address, storing receive queue id and
+ * only recycles the receive queue if it is not destroyed.
+ */
 void nd_page_pool_recycle_pages(struct sk_buff *skb) {
     struct page_pool *page_pool = skb_shinfo(skb)->page_pool;
     struct page *page;
