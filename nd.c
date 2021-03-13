@@ -87,6 +87,7 @@ EXPORT_SYMBOL(nd_hashinfo);
 #define MAX_ND_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
 
+#define MAX_PIN_PAGES 48
 
 static inline bool page_is_mergeable(const struct bio_vec *bv,
 		struct page *page, unsigned int len, unsigned int off,
@@ -129,7 +130,7 @@ static ssize_t nd_dcopy_iov_init(struct msghdr *msg, struct iov_iter *iter, stru
 	u32 bytes, int max_segs) {
 	ssize_t copied, offset, left;
 	struct bio_vec *bv_arr;
-	struct page *pages[48];
+	struct page *pages[MAX_PIN_PAGES];
 	unsigned nr_segs = 0, i, len = 0;
 	bool same_page = false;
 
@@ -200,7 +201,7 @@ void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
 	}
 }
 
-
+// u64 total_send_ack = 0;
 void nd_try_send_ack(struct sock *sk, int copied) {
 	struct nd_sock *nsk = nd_sk(sk);
 	u32 new_grant_nxt;
@@ -212,6 +213,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 			nsk->receiver.grant_nxt = new_grant_nxt;
 			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+			// total_send_ack++;
 		}
 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
 		// int available_space = nd_space(sk);
@@ -600,7 +602,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 	struct bio_vec *bv_arr = NULL;
 	// ssize_t bremain = msg->iter->count, blen;
 	ssize_t blen;
-	int max_segs = 48;
+	int max_segs = MAX_PIN_PAGES;
 	int nr_segs = 0;
 	// int pending = 0;
 	WARN_ON(msg->msg_iter.count != len);
@@ -633,7 +635,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		}
 		/* construct biov and data copy request */
-		bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+		bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
 		blen = nd_dcopy_iov_init(msg, &biter, bv_arr, copy, max_segs);
 		nr_segs = biter.nr_segs;
 		nsk->sender.pending_queue += blen;
@@ -696,6 +698,7 @@ wait_for_memory:
 	return copied;
 
 out_error:
+	/* ToDo: might need to wait as well */
 	// nd_push(sk);
 
 	// if (copied && sock->type == SOCK_SEQPACKET) {
@@ -1035,9 +1038,6 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 // 		spin_unlock(&sk_queue->lock);
 // }
 
-// uint64_t bytes_recvd[32];
-// extern u64 bytes_sent[8];
-// extern int max_queue_length;
 void nd_destruct_sock(struct sock *sk)
 {
 
@@ -1064,6 +1064,8 @@ void nd_destruct_sock(struct sock *sk)
 	// pr_info("max queue length:%d\n", max_queue_length);
 	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
+	// pr_info("total_send_ack:%llu\n", total_send_ack);
+	// pr_info("total_send_grant:%llu\n", total_send_grant);
 	/* clean sk_forward_alloc*/
 	sk_mem_reclaim(sk);
 	// sk->sk_forward_alloc = 0;
@@ -1213,7 +1215,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 	struct iov_iter biter;
 	struct bio_vec *bv_arr;
 	ssize_t bremain = len, blen;
-	int max_segs = 48;
+	int max_segs = MAX_PIN_PAGES;
 	int nr_segs = 0;
 	int qid;
 	// printk("convert bytes:%ld\n", ret);
@@ -1243,7 +1245,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 		goto out;
 
 	/* init bvec page */	
-	bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+	bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
 	blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
 	nr_segs = biter.nr_segs;
 	bremain -= blen;
@@ -1420,8 +1422,10 @@ queue_request:
 		// pr_info("queue request\n");
 		
 		qid = nd_dcopy_queue_request(request);
-		if(dsk->receiver.nxt_dcopy_cpu == -1)
+		if(dsk->receiver.nxt_dcopy_cpu == -1) {
 			dsk->receiver.nxt_dcopy_cpu = qid;
+			// printk("new qid:%d\n", qid);
+		}
 		if(blen == 0 && bremain > 0) {
 			ssize_t bsize = bremain;
 			if(used + offset < skb->len) {
@@ -1429,7 +1433,7 @@ queue_request:
 			} else {
 				dsk->receiver.nxt_dcopy_cpu = -1;
 			}
-			bv_arr = kmalloc(48 * sizeof(struct bio_vec), GFP_KERNEL);
+			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
 			nr_segs = biter.nr_segs;
 			bremain -= blen;
@@ -1513,7 +1517,7 @@ queue_request:
 	// 	// nd_try_send_token(sk);
 	// }
 	release_sock(sk);
-
+	// printk("return");
 	// if (cmsg_flags) {
 	// 	if (cmsg_flags & 2)
 	// 		tcp_recv_timestamp(msg, sk, &tss);
