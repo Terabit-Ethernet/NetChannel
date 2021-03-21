@@ -187,7 +187,8 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 /* new recvmsg syscall */
 int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len);
-
+int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+		int flags, int *addr_len);
 int nd_sendpage(struct sock *sk, struct page *page, int offset, size_t size,
 		 int flags);
 void nd_destroy_sock(struct sock *sk);

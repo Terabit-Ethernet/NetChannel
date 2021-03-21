@@ -90,7 +90,7 @@ struct proto nd_prot = {
     .setsockopt     = nd_setsockopt,
     .getsockopt     = nd_getsockopt,
     .sendmsg        = nd_sendmsg,
-    .recvmsg        = nd_recvmsg_new,
+    .recvmsg        = nd_recvmsg_new_2,
     .sendpage       = nd_sendpage,
     .backlog_rcv    = nd_v4_do_rcv,
     .release_cb     = nd_release_cb,
@@ -189,6 +189,20 @@ static struct ctl_table nd_ctl_table[] = {
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
+        {
+                .procname       = "nd_ldcopy_inflight_thre",
+                .data           = &nd_params.ldcopy_inflight_thre,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+        {
+                .procname       = "nd_ldcopy_min_thre",
+                .data           = &nd_params.ldcopy_min_thre,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
         {}
 };
 
@@ -223,6 +237,8 @@ void nd_params_init(struct nd_params* params) {
     params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
     params->nd_debug = 0;
+    params->ldcopy_inflight_thre = ND_MAX_SKB_LEN * 4;
+    params->ldcopy_min_thre = ND_MAX_SKB_LEN;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
     params->control_pkt_rtt = 50;
@@ -233,7 +249,7 @@ void nd_params_init(struct nd_params* params) {
     // matchiing parameters
     params->local_ip = "192.168.10.117";
     params->remote_ip = "192.168.10.116";
-    params->data_cpy_core = 12;
+    params->data_cpy_core = 16;
     params->num_nd_queues = 8;
     params->alpha = 2;
     params->beta = 5;
@@ -241,8 +257,8 @@ void nd_params_init(struct nd_params* params) {
     params->num_iters = 5;
     params->iter_size = params->beta * params->control_pkt_rtt * 1000;
     params->epoch_size = params->num_iters * params->iter_size * params->alpha;
-    params->rmem_default = 20289600;
-    params->wmem_default = 20289600;
+    params->rmem_default = 6289600;
+    params->wmem_default = 6289600;
     params->short_flow_size = params->bdp;
     params->control_pkt_bdp = params->control_pkt_rtt * params->bandwidth * 1000 / 8;
     params->data_budget = 1000000;

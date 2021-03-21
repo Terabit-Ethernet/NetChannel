@@ -85,6 +85,9 @@ struct nd_params {
 	int nd_add_host;
 	int nd_host_added;
 
+	int ldcopy_inflight_thre;
+	int ldcopy_min_thre;
+	
 	int min_iter;
 	int match_socket_port;
 	int bandwidth;
@@ -113,6 +116,8 @@ struct nd_params {
 	char* remote_ip;
 	int data_cpy_core;
 	int num_nd_queues;
+
+
 };
 
 struct nd_pq {

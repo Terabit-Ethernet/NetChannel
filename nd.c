@@ -55,6 +55,9 @@
 #include <net/addrconf.h>
 #include <net/udp_tunnel.h>
 #include <net/tcp.h>
+#include <linux/cpufreq.h>
+#include <linux/cpumask.h> // cpumask_{first,next}(), cpu_online_mask
+
 // #include "linux_nd.h"
 // #include "net_nd.h"
 // #include "net_ndlite.h"
@@ -84,6 +87,7 @@ EXPORT_SYMBOL(nd_epoch);
 
 struct inet_hashinfo nd_hashinfo;
 EXPORT_SYMBOL(nd_hashinfo);
+
 #define MAX_ND_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_ND_PORTS / ND_HTABLE_SIZE_MIN)
 
@@ -585,6 +589,238 @@ static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
 }
 /* copy from kcm sendmsg */
 extern struct nd_conn_ctrl* nd_ctrl;
+
+static int nd_sender_local_dcopy(struct sock* sk, struct msg_hdr *msg, 
+	int req_len, u32 seq) {
+	struct sk_buff *skb = NULL;
+	struct nd_sock nsk = nd_sk(sk);
+	struct nd_dcopy_response *resp;
+	size_t copy;
+	int err, i = 0;
+	while (req_len > 0) {
+		bool merge = true;
+		struct page_frag *pfrag = sk_page_frag(sk);
+		if (!sk_page_frag_refill(sk, pfrag))
+			goto wait_for_memory;
+		if(!skb) 
+			goto create_new_skb;
+		if(skb->len == ND_MAX_SKB_LEN)
+			goto push_skb;
+		i = skb_shinfo(skb)->nr_frags;
+		if (!skb_can_coalesce(skb, i, pfrag->page,
+			 pfrag->offset)) {
+			if (i == MAX_SKB_FRAGS) {
+				goto push_skb;
+			}
+			merge = false;
+		}
+		copy = min_t(int, ND_MAX_SKB_LEN - skb->len, req_len);
+		copy = min_t(int, copy,
+			     pfrag->size - pfrag->offset);
+		
+		err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
+					       pfrag->page,
+					       pfrag->offset,
+					       copy);
+		if (err)
+			goto out_error;
+		/* Update the skb. */
+		if (merge) {
+			skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
+		} else {
+			skb_fill_page_desc(skb, i, pfrag->page,
+					   pfrag->offset, copy);
+			get_page(pfrag->page);
+		}
+		pfrag->offset += copy;
+		req_len -= copy;
+		/* last request */
+		if(req_len == 0)
+			goto push_skb;
+		continue;
+
+create_new_skb:
+		WARN_ON(skb != NULL);
+		skb = alloc_skb(0, sk->sk_allocation);
+		// printk("create new skb\n");
+		if(!skb)
+			goto wait_for_memory;
+		continue;
+
+push_skb:
+		/* push the new skb */
+		ND_SKB_CB(skb)->seq = seq;
+		resp = kmalloc(sizeof(struct nd_dcopy_response), GFP_KERNEL);
+		resp->skb = req->skb;
+		llist_add(&resp->lentry, &nsk->sender.response_list);
+		seq += skb->len;
+		skb = NULL;
+		resp = NULL;
+		continue;
+wait_for_memory:
+		err = nd_push(sk, GFP_KERNEL);
+		/* hard code nd_ctrl for now */
+		if(err == -EDQUOT){
+			// pr_info("add to sleep sock send msg\n");
+			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		} 
+		err = sk_stream_wait_memory(sk, &timeo);
+		if (err) {
+			pr_info("out error \n");
+			goto out_error;
+		}
+	}
+	return 0;
+out_error:
+	if(skb)
+		kfree_skb(skb);
+	return err;
+}
+
+static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t len)
+{
+	struct nd_sock *nsk = nd_sk(sk);
+	// struct sk_buff *skb = NULL;
+	size_t copy, copied = 0;
+	long timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+	int eor = (sk->sk_socket->type == SOCK_DGRAM) ?
+		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
+	int err = -EPIPE;
+	// int i = 0;
+	
+	/* hardcode for now */
+	struct nd_dcopy_request *request;
+	struct iov_iter biter;
+	struct bio_vec *bv_arr = NULL;
+	// ssize_t bremain = msg->iter->count, blen;
+	ssize_t blen;
+	int max_segs = MAX_PIN_PAGES;
+	int nr_segs = 0;
+	// int pending = 0;
+	WARN_ON(msg->msg_iter.count != len);
+	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
+		err = nd_wait_for_connect(sk, &timeo);
+		if (err != 0)
+			goto out_error;
+	}
+	/* Per tcp_sendmsg this should be in poll */
+	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
+
+	if (sk->sk_err)
+		goto out_error;
+
+	while (msg_data_left(msg)) {
+
+		if (!nd_stream_memory_free(sk, nsk->sender.pending_queue)) {
+			// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+			goto wait_for_memory;
+		}
+
+		/* this part might need to change latter */
+		copy = min_t(int, max_segs * PAGE_SIZE / ND_MAX_SKB_LEN * ND_MAX_SKB_LEN, msg_data_left(msg));
+		if(copy == 0) {
+			WARN_ON(true);
+		}
+		if (!sk_wmem_schedule(sk, copy)) {
+			WARN_ON_ONCE(true);
+			goto wait_for_memory;
+
+		}
+		/* decide to do local or remote data copy */
+		if() {
+
+		} else {
+			goto local_sender_copy;
+		}
+		/* remote data copy */
+		/* construct biov and data copy request */
+		bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+		blen = nd_dcopy_iov_init(msg, &biter, bv_arr, copy, max_segs);
+		nr_segs = biter.nr_segs;
+		nsk->sender.pending_queue += blen;
+
+		/* create new request */
+		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+		request->state = ND_DCOPY_SEND;
+		request->sk = sk;
+		request->io_cpu = nsk->sender.nxt_dcopy_cpu;
+		request->len = blen;
+		request->remain_len = blen;
+		request->seq = nsk->sender.write_seq;
+		request->iter = biter;
+		request->bv_arr = bv_arr;
+		request->max_segs = nr_segs;
+		
+		nd_dcopy_queue_request(request);
+
+		bv_arr = NULL;
+		nr_segs = 0;
+		atomic_add(blen, &nsk->sender.in_flight_copy_bytes);
+		nsk->sender.write_seq += blen;
+
+		copied += blen;
+		
+		nsk->sender.nxt_dcopy_cpu = -1;
+
+		continue;
+
+local_sender_copy:
+		nd_sender_local_dcopy();
+wait_for_memory:
+		/* wait for pending requests to be done */
+		sk_wait_sender_data_copy(sk, &timeo);
+		// nd_fetch_dcopy_response(sk);
+		err = nd_push(sk, GFP_KERNEL);
+		WARN_ON(nsk->sender.pending_queue != 0);
+		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		/* hard code nd_ctrl for now */
+		if(err == -EDQUOT){
+			// pr_info("add to sleep sock send msg\n");
+			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+		} 
+		err = sk_stream_wait_memory(sk, &timeo);
+		// pr_info("end wait \n");
+		if (err) {
+			goto out_error;
+		}
+	}
+	sk_wait_sender_data_copy(sk, &timeo);
+	// nd_fetch_dcopy_response(sk);
+	if (eor) {
+		// if(!skb_queue_empty(&sk->sk_write_queue)) {
+			// printk("call nd push\n");
+			nd_push(sk, GFP_KERNEL);
+		// }
+	}
+
+	// ND_STATS_ADD(nsk->stats.tx_bytes, copied);
+
+	release_sock(sk);
+	return copied;
+
+out_error:
+	/* ToDo: might need to wait as well */
+	// nd_push(sk);
+
+	// if (copied && sock->type == SOCK_SEQPACKET) {
+	// 	/* Wrote some bytes before encountering an
+	// 	 * error, return partial success.
+	// 	 */
+	// 	goto partial_message;
+	// }
+
+	// if (head != nsk->seq_skb)
+	// 	kfree_skb(head);
+
+	err = sk_stream_error(sk, msg->msg_flags, err);
+
+	/* make sure we wake any epoll edge trigger waiter */
+	if (unlikely(skb_queue_len(&sk->sk_write_queue) == 0 && err == -EAGAIN))
+		sk->sk_write_space(sk);
+
+	return err;
+}
+
 static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct nd_sock *nsk = nd_sk(sk);
@@ -746,45 +982,6 @@ static int nd_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len)
 
 	if (sk->sk_err)
 		goto out_error;
-
-	// if (nsk->seq_skb) {
-	// 	/* Previously opened message */
-	// 	head = nsk->seq_skb;
-	// 	skb = nd_tx_msg(head)->last_skb;
-	// 	goto start;
-	// }
-	// skb = nd_write_queue_tail(sk);
-	// if(skb) {
-	// 	goto start;
-	// }
-	/* Call the sk_stream functions to manage the sndbuf mem. */
-	// if (!sk_stream_memory_free(sk)) {
-	// 	nd_push(nsk);
-	// 	set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
-	// 	err = sk_stream_wait_memory(sk, &timeo);
-	// 	if (err)
-	// 		goto out_error;
-	// }
-
-	// if (msg_data_left(msg)) {
-	// 	/* New message, alloc head skb */
-	// 	skb = alloc_skb(0, sk->sk_allocation);
-	// 	while (!skb) {
-	// 		nd_push(nsk);
-	// 		err = sk_stream_wait_memory(sk, &timeo);
-	// 		if (err)
-	// 			goto out_error;
-
-	// 		skb = alloc_skb(0, sk->sk_allocation);
-	// 	}
-
-	// 	skb = head;
-
-	// 	/* Set ip_summed to CHECKSUM_UNNECESSARY to avoid calling
-	// 	 * csum_and_copy_from_iter from skb_do_copy_data_nocache.
-	// 	 */
-	// 	skb->ip_summed = CHECKSUM_UNNECESSARY;
-	// }
 
 	while (msg_data_left(msg)) {
 		bool merge = true;
@@ -1058,9 +1255,6 @@ void nd_destruct_sock(struct sock *sk)
 	// pr_info("4: %llu\n", bytes_recvd[4]);
 	// pr_info("8: %llu\n", bytes_recvd[8]);
 
-	// pr_info("byte sent 0: %llu\n", bytes_sent[0]);
-	// pr_info("byte sent 1: %llu\n", bytes_sent[1]);
-	// pr_info("byte sent 2: %llu\n", bytes_sent[2]);
 	// pr_info("max queue length:%d\n", max_queue_length);
 	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
 	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
@@ -1119,7 +1313,7 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
-	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, -1);
+	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, nd_params.data_cpy_core);
 	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
 	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
 	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
@@ -1253,8 +1447,354 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 
 
 	seq = &dsk->receiver.copied_seq;
+	dsk->receiver.nxt_dcopy_cpu = nd_params.data_cpy_core;
+	// printk("start queue\n");
+	do {
+		u32 offset;
+		/* Next get a buffer. */
+
+		last = skb_peek_tail(&sk->sk_receive_queue);
+		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
+			last = skb;
+
+			/* Now that we have two receive queues this
+			 * shouldn't happen.
+			 */
+			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
+				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
+				 *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt,
+				 flags))
+				break;
+
+			offset = *seq - ND_SKB_CB(skb)->seq;
+
+			if (offset < skb->len) {
+				goto found_ok_skb; 
+			}
+			else {
+				WARN_ON(true);
+			}
+		}
 
 
+		/* ToDo: we have to check whether pending requests are done */
+		/* Well, if we have backlog, try to process it now yet. */
+
+		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail)) {
+			break;
+		}
+
+		if (copied) {
+			if (sk->sk_err ||
+			    sk->sk_state == TCP_CLOSE ||
+			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+			    !timeo ||
+			    signal_pending(current))
+				break;
+		} else {
+			if (sock_flag(sk, SOCK_DONE))
+				break;
+
+			if (sk->sk_err) {
+				copied = sock_error(sk);
+				break;
+			}
+
+			if (sk->sk_shutdown & RCV_SHUTDOWN)
+				break;
+
+			if (sk->sk_state == TCP_CLOSE) {
+				/* This occurs when user tries to read
+				 * from never connected socket.
+				 */
+				copied = -ENOTCONN;
+				break;
+			}
+
+			if (!timeo) {
+				copied = -EAGAIN;
+				break;
+			}
+
+			if (signal_pending(current)) {
+				copied = sock_intr_errno(timeo);
+				break;
+			}
+		}
+
+		// tcp_cleanup_rbuf(sk, copied);
+		nd_try_send_ack(sk, copied);
+		// printk("release sock");
+		if (copied >= target) {
+			/* Do not sleep, just process backlog. */
+			/* Release sock will handle the backlog */
+			release_sock(sk);
+			lock_sock(sk);
+		} else {
+			sk_wait_data(sk, &timeo, last);
+		}
+
+		continue;
+
+found_ok_skb:
+		/* Ok so how much can we use? */
+		used = skb->len - offset;
+		
+		// if(blen == 0) {
+		// 	// pr_info("free bvec bv page:%d\n", __LINE__);
+		// 	// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
+		// 	// kfree(bv_arr);
+		// 	// pr_info("done:%d\n", __LINE__);
+		// 	// bv_arr = NULL;
+		// 	sk_wait_data_copy(sk, &timeo);
+		// 	nd_release_pages(bv_arr, true, nr_segs);
+		// 	kfree(bv_arr);
+		// }
+		if(blen < used)
+			used = blen;
+
+		if (len < used) {
+			WARN_ON(true);
+			used = len;
+		}
+
+        // unsigned cpu = cpumask_first(cpu_online_mask);
+
+        // while (cpu < nr_cpu_ids) {
+        //         pr_info("CPU: %u, freq: %u kHz\n", cpu, cpufreq_get(cpu));
+        //         cpu = cpumask_next(cpu, cpu_online_mask);
+        // }
+		/* construct data copy request */
+		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+		request->state = ND_DCOPY_RECV;
+		request->sk = sk;
+		request->clean_skb = (used + offset == skb->len);
+		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
+		request->skb = skb;
+		request->offset = offset;
+		request->len = used;
+		request->remain_len = used;
+		// dup_iter(&request->iter, &biter, GFP_KERNEL);
+		request->iter = biter;
+		// printk("cpu:%d req bytes:%d skb bytes:%d frags:%d\n", request->io_cpu,  request->len, skb->len, skb_shinfo(skb)->nr_frags);
+		// bytes_recvd[request->io_cpu] += request->len;
+		// pr_info("request:%p\n", request);
+		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
+		// request->iter = msg->msg_iter;
+		// pr_info("request->len: %d\n", request->len);
+		/* update the biter */
+		iov_iter_advance(&biter, used);
+		blen -= used;
+
+		if(blen == 0) {
+			request->bv_arr = bv_arr;
+			request->max_segs = nr_segs;
+			bv_arr = NULL;
+			nr_segs = 0;
+		}
+		// if (!(flags & MSG_TRUNC)) {
+		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
+		// 	// printk("copy data done: %d\n", used);
+		// 	if (err) {
+		// 		/* Exception. Bailout! */
+		// 		if (!copied)
+		// 			copied = -EFAULT;
+		// 		break;
+		// 	}
+		// }
+
+		WRITE_ONCE(*seq, *seq + used);
+		copied += used;
+		len -= used;
+		if (used + offset < skb->len)
+			goto queue_request;
+		// pr_info("copied_seq:%d\n", seq);
+		WARN_ON(used + offset > skb->len);
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		// kfree_skb(skb);
+
+queue_request:
+		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
+		/* queue the data copy request */
+		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
+		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
+		
+		qid = nd_dcopy_queue_request(request);
+		// pr_info("queue request:%d, skb->len:%d req->len:%d \n", qid, skb->len, request->len);
+
+		// if(dsk->receiver.nxt_dcopy_cpu == -1) {
+		// 	dsk->receiver.nxt_dcopy_cpu = qid;
+		// 	// printk("new qid:%d\n", qid);
+		// }
+		if(blen == 0 && bremain > 0) {
+			ssize_t bsize = bremain;
+			if(used + offset < skb->len) {
+				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
+			} else {
+				dsk->receiver.nxt_dcopy_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+			}
+			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
+			nr_segs = biter.nr_segs;
+			bremain -= blen;
+			// sk_wait_data_copy(sk, &timeo);
+		}
+		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
+		// pr_info("start wait \n");
+		// sk_wait_data_copy(sk, &timeo);
+		// pr_info("finish wait \n");
+
+		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
+		// if(dsk->receiver.nxt_dcopy_cpu == 0)
+		// 	dsk->receiver.nxt_dcopy_cpu = 4;
+		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
+		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
+		// iov_iter_advance(&msg->msg_iter, used);
+		// pr_info("advance \n");
+		continue;
+
+		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
+		// 	// nd_try_send_token(sk);
+		// 	trigger_tokens += 1;
+			
+		// }
+		// nd_try_send_token(sk);
+
+		// tcp_rcv_space_adjust(sk);
+
+// skip_copy:
+		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
+		// 	tp->urg_data = 0;
+		// 	tcp_fast_path_check(sk);
+		// }
+		// if (used + offset < skb->len)
+		// 	continue;
+
+		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
+		// 	tcp_update_recv_tstamps(skb, &tss);
+		// 	cmsg_flags |= 2;
+		// }
+		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+		// 	goto found_fin_ok;
+		// if (!(flags & MSG_PEEK))
+		// 	sk_eat_skb(sk, skb);
+		// continue;
+
+// found_fin_ok:
+		/* Process the FIN. */
+		// WRITE_ONCE(*seq, *seq + 1);
+		// if (!(flags & MSG_PEEK))
+		// 	sk_eat_skb(sk, skb);
+		// break;
+	} while (len > 0);
+	
+	/* free the bvec memory */
+
+
+	/* According to UNIX98, msg_name/msg_namelen are ignored
+	 * on connected socket. I was just happy when found this 8) --ANK
+	 */
+	 	/* waiting data copy to be finishede */
+	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
+	// printk("start wait\n");
+	sk_wait_data_copy(sk, &timeo);
+	if(bv_arr) {
+		nd_release_pages(bv_arr, true, nr_segs);
+		kfree(bv_arr);
+	}
+	// pr_info("free bvec:%d\n", __LINE__);
+	// pr_info("biter.bvec:%p\n", biter.bvec);
+	// nd_release_pages(bv_arr, true, nr_segs);
+	// kfree(bv_arr);
+	// }
+	/* Clean up data we have read: This will do ACK frames. */
+	// tcp_cleanup_rbuf(sk, copied);
+	nd_try_send_ack(sk, copied);
+	// if (dsk->receiver.copied_seq == dsk->total_length) {
+	// 	printk("call tcp close in the recv msg\n");
+	// 	nd_set_state(sk, TCP_CLOSE);
+	// } else {
+	// 	// nd_try_send_token(sk);
+	// }
+	release_sock(sk);
+	// printk("return");
+	// if (cmsg_flags) {
+	// 	if (cmsg_flags & 2)
+	// 		tcp_recv_timestamp(msg, sk, &tss);
+	// 	if (cmsg_flags & 1) {
+	// 		inq = tcp_inq_hint(sk);
+	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
+	// 	}
+	// }
+	// printk("recvmsg\n");
+
+	return copied;
+
+out:
+	release_sock(sk);
+	return err;
+
+// recv_urg:
+// 	err = tcp_recv_urg(sk, msg, len, flags);
+// 	goto out;
+
+// recv_sndq:
+// 	// err = tcp_peek_sndq(sk, msg, len);
+// 	goto out;
+}
+
+int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+		int flags, int *addr_len)
+{
+
+	struct nd_sock *dsk = nd_sk(sk);
+	int copied = 0;
+	// u32 peek_seq;
+	u32 *seq;
+	unsigned long used;
+	int err;
+	int target;		/* Read at least this many bytes */
+	long timeo;
+	struct sk_buff *skb, *last, *tmp;
+	struct nd_dcopy_request *request;
+
+	
+	/* hardcode for now */ 
+	struct iov_iter biter;
+	struct bio_vec *bv_arr = NULL;
+	ssize_t blen = 0;
+	int max_segs = MAX_PIN_PAGES;
+	int nr_segs = 0;
+	int qid;
+	bool in_remote_cpy;
+	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+
+	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
+	    (sk->sk_state == ND_ESTABLISH))
+		sk_busy_loop(sk, nonblock);
+
+	lock_sock(sk);
+	err = -ENOTCONN;
+
+
+	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
+	timeo = sock_rcvtimeo(sk, nonblock);
+
+	if (sk->sk_state != ND_ESTABLISH)
+		goto out;
+
+	/* init bvec page */	
+	// bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+	// blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
+	// nr_segs = biter.nr_segs;
+	// bremain -= blen;
+	
+	/* set nxt_dcopy_cpu to be -1 */
+	in_remote_cpy = false;
+	dsk->receiver.nxt_dcopy_cpu = nd_params.data_cpy_core;
+
+	seq = &dsk->receiver.copied_seq;
 	do {
 		u32 offset;
 		/* Next get a buffer. */
@@ -1344,26 +1884,45 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 found_ok_skb:
 		/* Ok so how much can we use? */
 		used = skb->len - offset;
-		
-		// if(blen == 0) {
-		// 	// pr_info("free bvec bv page:%d\n", __LINE__);
-		// 	// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
-		// 	// kfree(bv_arr);
-		// 	// pr_info("done:%d\n", __LINE__);
-		// 	// bv_arr = NULL;
-		// 	sk_wait_data_copy(sk, &timeo);
-		// 	nd_release_pages(bv_arr, true, nr_segs);
-		// 	kfree(bv_arr);
-		// }
-		if(blen < used)
-			used = blen;
 
 		if (len < used) {
-			WARN_ON(true);
 			used = len;
 		}
+		/* decide to do local or remote data copy*/
+		if(blen == 0) {
+			ssize_t bsize = len;
+			/* the same skb can either do local or remote but not both */
+			if(in_remote_cpy && offset != 0) {
+				bsize =  min_t(ssize_t, bsize, used);
+				goto pin_user_page;
+			}
 
+			/* check the current CPU util */
+			if(atomic_read(&dsk->receiver.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
+				copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0){
+				/* do local */
+				in_remote_cpy = false;
+				goto local_copy;
+			}
+			/* set up the remote data copy core and state */
+			in_remote_cpy = true;
+			dsk->receiver.nxt_dcopy_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+			
+			// printk("dsk->receiver.nxt_dcopy_cpu:%d\n", dsk->receiver.nxt_dcopy_cpu);
+pin_user_page:
+			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
+			nr_segs = biter.nr_segs;
+		} 
 
+		if(!in_remote_cpy || blen == 0) {
+			WARN_ON_ONCE(true);
+			goto local_copy;
+		}
+		
+		/* do remote data copy */
+		if(blen < used && blen > 0)
+			used = blen;
 		/* construct data copy request */
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
 		request->state = ND_DCOPY_RECV;
@@ -1376,12 +1935,7 @@ found_ok_skb:
 		request->remain_len = used;
 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
 		request->iter = biter;
-		// printk("cpu:%d req bytes:%d skb bytes:%d frags:%d\n", request->io_cpu,  request->len, skb->len, skb_shinfo(skb)->nr_frags);
-		// bytes_recvd[request->io_cpu] += request->len;
-		// pr_info("request:%p\n", request);
-		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
-		// request->iter = msg->msg_iter;
-		// pr_info("request->len: %d\n", request->len);
+		// printk("queue_request:%d len:%d \n", dsk->receiver.nxt_dcopy_cpu, used);
 		/* update the biter */
 		iov_iter_advance(&biter, used);
 		blen -= used;
@@ -1392,16 +1946,6 @@ found_ok_skb:
 			bv_arr = NULL;
 			nr_segs = 0;
 		}
-		// if (!(flags & MSG_TRUNC)) {
-		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
-		// 	// printk("copy data done: %d\n", used);
-		// 	if (err) {
-		// 		/* Exception. Bailout! */
-		// 		if (!copied)
-		// 			copied = -EFAULT;
-		// 		break;
-		// 	}
-		// }
 
 		WRITE_ONCE(*seq, *seq + used);
 		copied += used;
@@ -1417,75 +1961,47 @@ found_ok_skb:
 queue_request:
 		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
 		/* queue the data copy request */
-		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
-		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
-		// pr_info("queue request\n");
 		
 		qid = nd_dcopy_queue_request(request);
-		if(dsk->receiver.nxt_dcopy_cpu == -1) {
-			dsk->receiver.nxt_dcopy_cpu = qid;
-			// printk("new qid:%d\n", qid);
-		}
-		if(blen == 0 && bremain > 0) {
-			ssize_t bsize = bremain;
-			if(used + offset < skb->len) {
-				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
-			} else {
-				dsk->receiver.nxt_dcopy_cpu = -1;
-			}
-			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
-			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
-			nr_segs = biter.nr_segs;
-			bremain -= blen;
-			// sk_wait_data_copy(sk, &timeo);
-		}
-		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
-		// pr_info("start wait \n");
-		// sk_wait_data_copy(sk, &timeo);
-		// pr_info("finish wait \n");
-
-		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
-		// if(dsk->receiver.nxt_dcopy_cpu == 0)
-		// 	dsk->receiver.nxt_dcopy_cpu = 4;
-		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
-		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
-		// iov_iter_advance(&msg->msg_iter, used);
-		// pr_info("advance \n");
+		// if(dsk->receiver.nxt_dcopy_cpu == -1) {
+		// 	dsk->receiver.nxt_dcopy_cpu = qid;
+		// 	// printk("new qid:%d\n", qid);
+		// }
+		// if(blen == 0 && bremain > 0) {
+		// 	ssize_t bsize = bremain;
+		// 	if(used + offset < skb->len) {
+		// 		bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
+		// 	} else {
+		// 		dsk->receiver.nxt_dcopy_cpu = -1;
+		// 	}
+		// 	bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+		// 	blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
+		// 	nr_segs = biter.nr_segs;
+		// 	bremain -= blen;
+		// 	// sk_wait_data_copy(sk, &timeo);
+		// }
 		continue;
-
-		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
-		// 	// nd_try_send_token(sk);
-		// 	trigger_tokens += 1;
-			
-		// }
-		// nd_try_send_token(sk);
-
-		// tcp_rcv_space_adjust(sk);
-
-// skip_copy:
-		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
-		// 	tp->urg_data = 0;
-		// 	tcp_fast_path_check(sk);
-		// }
-		// if (used + offset < skb->len)
-		// 	continue;
-
-		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
-		// 	tcp_update_recv_tstamps(skb, &tss);
-		// 	cmsg_flags |= 2;
-		// }
-		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-		// 	goto found_fin_ok;
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		// continue;
-
-// found_fin_ok:
-		/* Process the FIN. */
-		// WRITE_ONCE(*seq, *seq + 1);
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		// break;
+local_copy:
+		if (!(flags & MSG_TRUNC)) {
+			err = skb_copy_datagram_msg(skb, offset, msg, used);
+			// printk("copy data done: %d\n", used);
+			if (err) {
+				WARN_ON(true);
+				/* Exception. Bailout! */
+				if (!copied)
+					copied = -EFAULT;
+				break;
+			}
+		}
+		WRITE_ONCE(*seq, *seq + used);
+		copied += used;
+		len -= used;
+		if (used + offset < skb->len)
+			continue;
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		kfree_skb(skb);
+		/* might need to call clean pages here */
 	} while (len > 0);
 	
 	/* free the bvec memory */
@@ -1502,47 +2018,17 @@ queue_request:
 		nd_release_pages(bv_arr, true, nr_segs);
 		kfree(bv_arr);
 	}
-	// pr_info("free bvec:%d\n", __LINE__);
-	// pr_info("biter.bvec:%p\n", biter.bvec);
-	// nd_release_pages(bv_arr, true, nr_segs);
-	// kfree(bv_arr);
-	// }
-	/* Clean up data we have read: This will do ACK frames. */
-	// tcp_cleanup_rbuf(sk, copied);
+
 	nd_try_send_ack(sk, copied);
-	// if (dsk->receiver.copied_seq == dsk->total_length) {
-	// 	printk("call tcp close in the recv msg\n");
-	// 	nd_set_state(sk, TCP_CLOSE);
-	// } else {
-	// 	// nd_try_send_token(sk);
-	// }
 	release_sock(sk);
 	// printk("return");
-	// if (cmsg_flags) {
-	// 	if (cmsg_flags & 2)
-	// 		tcp_recv_timestamp(msg, sk, &tss);
-	// 	if (cmsg_flags & 1) {
-	// 		inq = tcp_inq_hint(sk);
-	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
-	// 	}
-	// }
-	// printk("recvmsg\n");
-	// pr_info("copied:%d\n", copied);
-
 	return copied;
 
 out:
 	release_sock(sk);
 	return err;
-
-// recv_urg:
-// 	err = tcp_recv_urg(sk, msg, len, flags);
-// 	goto out;
-
-// recv_sndq:
-// 	// err = tcp_peek_sndq(sk, msg, len);
-// 	goto out;
 }
+
 
 
 /*

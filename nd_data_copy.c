@@ -5,7 +5,6 @@ static struct workqueue_struct *nd_dcopy_wq;
 
 static struct nd_dcopy_queue nd_dcopy_q[NR_CPUS];
 
-
 static inline void nd_dcopy_free_request(struct nd_dcopy_request *req) {
     if(req->clean_skb && req->skb){
 		// pr_info("reach here:%d\n", __LINE__);
@@ -65,18 +64,17 @@ nd_dcopy_fetch_request(struct nd_dcopy_queue *queue)
 }
 
 /* round-robin */
-int nd_dcopy_sche_rr(void) {
+int nd_dcopy_sche_rr(int last_qid) {
 	struct nd_dcopy_queue *queue;
-	static u32 last_q = 0;
+	int last_q =  (last_qid - nd_params.data_cpy_core) / 4;
 	int i = 0, qid;
 	bool find = false;
-	for (i = 1; i <= nd_params.nd_num_dc_thread; i++) {
+	
+ 	for (i = 1; i <= nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
 		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
-		// if(nd_params.nd_debug)
-		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
-		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size)
+		if(atomic_read(&queue->queue_size) >= queue->queue_threshold)
 			continue;
 		find = true;
 		last_q = qid;
@@ -103,9 +101,9 @@ int nd_dcopy_sche_compact(void) {
 		qid = (i) % (nd_params.nd_num_dc_thread);
 		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
 		// if(nd_params.nd_debug)
-		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->cur_queue_size));
-		if(atomic_read(&queue->cur_queue_size) >= queue->queue_size) {
-			// pr_info(" queue size is larger than limit:%d %d\n", i, atomic_read(&queue->cur_queue_size));
+		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->queue_size));
+		if(atomic_read(&queue->queue_size) >= queue->queue_threshold) {
+			// pr_info(" queue size is larger than limit:%d %d\n", i, atomic_read(&queue->queue_size));
 			continue;
 		}
 		find = true;
@@ -127,32 +125,17 @@ int nd_dcopy_queue_request(struct nd_dcopy_request *req) {
 	int qid;
     struct nd_dcopy_queue* queue;  
     bool empty = false;
-    if(req->io_cpu >= 0){
-		qid = req->io_cpu;
-		queue = &nd_dcopy_q[req->io_cpu];
+	if(req->io_cpu < 0) {
+		WARN_ON(true);
 	}
-	else {
-		qid = nd_dcopy_sche_rr();
-		queue = &nd_dcopy_q[qid];
-	}
-	atomic_add(req->remain_len, &queue->cur_queue_size);
-	// if(nd_params.nd_debug)
-	// 	pr_info("qid:%d\n",qid);
+	qid = req->io_cpu;
+	queue = &nd_dcopy_q[req->io_cpu];
+	atomic_add(req->remain_len, &queue->queue_size);
 	req->queue = queue;
     empty = llist_add(&req->lentry, &queue->req_list) &&
 		list_empty(&queue->copy_list) && !queue->request;
-    
-	// if (queue->io_cpu == smp_processor_id() &&
-	//      empty && mutex_trylock(&queue->copy_mutex)) {
-	// 	// queue->more_requests = !last;
-	// 	nd_try_dcopy(queue);
-	// 	// if(ret == -EAGAIN)
-	// 	// 	queue->more_requests = false;
-	// 	mutex_unlock(&queue->copy_mutex);
-	// } else {
-		/* data packets always go here */	
-		queue_work_on(queue->io_cpu, nd_dcopy_wq, &queue->io_work);
-	// }
+		
+	queue_work_on(queue->io_cpu, nd_dcopy_wq, &queue->io_work);
     return qid;
 }
 
@@ -199,7 +182,7 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
 		// nd_release_pages(req->bv_arr, true, req->max_segs);
 	} 
     atomic_sub_return(req_len, &nsk->receiver.in_flight_copy_bytes);
-	atomic_sub(req_len, &req->queue->cur_queue_size);
+	atomic_sub(req_len, &req->queue->queue_size);
 // done:
 // 	return ret;
 }
@@ -259,6 +242,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 					       pfrag->page,
 					       pfrag->offset,
 					       copy);
+		/* ToDo: handle the err */
 		if(err)
 			WARN_ON(true);
 		/* Update the skb. */
@@ -307,7 +291,7 @@ void nd_try_dcopy_send(struct nd_dcopy_request *req) {
 		nd_release_pages(req->bv_arr, true, req->max_segs);
 	}  
 	atomic_sub_return(req->remain_len - req_len, &nsk->sender.in_flight_copy_bytes);
-	atomic_sub(req->remain_len - req_len, &req->queue->cur_queue_size);
+	atomic_sub(req->remain_len - req_len, &req->queue->queue_size);
 	req->remain_len = req_len;
 // done:
 // 	return ret;
@@ -337,7 +321,7 @@ int nd_try_dcopy(struct nd_dcopy_queue *queue)
 		nd_try_dcopy_send(req);
 	}
 	if(req->state == ND_DCOPY_DONE) {
-		// atomic_dec(&queue->cur_queue_size);
+		// atomic_dec(&queue->queue_size);
 		nd_dcopy_free_request(req);
 		queue->request = NULL;
 	}
@@ -417,9 +401,9 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
-	queue->queue_size = 128 * 65536;
+	queue->queue_threshold = 128 * 65536;
 	// queue->queue_size = queue_size;
-	atomic_set(&queue->cur_queue_size, 0);
+	atomic_set(&queue->queue_size, 0);
 	return 0;
 }
 
@@ -446,7 +430,7 @@ int nd_dcopy_init(void)
 {
 	int ret;
 
-	nd_dcopy_wq = alloc_workqueue("nd_dcopy_wq", WQ_MEM_RECLAIM , 0);
+	nd_dcopy_wq = alloc_workqueue("nd_dcopy_wq", WQ_MEM_RECLAIM, 0);
 
 	if (!nd_dcopy_wq)
 		return -ENOMEM;
