@@ -654,6 +654,8 @@ push_skb:
 		resp->skb = skb;
 		llist_add(&resp->lentry, &nsk->sender.response_list);
 		seq += skb->len;
+		nsk->sender.pending_queue += skb->len;
+
 		skb = NULL;
 		resp = NULL;
 		continue;
@@ -684,6 +686,7 @@ out_error:
 		resp->skb = skb;
 		llist_add(&resp->lentry, &nsk->sender.response_list);
 		seq += skb->len;
+		nsk->sender.pending_queue += skb->len;
 		skb = NULL;
 		resp = NULL;
 	}
@@ -734,6 +737,11 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		}
 
 		/* this part might need to change latter */
+		/* decide to do local or remote data copy */
+		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
+			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
+			goto local_sender_copy;
+		}
 		copy = min_t(int, max_segs * PAGE_SIZE / ND_MAX_SKB_LEN * ND_MAX_SKB_LEN, msg_data_left(msg));
 		if(copy == 0) {
 			WARN_ON(true);
@@ -742,11 +750,6 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 			WARN_ON_ONCE(true);
 			goto wait_for_memory;
 
-		}
-		/* decide to do local or remote data copy */
-		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
-			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
-			goto local_sender_copy;
 		}
 		/* remote data copy */
 		/* construct biov and data copy request */
@@ -778,6 +781,15 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		continue;
 
 local_sender_copy:
+		copy = min_t(int, ND_MAX_SKB_LEN, msg_data_left(msg));
+		if(copy == 0) {
+			WARN_ON(true);
+		}
+		if (!sk_wmem_schedule(sk, copy)) {
+			WARN_ON_ONCE(true);
+			goto wait_for_memory;
+
+		}
 		err = nd_sender_local_dcopy(sk, msg, copy, nsk->sender.write_seq, timeo);
 		if(err != 0)
 			goto out_error;
@@ -1130,7 +1142,7 @@ int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int ret = 0;
 	lock_sock(sk);
 	// nd_rps_record_flow(sk);
-	ret = nd_sendmsg_new_locked(sk, msg, len);
+	ret = nd_sendmsg_new2_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
 }
