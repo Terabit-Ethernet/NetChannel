@@ -590,10 +590,10 @@ static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
 /* copy from kcm sendmsg */
 extern struct nd_conn_ctrl* nd_ctrl;
 
-static int nd_sender_local_dcopy(struct sock* sk, struct msg_hdr *msg, 
-	int req_len, u32 seq) {
+static int nd_sender_local_dcopy(struct sock* sk, struct msghdr *msg, 
+	int req_len, u32 seq, long timeo) {
 	struct sk_buff *skb = NULL;
-	struct nd_sock nsk = nd_sk(sk);
+	struct nd_sock *nsk = nd_sk(sk);
 	struct nd_dcopy_response *resp;
 	size_t copy;
 	int err, i = 0;
@@ -618,7 +618,7 @@ static int nd_sender_local_dcopy(struct sock* sk, struct msg_hdr *msg,
 		copy = min_t(int, copy,
 			     pfrag->size - pfrag->offset);
 		
-		err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
+		err = nd_copy_to_page_nocache(sk, &msg->msg_iter, skb,
 					       pfrag->page,
 					       pfrag->offset,
 					       copy);
@@ -651,29 +651,43 @@ push_skb:
 		/* push the new skb */
 		ND_SKB_CB(skb)->seq = seq;
 		resp = kmalloc(sizeof(struct nd_dcopy_response), GFP_KERNEL);
-		resp->skb = req->skb;
+		resp->skb = skb;
 		llist_add(&resp->lentry, &nsk->sender.response_list);
 		seq += skb->len;
 		skb = NULL;
 		resp = NULL;
 		continue;
 wait_for_memory:
+		/* wait for pending requests to be done */
+		sk_wait_sender_data_copy(sk, &timeo);
+		// nd_fetch_dcopy_response(sk);
 		err = nd_push(sk, GFP_KERNEL);
+		WARN_ON(nsk->sender.pending_queue != 0);
+		// set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		} 
 		err = sk_stream_wait_memory(sk, &timeo);
+		// pr_info("end wait \n");
 		if (err) {
-			pr_info("out error \n");
 			goto out_error;
 		}
 	}
 	return 0;
 out_error:
-	if(skb)
-		kfree_skb(skb);
+	/* To Do: need to check whether kfree_skb should be called */
+	if(skb) {
+		ND_SKB_CB(skb)->seq = seq;
+		resp = kmalloc(sizeof(struct nd_dcopy_response), GFP_KERNEL);
+		resp->skb = skb;
+		llist_add(&resp->lentry, &nsk->sender.response_list);
+		seq += skb->len;
+		skb = NULL;
+		resp = NULL;
+	}
+
 	return err;
 }
 
@@ -709,6 +723,9 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 	if (sk->sk_err)
 		goto out_error;
 
+	/* intialize the nxt_dcopy_cpu */
+	nsk->sender.nxt_dcopy_cpu = nd_params.data_cpy_core;
+
 	while (msg_data_left(msg)) {
 
 		if (!nd_stream_memory_free(sk, nsk->sender.pending_queue)) {
@@ -727,9 +744,8 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 
 		}
 		/* decide to do local or remote data copy */
-		if() {
-
-		} else {
+		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
+			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
 			goto local_sender_copy;
 		}
 		/* remote data copy */
@@ -757,15 +773,17 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		nr_segs = 0;
 		atomic_add(blen, &nsk->sender.in_flight_copy_bytes);
 		nsk->sender.write_seq += blen;
-
 		copied += blen;
-		
-		nsk->sender.nxt_dcopy_cpu = -1;
-
+		nsk->sender.nxt_dcopy_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
 		continue;
 
 local_sender_copy:
-		nd_sender_local_dcopy();
+		err = nd_sender_local_dcopy(sk, msg, copy, nsk->sender.write_seq, timeo);
+		if(err != 0)
+			goto out_error;
+		nsk->sender.write_seq += copy;
+		copied += copy;
+		continue;
 wait_for_memory:
 		/* wait for pending requests to be done */
 		sk_wait_sender_data_copy(sk, &timeo);
@@ -799,6 +817,8 @@ wait_for_memory:
 	return copied;
 
 out_error:
+	/* wait for pending requests to be done */
+	sk_wait_sender_data_copy(sk, &timeo);
 	/* ToDo: might need to wait as well */
 	// nd_push(sk);
 
@@ -852,7 +872,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 	if (sk->sk_err)
 		goto out_error;
-
+	nsk->sender.nxt_dcopy_cpu =  nd_params.data_cpy_core;
 	while (msg_data_left(msg)) {
 
 		if (!nd_stream_memory_free(sk, nsk->sender.pending_queue)) {
@@ -897,7 +917,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		copied += blen;
 		
-		nsk->sender.nxt_dcopy_cpu = -1;
+		nsk->sender.nxt_dcopy_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
 
 		continue;
 
@@ -934,6 +954,8 @@ wait_for_memory:
 	return copied;
 
 out_error:
+	/* wait for pending requests to be done */
+	sk_wait_sender_data_copy(sk, &timeo);
 	/* ToDo: might need to wait as well */
 	// nd_push(sk);
 

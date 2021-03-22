@@ -187,26 +187,6 @@ void nd_try_dcopy_receive(struct nd_dcopy_request *req) {
 // 	return ret;
 }
 
-static inline int nd_copy_to_page_nocache(struct sock *sk, struct iov_iter *from,
-					   struct sk_buff *skb,
-					   struct page *page,
-					   int off, int copy)
-{
-	int err;
-
-	err = skb_do_copy_data_nocache(sk, skb, from, page_address(page) + off,
-				       copy, skb->len);
-	if (err)
-		return err;
-
-	skb->len	     += copy;
-	skb->data_len	     += copy;
-	skb->truesize	     += copy;
-	// sk_wmem_queued_add(sk, copy);
-	// sk_mem_charge(sk, copy);
-	return 0;
-}
-
 void nd_try_dcopy_send(struct nd_dcopy_request *req) {
     struct nd_sock *nsk;
  	int err, req_len, i;

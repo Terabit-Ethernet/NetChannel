@@ -121,9 +121,9 @@ normal_path:
  */
 void nd_page_pool_recycle_pages(struct sk_buff *skb) {
     struct page_pool *page_pool = skb_shinfo(skb)->page_pool;
-    struct page *page;
+    // struct page *page;
     struct sk_buff *segs;
-    int refcnt, i;
+    // int refcnt, i;
     if(!page_pool) {
         // WARN_ON_ONCE(true);
         return;
