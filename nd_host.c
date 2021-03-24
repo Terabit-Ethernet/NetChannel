@@ -709,10 +709,10 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 	struct sk_buff *skb = req->skb;
 	// unsigned int sent = req->sent;
 	int ret = 0;
-	int flags = MSG_DONTWAIT;
  	skb_frag_t *frag;
 	// printk("skb_shinfo(skb)->nr_frags:%d\n", skb_shinfo(skb)->nr_frags);
 	while(true) {
+		int flags = MSG_DONTWAIT;
 		unsigned short frag_offset = req->frag_offset, 
 			fragidx = req->fragidx;
 		frag = &skb_shinfo(skb)->frags[fragidx];
@@ -725,7 +725,7 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 			}
 			frag = &skb_shinfo(skb)->frags[fragidx];
 		}
-		if(fragidx == skb_shinfo(skb)->nr_frags - 1 && atomic_read(&queue->cur_queue_size) == 0) {
+		if(fragidx == skb_shinfo(skb)->nr_frags - 1 && atomic_read(&queue->cur_queue_size) == 1) {
 			flags |= MSG_EOR;
 		} else {
 			flags |= MSG_MORE;
@@ -844,7 +844,6 @@ void nd_conn_io_work(struct work_struct *w)
 		// 	return;
 		if (!pending)
 			break;
-
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
 	// pr_info("queue size after:%u\n", atomic_read(&queue->cur_queue_size));
 	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
