@@ -953,6 +953,77 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 }
 
 /**
+ * nd_pingping() - Handles messages arriving on a given socket.
+ * @fd:           File descriptor for the socket over which messages
+ *                will arrive.
+ * @client_addr:  Information about the client (for messages).
+ */
+void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
+{
+	// int flag = 1;
+	int times =100;
+	// int cur_length = 0;
+	// bool streaming = false;
+	uint64_t count = 0;
+	uint64_t total_length = 0;
+	printf("reach here1\n");
+	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
+		printf("Couldn't connect to dest %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("connect done\n");
+	while (1) {
+		int copied = 0;
+		int rpc_length = 4000;
+		times--;
+		if(times == 0)
+			break;
+		uint64_t start = rdtsc(), end;
+		while(1) {
+			int result = write(fd, buffer + copied,
+				rpc_length);
+			if (result < 0) {
+				printf("goto close\n");
+					goto close;
+			}
+			// printf("result:%d\n",result);
+			rpc_length -= result;
+			copied += result;
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
+		copied = 0;
+		rpc_length = 4000;
+		while(1) {
+			int result = read(fd, buffer + copied,
+				rpc_length);
+			if (result < 0) {
+					printf("goto close2\n");
+					goto close;
+			}
+			// printf("result:%d\n",result);
+			// printf("receive rpc times:%d \n", times);
+			rpc_length -= result;
+			copied += result;
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
+		end = rdtsc();
+		printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
+	//	if (total_length <= 8000000)
+	//	 	printf("buffer:%s\n", buffer);
+		count++;
+
+	}
+		printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!");
+close:
+	return;
+}
+
+/**
  * tcp_ping() - Send a request on a TCP socket and wait for the
  * corresponding response.
  * @fd:       File descriptor corresponding to a TCP connection.
@@ -1125,8 +1196,9 @@ int main(int argc, char** argv)
 		print_help(argv[0]);
 		exit(0);
 	}
-	// for (i = 0; i < 8000000; i++)
-	// 	buffer[i] = (rand()) % 26 + 'a';
+	for (i = 0; i < 8000000; i++)
+		buffer[i] = (rand()) % 26 + 'a';
+//	printf("buffer:%s\n", buffer);
 	if (argc < 3) {
 		printf("Usage: %s host:port [options] op op ...\n", argv[0]);
 		exit(1);
@@ -1205,6 +1277,8 @@ int main(int argc, char** argv)
 
 		printf("nextArg:%d\n", nextArg);
 		fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+		// fd = socket(AF_INET, SOCK_STREAM, 0);
+
 		if (fd < 0) {
 			printf("Couldn't open ND socket: %s\n", strerror(errno));
 		}
@@ -1259,7 +1333,13 @@ int main(int argc, char** argv)
 			} else if (strcmp(argv[nextArg], "ndping") == 0) {
 				printf("call ndping\n");
 				test_ndping(fd, dest, buffer);
-			}
+			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
+				printf("call ndpingpong\n");
+				test_ndpingpong(fd, dest, buffer);
+			} else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
+				fd = socket(AF_INET, SOCK_STREAM, 0);
+				test_ndpingpong(fd, dest, buffer);
+			} 
 			 else {
 				printf("Unknown operation '%s'\n", argv[nextArg]);
 				exit(1);
