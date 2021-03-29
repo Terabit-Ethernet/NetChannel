@@ -143,11 +143,11 @@ void nd_set_state(struct sock* sk, int state) {
 		sk->sk_prot->unhash(sk);
 		/* !(sk->sk_userlocks & SOCK_BINDPORT_LOCK) may need later*/
 		if (nd_sk(sk)->icsk_bind_hash) {
-			printk("put port\n");
+			// printk("put port\n");
 			nd_put_port(sk);
 		} else {
-			printk("userlook and SOCK_BINDPORT_LOCK:%d\n", !(sk->sk_userlocks & SOCK_BINDPORT_LOCK));
-			printk("cannot put port\n");
+			// printk("userlook and SOCK_BINDPORT_LOCK:%d\n", !(sk->sk_userlocks & SOCK_BINDPORT_LOCK));
+			// printk("cannot put port\n");
 		}
 		/* fall through */
 	default:

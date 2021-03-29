@@ -212,8 +212,10 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 	// struct inet_sock *inet = inet_sk(sk);
 	if(copied > 0) {
 		new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
-		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt) {
+		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt && 
+			new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
 			/* send ack pkt for new window */
+			// printk("nd window size:%u\n",  nd_window_size(nsk));
 			nsk->receiver.grant_nxt = new_grant_nxt;
 			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
@@ -1290,8 +1292,8 @@ void nd_destruct_sock(struct sock *sk)
 	// pr_info("8: %llu\n", bytes_recvd[8]);
 
 	// pr_info("max queue length:%d\n", max_queue_length);
-	pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
-	pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
+	// pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
+	// pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	// pr_info("total_send_ack:%llu\n", total_send_ack);
 	// pr_info("total_send_grant:%llu\n", total_send_grant);
 	/* clean sk_forward_alloc*/
@@ -1299,7 +1301,7 @@ void nd_destruct_sock(struct sock *sk)
 	// sk->sk_forward_alloc = 0;
 	// nd_rmem_release(sk, total, 0, true);
 	inet_sock_destruct(sk);
-	printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
+	// printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
 
 	/* unclear part */
 	// printk("sk_memory_allocated:%ld\n", sk_memory_allocated(sk));
@@ -1313,25 +1315,20 @@ int nd_init_sock(struct sock *sk)
 	nd_set_state(sk, TCP_CLOSE);
 	skb_queue_head_init(&nd_sk(sk)->reader_queue);
 	dsk->core_id = raw_smp_processor_id();
-	printk("init sock\n");
-	printk("sk_has_account(sk):%d\n", sk_has_account(sk));
-	// next_going_id 
-	// printk("remaining tokens:%d\n", nd_epoch.remaining_tokens);
-	// atomic64_set(&dsk->next_outgoing_id, 1);
 	// initialize the ready queue and its lock
 	sk->sk_destruct = nd_destruct_sock;
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
-	// WRITE_ONCE(dsk->grant_nxt, 0);
-	// WRITE_ONCE(dsk->prev_grant_nxt, 0);
-	// WRITE_ONCE(dsk->new_grant_nxt, 0);
-
-
 	INIT_WORK(&dsk->tx_work, nd_tx_work);
 	WRITE_ONCE(dsk->wait_cpu, 0);
 	WRITE_ONCE(dsk->wait_on_nd_conns, false);
 	INIT_LIST_HEAD(&dsk->wait_list);
+
+	/* initialize the sndbuf and rcvbuf */
+	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
+	WRITE_ONCE(sk->sk_rcvbuf, nd_params.rmem_default);
+	WRITE_ONCE(dsk->default_win , min_t(uint32_t, nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
 
 	// INIT_LIST_HEAD(&dsk->match_link);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
@@ -1341,35 +1338,21 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.nxt_dcopy_cpu, -1);	
 	WRITE_ONCE(dsk->sender.pending_queue, 0);
     init_llist_head(&dsk->sender.response_list);
+	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
 
-	// WRITE_ONCE(dsk->receiver.free_flow, false);
 	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
 	WRITE_ONCE(dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
 	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, nd_params.data_cpy_core);
-	// WRITE_ONCE(dsk->receiver.max_grant_batch, 0);
-	// WRITE_ONCE(dsk->receiver.max_gso_data, 0);
-	// WRITE_ONCE(dsk->receiver.finished_at_receiver, false);
-	// WRITE_ONCE(dsk->receiver.flow_finish_wait, false);
 	WRITE_ONCE(dsk->receiver.rmem_exhausted, 0);
 	WRITE_ONCE(dsk->receiver.prev_grant_bytes, 0);
-	// WRITE_ONCE(dsk->receiver.in_pq, false);
-	// WRITE_ONCE(dsk->receiver.last_rtx_time, ktime_get());
+
 	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
 	dsk->receiver.free_skb_num = 0;
 	init_llist_head(&dsk->receiver.clean_page_list);
-	// atomic_set(&dsk->receiver.backlog_len, 0);
-	// dsk->start_time = ktime_get();
-	// hrtimer_init(&dsk->receiver.flow_wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
-	// dsk->receiver.flow_wait_timer.function = &nd_flow_wait_event;
 
-	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
-	WRITE_ONCE(sk->sk_rcvbuf, nd_params.rmem_default);
-	WRITE_ONCE(dsk->default_win , min_t(uint32_t, nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
-	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
 
-	printk("dsk->default_win:%u\n", dsk->default_win);
 	kfree_skb(sk->sk_tx_skb_cache);
 	sk->sk_tx_skb_cache = NULL;
 	/* reuse tcp rtx queue*/
@@ -2055,7 +2038,6 @@ local_copy:
 
 	nd_try_send_ack(sk, copied);
 	release_sock(sk);
-	// printk("return");
 	return copied;
 
 out:
@@ -2526,28 +2508,28 @@ void nd_destroy_sock(struct sock *sk)
 	lock_sock(sk);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_ESTABLISH) {
-		printk("send fin pkt\n");
+		// printk("send fin pkt\n");
 		nd_conn_queue_request(construct_fin_req(sk), false, true);
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}      
-	printk("reach here:%d", __LINE__);
-	pr_info("up->sender.snd_una:%u\n", up->sender.snd_una);
-	pr_info("up->sender.grant_nxt:%u\n", up->sender.sd_grant_nxt);
-	pr_info("up->sender.write_seq:%u\n", up->sender.write_seq);
-	pr_info("up->receiver.grant_nxt:%u\n", up->receiver.grant_nxt);
-	pr_info("up->receiver.free_skb_num:%llu\n", up->receiver.free_skb_num);
-	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
+	// printk("reach here:%d", __LINE__);
+	// pr_info("up->sender.snd_una:%u\n", up->sender.snd_una);
+	// pr_info("up->sender.grant_nxt:%u\n", up->sender.sd_grant_nxt);
+	// pr_info("up->sender.write_seq:%u\n", up->sender.write_seq);
+	// pr_info("up->receiver.grant_nxt:%u\n", up->receiver.grant_nxt);
+	// pr_info("up->receiver.free_skb_num:%llu\n", up->receiver.free_skb_num);
+	// pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pendfing_frames(sk);
 	if(up->sender.pending_req) {
-		pr_info("up->sender.pending_req seq:%u\n", ND_SKB_CB(up->sender.pending_req->skb)->seq);
+		// pr_info("up->sender.pending_req seq:%u\n", ND_SKB_CB(up->sender.pending_req->skb)->seq);
 		kfree_skb(up->sender.pending_req->skb);
 		kfree(up->sender.pending_req);
 		up->sender.pending_req = NULL;
 	}
 	nd_write_queue_purge(sk);
 	nd_read_queue_purge(sk);
-	pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
+	// pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 
 	release_sock(sk);
 	/* remove from sleep wait queue */

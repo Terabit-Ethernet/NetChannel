@@ -621,7 +621,9 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 	u32 new_grant_nxt;
 	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
 	
-	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt) {
+	// printk("new grant nxt:%u\n", new_);
+	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt
+		&& new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
 		/* send ack pkt for new window */
 		 nsk->receiver.grant_nxt = new_grant_nxt;
 		nd_conn_queue_request(construct_ack_req(sk, flag), sync, true);
@@ -1799,6 +1801,7 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 		return -ENOMEM;
 	return 0;
 }
+
 void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue) {
 	struct sock *sk = ndt_queue->sock->sk;
 	struct sk_buff *skb;
@@ -1890,7 +1893,12 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 		// 	pr_info("receive skb:%u CORE:%d\n", ntohl(nh->seq), raw_smp_processor_id());
 		// }
 		/* disable irq since it is in the process context */
-		// if(nh->type != DATA) {
+		// if(nh->type == DATA) {
+		// 	start_time = ktime_get_ns();
+		// 	printk("receive data\n");
+		// } else {
+		// 	printk("receive ack\n");
+		// }
 		// 	pr_info("reach here:%d\n", __LINE__);
 			// skb_dump(KERN_WARNING, skb, false);
 			local_bh_disable();
