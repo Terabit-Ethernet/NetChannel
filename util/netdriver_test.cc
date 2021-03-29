@@ -961,28 +961,29 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 {
 	// int flag = 1;
-	int times =100;
+	int times = 90;
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
 	uint64_t total_length = 0;
+	uint64_t start_time;
 	printf("reach here1\n");
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("connect done\n");
+	start_time = rdtsc();
 	while (1) {
 		int copied = 0;
 		int rpc_length = 4000;
-		times--;
-		if(times == 0)
-			break;
+		// times--;
+		// if(times == 0)
+		// 	break;
 		uint64_t start = rdtsc(), end;
 		while(1) {
 			int result = write(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 				printf("goto close\n");
 					goto close;
 			}
@@ -998,7 +999,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 		while(1) {
 			int result = read(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 					printf("goto close2\n");
 					goto close;
 			}
@@ -1012,6 +1013,8 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 		}
 		end = rdtsc();
 		printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
+		if(to_seconds(end-start_time) > times)
+			break;
 	//	if (total_length <= 8000000)
 	//	 	printf("buffer:%s\n", buffer);
 		count++;
