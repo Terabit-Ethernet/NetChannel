@@ -105,7 +105,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 {
 	// int flag = 1;
 	char *buffer = (char*)malloc(2359104);
-	int times = 100;
+	// int times = 10000;
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
@@ -127,11 +127,11 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	while (1) {
 		int copied = 0;
 		int rpc_length = 4000;
-		times--;
+		// times--;
 		while(1) {
 			int result = read(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 					goto close;
 			}
 			rpc_length -= result;
@@ -144,12 +144,12 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		}
 		copied = 0;
 		rpc_length = 4000;
-		if(times == -1)
-			break;
+		// if(times == -1)
+		// 	break;
 		while(1) {
 			int result = write(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 					goto close;
 			}
 			rpc_length -= result;
@@ -774,7 +774,7 @@ int main(int argc, char** argv) {
 	// }
 	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
-	// workers.push_back(std::thread(nd_server, port));
+	workers.push_back(std::thread(nd_server, port));
 	// workers.push_back(std::thread(aggre_thread, &agg_stats));
 	for(int i = 0; i < num_ports; i++) {
 		workers[i].join();
