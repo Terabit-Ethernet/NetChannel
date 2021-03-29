@@ -644,6 +644,7 @@ static int nd_sender_local_dcopy(struct sock* sk, struct msghdr *msg,
 create_new_skb:
 		WARN_ON(skb != NULL);
 		skb = alloc_skb(0, sk->sk_allocation);
+		skb->ip_summed = CHECKSUM_PARTIAL;
 		// printk("create new skb\n");
 		if(!skb)
 			goto wait_for_memory;
