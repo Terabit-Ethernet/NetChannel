@@ -212,8 +212,8 @@ static struct ctl_table nd_ctl_table[] = {
 static void nd_v4_reqsk_destructor(struct request_sock *req)
 {
 
-        printk("call reqsk destructor\n");
-        printk("ireq option is NULL:%d\n", inet_rsk(req)->ireq_opt == NULL);
+        // printk("call reqsk destructor\n");
+        // printk("ireq option is NULL:%d\n", inet_rsk(req)->ireq_opt == NULL);
         kfree(rcu_dereference_protected(inet_rsk(req)->ireq_opt, 1));
 }
 

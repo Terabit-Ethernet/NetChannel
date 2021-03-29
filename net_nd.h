@@ -432,7 +432,7 @@ static inline struct ndhdr *nd_gro_ndhdr(struct sk_buff *skb)
 
 static inline void nd_lib_close(struct sock *sk, long timeout)
 {
-	printk("call socket close\n");
+	// printk("call socket close\n");
 	sk_common_release(sk);
 }
 

@@ -951,7 +951,6 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 		fh->dest, sdif, &refcounted);
 		// sk = __nd4_lib_lookup_skb(skb, fh->common.source, fh->common.dest, &nd_table);
 	// }
-	pr_info("receive sync pkt\n");
 	if(sk) {
 		child = nd_conn_request(sk, skb);
 		if(child) {
@@ -966,7 +965,6 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 			/* currently assume at the target side */
 			/* ToDo: sync can be true; */
 			nd_conn_queue_request(construct_sync_ack_req(child), false, true);
-			printk("send back sync ack:\n");
 		}
 	} else {
 		goto free;
@@ -1163,7 +1161,7 @@ int nd_handle_fin_pkt(struct sk_buff *skb) {
 	// 	kfree_skb(skb);		/* No space for header. */
 	// 	return 0;
 	// }
-	printk("receive fin pkt\n");
+	// printk("receive fin pkt\n");
 	dh = nd_hdr(skb);
 	// sk = skb_steal_sock(skb);
 	// if(!sk) {
@@ -1174,14 +1172,14 @@ int nd_handle_fin_pkt(struct sk_buff *skb) {
  		bh_lock_sock(sk);
 		dsk = nd_sk(sk);
 		if (!sock_owned_by_user(sk)) {
-			printk("reach here:%d", __LINE__);
+			// printk("reach here:%d", __LINE__);
 
 	        nd_set_state(sk, TCP_CLOSE);
 	        nd_write_queue_purge(sk);
 	        sk->sk_data_ready(sk);
 	        kfree_skb(skb);
         } else {
-			printk("put fin to backlog:%d", __LINE__);
+			// printk("put fin to backlog:%d", __LINE__);
             nd_add_backlog(sk, skb, true);
         }
         bh_unlock_sock(sk);
@@ -1505,8 +1503,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	}
 	
 	if (discard) {
-	    printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
-	    printk("discard packet:%d\n", __LINE__);
+	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
+	    // printk("discard packet:%d\n", __LINE__);
 		// skb_dump(KERN_WARNING, skb, false);
 
 		sk_drops_add(sk, skb);

@@ -840,7 +840,7 @@ struct sock *nd_sk_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
-	printk("accept core id:%d\n", raw_smp_processor_id());
+	// printk("accept core id:%d\n", raw_smp_processor_id());
 	// nd_rps_record_flow(newsk);
 
 	// printk("src port:%d\n", inet_sk(newsk)->inet_num);
