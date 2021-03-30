@@ -85,7 +85,8 @@ struct nd_params {
 	int nd_add_host;
 	int nd_host_added;
 
-	int ldcopy_inflight_thre;
+	int ldcopy_tx_inflight_thre;
+	int ldcopy_rx_inflight_thre;
 	int ldcopy_min_thre;
 	
 	int min_iter;

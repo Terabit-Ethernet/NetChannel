@@ -741,7 +741,7 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 
 		/* this part might need to change latter */
 		/* decide to do local or remote data copy */
-		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
+		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_tx_inflight_thre || 
 			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
 			goto local_sender_copy;
 		}
@@ -1918,7 +1918,7 @@ found_ok_skb:
 			}
 
 			/* check the current CPU util */
-			if(atomic_read(&dsk->receiver.in_flight_copy_bytes) > nd_params.ldcopy_inflight_thre || 
+			if(atomic_read(&dsk->receiver.in_flight_copy_bytes) > nd_params.ldcopy_rx_inflight_thre || 
 				copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0){
 				/* do local */
 				in_remote_cpy = false;

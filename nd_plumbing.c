@@ -190,8 +190,15 @@ static struct ctl_table nd_ctl_table[] = {
                 .proc_handler   = nd_dointvec
         },
         {
-                .procname       = "nd_ldcopy_inflight_thre",
-                .data           = &nd_params.ldcopy_inflight_thre,
+                .procname       = "nd_ldcopy_tx_inflight_thre",
+                .data           = &nd_params.ldcopy_tx_inflight_thre,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+        {
+                .procname       = "nd_ldcopy_rx_inflight_thre",
+                .data           = &nd_params.ldcopy_rx_inflight_thre,
                 .maxlen         = sizeof(int),
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
@@ -237,7 +244,8 @@ void nd_params_init(struct nd_params* params) {
     params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
     params->nd_debug = 0;
-    params->ldcopy_inflight_thre = ND_MAX_SKB_LEN * 4;
+    params->ldcopy_tx_inflight_thre = ND_MAX_SKB_LEN * 8;
+    params->ldcopy_rx_inflight_thre = ND_MAX_SKB_LEN * 4;
     params->ldcopy_min_thre = ND_MAX_SKB_LEN;
     params->match_socket_port = 3000;
     params->bandwidth = 100;
@@ -247,8 +255,8 @@ void nd_params_init(struct nd_params* params) {
     params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
-    params->local_ip = "192.168.10.117";
-    params->remote_ip = "192.168.10.116";
+    params->local_ip = "192.168.10.116";
+    params->remote_ip = "192.168.10.117";
     params->data_cpy_core = 16;
     params->num_nd_queues = 8;
     params->alpha = 2;
