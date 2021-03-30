@@ -260,33 +260,33 @@ done:
 // u64 bytes_sent[8];
 // int max_queue_length;
 /* round-robin; will not select the previous one except if there is only one channel. */
-int nd_conn_sche_rr(bool avoid_check) {
+int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
 	struct nd_conn_queue *queue;
 	/* cur_count tracks how many skbs has been sent for the current queue before going to the next queue */
-	static u32 last_q = 0, cur_count = 0;
+	// static u32;
 	int i = 0, qid = last_q;
 	// if(nd_params.nd_num_queue == 1)
 	// 	i = 0;
+	/* advance to the next queue */
+	if(cur_count == nd_ctrl->queues[last_q].compact_low_thre) {
+		last_q = (last_q + 1) % (nd_params.nd_num_queue);
+		// cur_count = 0;
+	}
 	for (; i < nd_params.nd_num_queue; i++) {
 		/* select queue */
 		qid = (last_q + i) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
-		WARN_ON(cur_count >= queue->compact_low_thre);
+		// WARN_ON(cur_count >= queue->compact_low_thre);
 
 		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
 			== queue->queue_size) {
 			/* update the count */
-			cur_count = 0;
+			// cur_count = 0;
 			continue;
 		} else {
-			cur_count++;
+			// cur_count++;
 		}
 		last_q = qid;
-		/* advance to the next queue */
-		if(cur_count == queue->compact_low_thre) {
-			last_q = (last_q + 1) % (nd_params.nd_num_queue);
-			cur_count = 0;
-		}
 		return qid;
 	}
 	if(avoid_check) {
@@ -344,7 +344,7 @@ int nd_conn_sche_compact(bool avoid_check) {
 	return -1;
 }
 
-bool nd_conn_queue_request(struct nd_conn_request *req,
+bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		bool sync, bool avoid_check)
 {
 	struct nd_conn_queue *queue = req->queue;
@@ -352,16 +352,25 @@ bool nd_conn_queue_request(struct nd_conn_request *req,
 	bool empty;
 	int ret;
 	int qid = 0;
+	WARN_ON(nsk == NULL);
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		qid = nd_conn_sche_rr(avoid_check);
-		if(qid >= 0)
-			req->queue = &nd_ctrl->queues[qid];
-		else
+		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, avoid_check);
+
+		if(qid < 0)
 			return false;
+		req->queue = &nd_ctrl->queues[qid];
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
+		/* update nsk state */
+		if(qid == nsk->sender.con_queue_id)
+			nsk->sender.con_accumu_count += 1;
+		else {
+			/* reinitalize the sk state */
+			nsk->sender.con_accumu_count = 1;
+			nsk->sender.con_queue_id = qid;
+		}
 		// queue_id += 1;
 	}
 	// bytes_sent[qid] += 1;
@@ -1264,7 +1273,7 @@ int nd_conn_init_module(void)
 
     opts->queue_size = 128;
 	opts->compact_high_thre = 256;
-	opts->compact_low_thre = 1;
+	opts->compact_low_thre = 2;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

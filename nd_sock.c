@@ -23,7 +23,7 @@
 #include <net/sock_reuseport.h>
 #include <net/addrconf.h>
 #include "nd_host.h"
-// #include "linux_nd.h"
+#include "linux_nd.h"
 #include "nd_impl.h"
 #include "nd_hashtables.h"
 
@@ -518,6 +518,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// struct nd_sock *dsk = nd_sk(sk);
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	struct inet_sock *inet = inet_sk(sk);
+	struct nd_sock *nsk = nd_sk(sk);
 	// struct nd_sock *tp = nd_sk(sk);
 	__be16 orig_sport, orig_dport;
 	__be32 daddr, nexthop;
@@ -647,7 +648,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
 	/* send sync request */
-    nd_conn_queue_request(construct_sync_req(sk), true, true);
+    nd_conn_queue_request(construct_sync_req(sk), nsk, true, true);
 	nd_set_state(sk, ND_SYNC_SENT);
 
 	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 

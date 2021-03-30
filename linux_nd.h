@@ -501,11 +501,17 @@ struct nd_sock {
 		int pending_queue;
 	    /* the last unack byte.*/
 	    uint32_t snd_una;
+
+		/* for data copy */
 		struct nd_conn_request* pending_req;
 		uint32_t nxt_dcopy_cpu;
 		struct llist_head	response_list;
 		atomic_t in_flight_copy_bytes;
 
+		/* for ND conns */
+		int con_queue_id;
+		// for batching
+		int con_accumu_count;
 	    // uint32_t total_bytes_sent;
 	    // uint32_t bytes_from_user;
 	    // int remaining_pkts_at_sender;

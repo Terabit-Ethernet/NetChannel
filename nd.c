@@ -217,7 +217,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 			/* send ack pkt for new window */
 			// printk("nd window size:%u\n",  nd_window_size(nsk));
 			nsk->receiver.grant_nxt = new_grant_nxt;
-			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), false, true);
+			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), nsk, false, true);
 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 			// total_send_ack++;
 		}
@@ -542,7 +542,7 @@ queue_req:
 		}
 		seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
-		push_success = nd_conn_queue_request(req, false, false);
+		push_success = nd_conn_queue_request(req, nsk, false, false);
 		if(!push_success) {
 			WARN_ON(nsk->sender.pending_req);
 			// pr_info("add to sleep sock:%d\n", __LINE__);
@@ -1340,6 +1340,8 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.pending_queue, 0);
     init_llist_head(&dsk->sender.response_list);
 	WRITE_ONCE(dsk->sender.sd_grant_nxt, dsk->default_win);
+	WRITE_ONCE(dsk->sender.con_queue_id, 0);
+	WRITE_ONCE(dsk->sender.con_accumu_count, 0);
 
 	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
@@ -2509,8 +2511,7 @@ void nd_destroy_sock(struct sock *sk)
 	lock_sock(sk);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_ESTABLISH) {
-		// printk("send fin pkt\n");
-		nd_conn_queue_request(construct_fin_req(sk), false, true);
+		nd_conn_queue_request(construct_fin_req(sk), up, false, true);
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}      
 	// printk("reach here:%d", __LINE__);
