@@ -716,6 +716,7 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 	ssize_t blen;
 	int max_segs = MAX_PIN_PAGES;
 	int nr_segs = 0;
+	int next_cpu = 0;
 	// int pending = 0;
 	WARN_ON(msg->msg_iter.count != len);
 	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
@@ -754,6 +755,12 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 			goto wait_for_memory;
 
 		}
+		next_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
+		if(next_cpu == -1) {
+			/* data copy worker threads are all busy */
+			goto local_sender_copy;
+		} else
+			nsk->sender.nxt_dcopy_cpu = next_cpu;
 		/* remote data copy */
 		/* construct biov and data copy request */
 		bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
@@ -780,7 +787,6 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		atomic_add(blen, &nsk->sender.in_flight_copy_bytes);
 		nsk->sender.write_seq += blen;
 		copied += blen;
-		nsk->sender.nxt_dcopy_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
 		continue;
 
 local_sender_copy:
@@ -875,6 +881,7 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 	ssize_t blen;
 	int max_segs = MAX_PIN_PAGES;
 	int nr_segs = 0;
+	int next_cpu = 0;
 	// int pending = 0;
 	WARN_ON(msg->msg_iter.count != len);
 	if ((1 << sk->sk_state) & ~(NDF_ESTABLISH)) {
@@ -932,8 +939,9 @@ static int nd_sendmsg_new_locked(struct sock *sk, struct msghdr *msg, size_t len
 
 		copied += blen;
 		
-		nsk->sender.nxt_dcopy_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
-
+		next_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
+		if(next_cpu != -1)
+			nsk->sender.nxt_dcopy_cpu = next_cpu;
 		continue;
 
 wait_for_memory:
@@ -1649,10 +1657,13 @@ queue_request:
 		// }
 		if(blen == 0 && bremain > 0) {
 			ssize_t bsize = bremain;
+			int next_cpu = 0;
 			if(used + offset < skb->len) {
 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
 			} else {
-				dsk->receiver.nxt_dcopy_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+				next_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+				if(next_cpu != -1)
+					dsk->receiver.nxt_dcopy_cpu = next_cpu;
 			}
 			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
@@ -1787,6 +1798,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 	int max_segs = MAX_PIN_PAGES;
 	int nr_segs = 0;
 	int qid;
+	int next_cpu;
 	bool in_remote_cpy;
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
@@ -1924,9 +1936,16 @@ found_ok_skb:
 				in_remote_cpy = false;
 				goto local_copy;
 			}
+
 			/* set up the remote data copy core and state */
+			next_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+			if(next_cpu == -1) {
+				/* worker thread are all busy */
+				goto local_copy;
+			} else {
+				dsk->receiver.nxt_dcopy_cpu = next_cpu;
+			}
 			in_remote_cpy = true;
-			dsk->receiver.nxt_dcopy_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
 			
 			// printk("dsk->receiver.nxt_dcopy_cpu:%d\n", dsk->receiver.nxt_dcopy_cpu);
 pin_user_page:

@@ -82,8 +82,9 @@ int nd_dcopy_sche_rr(int last_qid) {
 		// return qid * 4 + nd_params.data_cpy_core;
 	}
 	if(!find) {
-		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
-		last_q = qid;
+		return -1;
+		// qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
+		// last_q = qid;
 	}
 	return last_q * 4 + nd_params.data_cpy_core;
 	// }
@@ -113,8 +114,9 @@ int nd_dcopy_sche_compact(void) {
 	}
 	/* if all queue is full; do round-robin */
 	if(!find) {
-		qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
-		last_q = qid;
+		return -1;
+		// qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
+		// last_q = qid;
 	}
 	return last_q * 4 + nd_params.data_cpy_core;
 	// }
@@ -335,7 +337,7 @@ void nd_dcopy_io_work(struct work_struct *w)
 			pending = true;
 		else if (unlikely(result < 0))
 			break;
-		
+		// printk("queue size:%d \n",atomic_read(&queue->queue_size));
 
 		// result = nvme_tcp_try_recv(queue);
 		// if (result > 0)
@@ -381,7 +383,7 @@ int nd_dcopy_alloc_queue(struct nd_dcopy_queue *queue, int io_cpu)
     mutex_init(&queue->copy_mutex);
 	INIT_WORK(&queue->io_work, nd_dcopy_io_work);
     queue->io_cpu = io_cpu;
-	queue->queue_threshold = 128 * 65536;
+	queue->queue_threshold = 10 * 65536;
 	// queue->queue_size = queue_size;
 	atomic_set(&queue->queue_size, 0);
 	return 0;

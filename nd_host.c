@@ -278,14 +278,15 @@ int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
 		queue =  &nd_ctrl->queues[qid];
 		// WARN_ON(cur_count >= queue->compact_low_thre);
 
-		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->queue_size) 
-			== queue->queue_size) {
+		if(atomic_read(&queue->cur_queue_size) 
+			>= queue->queue_size) {
 			/* update the count */
 			// cur_count = 0;
 			continue;
 		} else {
 			// cur_count++;
 		}
+		atomic_add(1, &queue->cur_queue_size);
 		last_q = qid;
 		return qid;
 	}
@@ -808,6 +809,7 @@ int nd_conn_try_send(struct nd_conn_queue *queue)
 	// 		goto done;
 	// }
 clean:
+	// printk("queue cpu:%d  size %d\n", queue->io_cpu, atomic_read(&queue->cur_queue_size));
 	atomic_dec(&queue->cur_queue_size);
 	nd_conn_done_send_req(queue);
 	// if (req->state == NVME_TCP_SEND_DDGST)
@@ -868,6 +870,7 @@ void nd_conn_io_work(struct work_struct *w)
 void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
 	uint32_t i;
 	spin_lock_bh(&ctrl->sock_wait_lock);
+	// printk("add sleep sock\n");
 	if(nsk->wait_on_nd_conns)
 		goto queue_work;
 	nsk->wait_cpu = raw_smp_processor_id();
@@ -1271,7 +1274,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = nd_params.local_ip;
     // opts->host_port = "10000";
 
-    opts->queue_size = 128;
+    opts->queue_size = 1024;
 	opts->compact_high_thre = 256;
 	opts->compact_low_thre = 2;
     opts->tos = 0;
