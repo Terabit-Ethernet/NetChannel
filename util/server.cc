@@ -501,7 +501,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		while(1) {
 			int result = read(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 					goto close;
 			}
 			rpc_length -= result;
@@ -514,12 +514,13 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		}
 		copied = 0;
 		rpc_length = 4000;
+		printf("times:%d\n", times);
 		if(times == -1)
 			break;
 		while(1) {
 			int result = write(fd, buffer + copied,
 				rpc_length);
-			if (result < 0) {
+			if (result <= 0) {
 					goto close;
 			}
 			rpc_length -= result;

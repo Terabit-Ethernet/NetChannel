@@ -126,7 +126,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
 		int copied = 0;
-		int rpc_length = 4000;
+		int rpc_length = 16000;
 		// times--;
 		while(1) {
 			int result = read(fd, buffer + copied,
