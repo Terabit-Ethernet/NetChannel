@@ -24,6 +24,7 @@
 #include <ctime>
 #include<chrono>
 #include <errno.h>
+#include <iostream>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
@@ -40,7 +41,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <inttypes.h>
-
+#include <vector>
 #include <thread>
 
 //#include "../uapi_linux_nd.h"
@@ -965,8 +966,9 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
-	uint64_t total_length = 0;
+	// uint64_t total_length = 0;
 	uint64_t start_time;
+	std::vector<double> latency;
 	printf("reach here1\n");
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
@@ -975,7 +977,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 	start_time = rdtsc();
 	while (1) {
 		int copied = 0;
-		int rpc_length = 4000;
+		int rpc_length = 16000;
 		// times--;
 		// if(times == 0)
 		// 	break;
@@ -1012,7 +1014,8 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 			// return;
 		}
 		end = rdtsc();
-		printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
+		latency.push_back(to_seconds(end-start));
+		// printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
 		if(to_seconds(end-start_time) > times)
 			break;
 	//	if (total_length <= 8000000)
@@ -1020,9 +1023,14 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 		count++;
 
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		// printf( "total len:%" PRIu64 "\n", total_length);
+		// printf("done!");
 close:
+	sleep(10);
+
+	for(uint32_t i = 0; i < latency.size(); i++) {
+		std::cout << "finish time: " << latency[i] << "\n"; 
+	}
 	return;
 }
 
