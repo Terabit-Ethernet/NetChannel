@@ -259,7 +259,9 @@ void nd_fetch_dcopy_response(struct sock *sk) {
 		nd_rbtree_insert(&sk->tcp_rtx_queue, resp->skb);
 		node = node->next;
 		sk_wmem_queued_add(sk, resp->skb->truesize);
-		sk_mem_charge(sk, resp->skb->truesize);
+		sk_mem_charge(sk, resp->skb->len);
+		// printk("sk->sk_forward alloc:%d\n", sk->sk_forward_alloc);
+
 		nsk->sender.pending_queue -= resp->skb->len;
 		WARN_ON(nsk->sender.pending_queue < 0);
 		kfree(resp);
@@ -584,6 +586,7 @@ out:
 
 static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
 {
+	/* this is roung calc, since pending queue only consider payload */
 	if (READ_ONCE(sk->sk_wmem_queued) + pending >= READ_ONCE(sk->sk_sndbuf))
 		return false;
 
@@ -697,6 +700,13 @@ out_error:
 	return err;
 }
 
+static inline bool nd_wmem_schedule(struct sock *sk, int size)
+{
+	if (!sk_has_account(sk))
+		return true;
+	return __sk_mem_schedule(sk, size, SK_MEM_SEND);
+}
+
 static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct nd_sock *nsk = nd_sk(sk);
@@ -742,18 +752,19 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 
 		/* this part might need to change latter */
 		/* decide to do local or remote data copy */
-		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_tx_inflight_thre || 
-			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
-			goto local_sender_copy;
-		}
 		copy = min_t(int, max_segs * PAGE_SIZE / ND_MAX_SKB_LEN * ND_MAX_SKB_LEN, msg_data_left(msg));
 		if(copy == 0) {
 			WARN_ON(true);
 		}
-		if (!sk_wmem_schedule(sk, copy)) {
+		if (!nd_wmem_schedule(sk, copy)) {
 			WARN_ON_ONCE(true);
 			goto wait_for_memory;
 
+		} 
+		// printk("wmem schedule: %d !sk_has_account(sk):%d \n", sk->sk_forward_alloc, !sk_has_account(sk));
+		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_tx_inflight_thre || 
+			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
+			goto local_sender_copy;
 		}
 		next_cpu = nd_dcopy_sche_rr(nsk->sender.nxt_dcopy_cpu);
 		if(next_cpu == -1) {
@@ -767,7 +778,13 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		blen = nd_dcopy_iov_init(msg, &biter, bv_arr, copy, max_segs);
 		nr_segs = biter.nr_segs;
 		nsk->sender.pending_queue += blen;
+		if(blen < copy) {
+			sk_mem_charge(sk, copy - blen);
+			// printk("wmem schedule 2: %d\n", sk->sk_forward_alloc);
 
+		} else {
+			WARN_ON_ONCE(blen != copy);
+		}
 		/* create new request */
 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
 		request->state = ND_DCOPY_SEND;
@@ -790,15 +807,16 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		continue;
 
 local_sender_copy:
-		copy = min_t(int, ND_MAX_SKB_LEN, msg_data_left(msg));
-		if(copy == 0) {
-			WARN_ON(true);
-		}
-		if (!sk_wmem_schedule(sk, copy)) {
-			WARN_ON_ONCE(true);
-			goto wait_for_memory;
+		// copy = min_t(int, ND_MAX_SKB_LEN, msg_data_left(msg));
+		// if(copy == 0) {
+		// 	WARN_ON(true);
+		// }
+		// if (!sk_wmem_schedule(sk, copy)) {
+		// 	WARN_ON_ONCE(true);
+		// 	goto wait_for_memory;
 
-		}
+		// }
+// local_sender_copy_skip_schedule:
 		err = nd_sender_local_dcopy(sk, msg, copy, nsk->sender.write_seq, timeo);
 		if(err != 0)
 			goto out_error;
