@@ -222,6 +222,7 @@ void nd_conn_write_space(struct sock *sk)
 	read_lock_bh(&sk->sk_callback_lock);
 	queue = sk->sk_user_data;
 	if (likely(queue && sk_stream_is_writeable(sk))) {
+		// printk("write space invoke\n");
 		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	}
@@ -373,6 +374,8 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 			nsk->sender.con_queue_id = qid;
 		}
 		// queue_id += 1;
+	} else {
+		atomic_add(1, &queue->cur_queue_size);
 	}
 	// bytes_sent[qid] += 1;
 	WARN_ON(req->queue == NULL);
@@ -856,7 +859,6 @@ void nd_conn_io_work(struct work_struct *w)
 		if (!pending)
 			break;
 	} while (!time_after(jiffies, deadline)); /* quota is exhausted */
-	// pr_info("queue size after:%u\n", atomic_read(&queue->cur_queue_size));
 	// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_SNDBUF,
 	// 	(char *)&bufsize, &optlen);
 	// pr_info("ret value:%d\n", ret);
@@ -997,6 +999,8 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
 	/* mod 28 is hard code for now. */
 	queue->io_cpu = (4 * qid) % 32;
+	// queue->io_cpu = 0;
+	// printk("queue id:%d\n", queue->io_cpu);
 	queue->request = NULL;
 	// queue->data_remaining = 0;
 	// queue->ddgst_remaining = 0;
@@ -1274,7 +1278,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = nd_params.local_ip;
     // opts->host_port = "10000";
 
-    opts->queue_size = 1024;
+    opts->queue_size = 128;
 	opts->compact_high_thre = 256;
 	opts->compact_low_thre = 2;
     opts->tos = 0;

@@ -259,7 +259,7 @@ void nd_fetch_dcopy_response(struct sock *sk) {
 		nd_rbtree_insert(&sk->tcp_rtx_queue, resp->skb);
 		node = node->next;
 		sk_wmem_queued_add(sk, resp->skb->truesize);
-		sk_mem_charge(sk, resp->skb->len);
+		// sk_mem_charge(sk, resp->skb->len);
 		// printk("sk->sk_forward alloc:%d\n", sk->sk_forward_alloc);
 
 		nsk->sender.pending_queue -= resp->skb->len;
@@ -456,6 +456,8 @@ bool nd_snd_q_ready(struct sock *sk) {
 	}
 	return false;
 }
+extern struct nd_conn_ctrl* nd_ctrl; 
+
 int nd_push(struct sock *sk, gfp_t flag) {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sk_buff *skb;
@@ -520,7 +522,7 @@ int nd_push(struct sock *sk, gfp_t flag) {
 		// skb_dequeue(&sk->sk_write_queue);
 			// kfree_skb(skb);
 		sk_wmem_queued_add(sk, -skb->truesize);
-		sk_mem_uncharge(sk, skb->truesize);
+		// sk_mem_uncharge(sk, skb->truesize);
 		WARN_ON(nsk->sender.snd_nxt != ND_SKB_CB(skb)->seq);
 		nsk->sender.snd_nxt += skb->len;
 		// if(ND_SKB_CB(skb)->seq == 0)
@@ -544,6 +546,7 @@ queue_req:
 		}
 		seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
+		// req->queue = &nd_ctrl->queues[htons(inet->inet_sport) % nd_params.nd_num_queue];
 		push_success = nd_conn_queue_request(req, nsk, false, false);
 		if(!push_success) {
 			WARN_ON(nsk->sender.pending_req);
@@ -756,12 +759,12 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		if(copy == 0) {
 			WARN_ON(true);
 		}
-		if (!nd_wmem_schedule(sk, copy)) {
-			WARN_ON_ONCE(true);
-			goto wait_for_memory;
 
-		} 
-		// printk("wmem schedule: %d !sk_has_account(sk):%d \n", sk->sk_forward_alloc, !sk_has_account(sk));
+		// if (!nd_wmem_schedule(sk, copy)) {
+		// 	WARN_ON_ONCE(true);
+		// 	goto wait_for_memory;
+
+		// } 
 		if(atomic_read(&nsk->sender.in_flight_copy_bytes) > nd_params.ldcopy_tx_inflight_thre || 
 			copied <  nd_params.ldcopy_min_thre || nd_params.nd_num_dc_thread == 0) {
 			goto local_sender_copy;
@@ -779,7 +782,7 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		nr_segs = biter.nr_segs;
 		nsk->sender.pending_queue += blen;
 		if(blen < copy) {
-			sk_mem_charge(sk, copy - blen);
+			// sk_mem_charge(sk, copy - blen);
 			// printk("wmem schedule 2: %d\n", sk->sk_forward_alloc);
 
 		} else {
@@ -1325,6 +1328,7 @@ void nd_destruct_sock(struct sock *sk)
 	// pr_info("total_send_grant:%llu\n", total_send_grant);
 	/* clean sk_forward_alloc*/
 	sk_mem_reclaim(sk);
+
 	// sk->sk_forward_alloc = 0;
 	// nd_rmem_release(sk, total, 0, true);
 	inet_sock_destruct(sk);
