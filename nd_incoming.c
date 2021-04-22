@@ -1080,7 +1080,9 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 				err = nd_push(sk, GFP_ATOMIC);
 				if(sk_stream_memory_free(sk)) {
 					sk->sk_write_space(sk);
-				} else if(err == -EDQUOT){
+				} 
+				/* might need to remove this logic */
+				else if(err == -EDQUOT){
 					/* push back since there is no space */
 					nd_conn_add_sleep_sock(nd_ctrl, dsk);
 				}

@@ -287,14 +287,14 @@ int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
 		} else {
 			// cur_count++;
 		}
-		atomic_add(1, &queue->cur_queue_size);
+		// atomic_add(1, &queue->cur_queue_size);
 		last_q = qid;
 		return qid;
 	}
 	if(avoid_check) {
 		qid = (1 + last_q) % (nd_params.nd_num_queue);
 		queue =  &nd_ctrl->queues[qid];
-		atomic_add(1, &queue->cur_queue_size);
+		// atomic_add(1, &queue->cur_queue_size);
 		last_q = qid;
 		return last_q;
 	}
@@ -365,6 +365,7 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		req->queue = &nd_ctrl->queues[qid];
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
+		atomic_add(1, &queue->cur_queue_size);
 		/* update nsk state */
 		if(qid == nsk->sender.con_queue_id)
 			nsk->sender.con_accumu_count += 1;
@@ -715,7 +716,7 @@ int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req)
 	req->offset += ret;
 	return -EAGAIN;
 }
-
+extern ktime_t start_time;
 int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 {
 	struct nd_conn_queue *queue = req->queue;
@@ -743,7 +744,9 @@ int nd_conn_try_send_data_pdu(struct nd_conn_request *req)
 		} else {
 			flags |= MSG_MORE;
 		}
-		// printk("sendpage:%d\n", fragidx);
+		// if(queue->qid == 0)
+		// 	printk("time diff: %lld\n", ktime_to_us(ktime_sub(ktime_get(), start_time)));
+
 		ret = kernel_sendpage(queue->sock,
 						skb_frag_page(frag),
 						skb_frag_off(frag) + frag_offset,
@@ -828,6 +831,7 @@ done:
 	}
 	return ret;
 }
+uint32_t total_time = 0;
 
 void nd_conn_io_work(struct work_struct *w)
 {
@@ -839,6 +843,7 @@ void nd_conn_io_work(struct work_struct *w)
 	// int bufsize;
 	// int optlen = sizeof(bufsize);
 	// pr_info("queue size:%u\n", atomic_read(&queue->cur_queue_size));
+	total_time += 1;
 	do {
 		int result;
 		pending = false;
@@ -1000,6 +1005,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	/* mod 28 is hard code for now. */
 	queue->io_cpu = (4 * qid) % 32;
 	// queue->io_cpu = 0;
+	queue->qid = qid;
 	// printk("queue id:%d\n", queue->io_cpu);
 	queue->request = NULL;
 	// queue->data_remaining = 0;
@@ -1278,7 +1284,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = nd_params.local_ip;
     // opts->host_port = "10000";
 
-    opts->queue_size = 128;
+    opts->queue_size = 1024;
 	opts->compact_high_thre = 256;
 	opts->compact_low_thre = 2;
     opts->tos = 0;

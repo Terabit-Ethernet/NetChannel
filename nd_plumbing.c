@@ -244,7 +244,7 @@ void nd_params_init(struct nd_params* params) {
     params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
     params->nd_debug = 0;
-    params->ldcopy_tx_inflight_thre = ND_MAX_SKB_LEN * 8;
+    params->ldcopy_tx_inflight_thre = ND_MAX_SKB_LEN * 12;
     params->ldcopy_rx_inflight_thre = ND_MAX_SKB_LEN * 4;
     params->ldcopy_min_thre = ND_MAX_SKB_LEN;
     params->match_socket_port = 3000;
@@ -257,7 +257,7 @@ void nd_params_init(struct nd_params* params) {
     // matchiing parameters
     params->local_ip = "192.168.10.116";
     params->remote_ip = "192.168.10.117";
-    params->data_cpy_core = 16;
+    params->data_cpy_core = 8;
     params->num_nd_queues = 8;
     params->alpha = 2;
     params->beta = 5;
@@ -362,20 +362,6 @@ static int __init nd_load(void) {
         //     temp = list_entry(head, struct test_element, node);
         //     printk("value: %d\n", temp->value);
         // }   
-        spinlock_t lock;
-        spin_lock_init(&lock);
-        pr_info("in_softirq():%lu\n", in_softirq());
-        local_bh_disable();
-        pr_info("in_softirq():%lu\n", in_softirq());
-        spin_lock_bh(&lock);
-
-        pr_info("in_softirq():%lu\n", in_softirq());
-        spin_unlock_bh(&lock);
-        pr_info("in_softirq():%lu\n", in_softirq());
-
-        local_bh_enable();
-        pr_info("in_softirq():%lu\n", in_softirq());
-
 
         printk(KERN_NOTICE "ND module loading\n");
         nd_params_init(&nd_params);
