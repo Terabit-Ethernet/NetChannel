@@ -3,6 +3,8 @@
 static LIST_HEAD(nd_conn_ctrl_list);
 static DEFINE_MUTEX(nd_conn_ctrl_mutex);
 static struct workqueue_struct *nd_conn_wq;
+static struct workqueue_struct *nd_conn_wq_lat;
+
 struct nd_conn_ctrl* nd_ctrl;
 // static struct blk_mq_ops nvme_tcp_mq_ops;
 // static struct blk_mq_ops nvme_tcp_admin_mq_ops;
@@ -15,6 +17,11 @@ static inline bool nd_conn_has_inline_data(struct nd_conn_request *req) {
 static inline int nd_conn_queue_id(struct nd_conn_queue *queue)
 {
 	return queue - queue->ctrl->queues;
+}
+
+static inline bool nd_conn_queue_is_lat(struct nd_conn_queue *queue)
+{
+	return queue->prio_class == 1;
 }
 
 static inline void nd_conn_done_send_req(struct nd_conn_queue *queue)
@@ -209,8 +216,11 @@ void nd_conn_data_ready(struct sock *sk)
 	queue = sk->sk_user_data;
 	if (likely(queue && queue->rd_enabled) &&
 	    !test_bit(ND_CONN_Q_POLLING, &queue->flags)) {
-			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
-
+			if(nd_conn_queue_is_lat(queue)) {
+				queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
+			}else {
+				queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+			}
 		}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
@@ -224,7 +234,11 @@ void nd_conn_write_space(struct sock *sk)
 	if (likely(queue && sk_stream_is_writeable(sk))) {
 		// printk("write space invoke\n");
 		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
-			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+			if(nd_conn_queue_is_lat(queue)) {
+				queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
+			}else {
+				queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+			}
 	}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
@@ -261,21 +275,30 @@ done:
 // u64 bytes_sent[8];
 // int max_queue_length;
 /* round-robin; will not select the previous one except if there is only one channel. */
-int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
+int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check) {
 	struct nd_conn_queue *queue;
 	/* cur_count tracks how many skbs has been sent for the current queue before going to the next queue */
 	// static u32;
 	int i = 0, qid = last_q;
+	int lower_bound = 0;
+	int num_queue = 0;
+	if(prio_class) {
+		lower_bound = nd_params.lat_channel_idx;
+		num_queue = nd_params.num_lat_channels;
+	} else {
+		lower_bound = nd_params.thpt_channel_idx;
+		num_queue =  nd_params.num_thpt_channels;
+	}
 	// if(nd_params.nd_num_queue == 1)
 	// 	i = 0;
 	/* advance to the next queue */
 	if(cur_count == nd_ctrl->queues[last_q].compact_low_thre) {
-		last_q = (last_q + 1) % (nd_params.nd_num_queue);
+		last_q = (last_q + 1) % num_queue + lower_bound;
 		// cur_count = 0;
 	}
-	for (; i < nd_params.nd_num_queue; i++) {
+	for (; i < num_queue; i++) {
 		/* select queue */
-		qid = (last_q + i) % (nd_params.nd_num_queue);
+		qid = (last_q + i) % num_queue + lower_bound;
 		queue =  &nd_ctrl->queues[qid];
 		// WARN_ON(cur_count >= queue->compact_low_thre);
 
@@ -292,7 +315,7 @@ int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
 		return qid;
 	}
 	if(avoid_check) {
-		qid = (1 + last_q) % (nd_params.nd_num_queue);
+		qid = (1 + last_q) % num_queue + lower_bound;
 		queue =  &nd_ctrl->queues[qid];
 		// atomic_add(1, &queue->cur_queue_size);
 		last_q = qid;
@@ -302,49 +325,49 @@ int nd_conn_sche_rr(int last_q, int cur_count, bool avoid_check) {
 }
 
 /* stick on one queue if the queue size is below than threshold; */
-int nd_conn_sche_compact(bool avoid_check) {
-	struct nd_conn_queue *queue;
-	static u32 last_q = 0;
-	int i = 1, qid;
-	/* try low threshold first */
-	for (i = 0; i < nd_params.nd_num_queue; i++) {
+// int nd_conn_sche_compact(bool avoid_check) {
+// 	struct nd_conn_queue *queue;
+// 	static u32 last_q = 0;
+// 	int i = 1, qid;
+// 	/* try low threshold first */
+// 	for (i = 0; i < nd_params.nd_num_queue; i++) {
 
-		qid = (i) % (nd_params.nd_num_queue);
-		queue =  &nd_ctrl->queues[qid];
-		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_low_thre) 
-			== queue->compact_low_thre) {
-			continue;
-		}
-		WARN_ON(atomic_read(&queue->cur_queue_size) > queue->compact_low_thre);
-		// if(qid == 1){
-		// 	printk("qid 1 is being used\n");
-		// }
-		last_q = qid;
-		return last_q;
-	}
-	/* then try high threshold*/
-	// for (i = 0; i < nd_params.nd_num_queue; i++) {
+// 		qid = (i) % (nd_params.nd_num_queue);
+// 		queue =  &nd_ctrl->queues[qid];
+// 		if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_low_thre) 
+// 			== queue->compact_low_thre) {
+// 			continue;
+// 		}
+// 		WARN_ON(atomic_read(&queue->cur_queue_size) > queue->compact_low_thre);
+// 		// if(qid == 1){
+// 		// 	printk("qid 1 is being used\n");
+// 		// }
+// 		last_q = qid;
+// 		return last_q;
+// 	}
+// 	/* then try high threshold*/
+// 	// for (i = 0; i < nd_params.nd_num_queue; i++) {
 
-	// 	qid = (i) % (nd_params.nd_num_queue);
-	// 	queue =  &nd_ctrl->queues[qid];
-	// 	if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_high_thre) 
-	// 		== queue->compact_high_thre) {
-	// 		continue;
-	// 	}
-	// 	last_q = qid;
-	// 	return last_q;
-	// }
-	/* when all queues become full and avoid check is true */
-	/* do rr */
-	if(avoid_check) {
-		qid = (1 + last_q) % (nd_params.nd_num_queue);
-		queue =  &nd_ctrl->queues[qid];
-		atomic_add(1, &queue->cur_queue_size);
-		last_q = qid;
-		return last_q;
-	}
-	return -1;
-}
+// 	// 	qid = (i) % (nd_params.nd_num_queue);
+// 	// 	queue =  &nd_ctrl->queues[qid];
+// 	// 	if(atomic_fetch_add_unless(&queue->cur_queue_size, 1, queue->compact_high_thre) 
+// 	// 		== queue->compact_high_thre) {
+// 	// 		continue;
+// 	// 	}
+// 	// 	last_q = qid;
+// 	// 	return last_q;
+// 	// }
+// 	/* when all queues become full and avoid check is true */
+// 	/* do rr */
+// 	if(avoid_check) {
+// 		qid = (1 + last_q) % (nd_params.nd_num_queue);
+// 		queue =  &nd_ctrl->queues[qid];
+// 		atomic_add(1, &queue->cur_queue_size);
+// 		last_q = qid;
+// 		return last_q;
+// 	}
+// 	return -1;
+// }
 
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		bool sync, bool avoid_check)
@@ -358,7 +381,7 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, avoid_check);
+		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
 
 		if(qid < 0)
 			return false;
@@ -401,8 +424,12 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		// 	queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
 	} else {
-		/* data packets always go here */	
-		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+		/* data packets always go here */
+		if(nd_conn_queue_is_lat(queue)) {
+			queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
+		}else {
+			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+		}
 	}
 	return true;
 }
@@ -868,8 +895,14 @@ void nd_conn_io_work(struct work_struct *w)
 	// 	(char *)&bufsize, &optlen);
 	// pr_info("ret value:%d\n", ret);
 	// pr_info("buffer size receive:%d\n", bufsize);
-	if(pending)
-		ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	if(pending) {
+		if(nd_conn_queue_is_lat(queue)) {
+			queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
+		}else {
+			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+		}
+	}
+		// ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	nd_conn_wake_up_all_socks(queue->ctrl);
 }
 
@@ -886,7 +919,12 @@ void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
 queue_work:
 	spin_unlock_bh(&ctrl->sock_wait_lock);
 	for(i = 0; i < ctrl->queue_count; i++) {
-		queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+		if(nd_conn_queue_is_lat(&ctrl->queues[i])) {
+			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq_lat, &ctrl->queues[i].io_work);
+		}else {
+			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+		}
+		// queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
 	}
 }
 
@@ -931,6 +969,13 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	queue->compact_high_thre = ctrl->opts->compact_high_thre;
 	atomic_set(&queue->cur_queue_size, 0);
 
+
+	if (qid >= ctrl->queue_count / 2) {
+		/* latency-sensitive channel */
+		queue->prio_class = 1;
+	} else
+		/* throughput-bound channel */
+		queue->prio_class = 0;
 	// if (qid > 0)
 	// 	queue->cmnd_capsule_len = nctrl->ioccsz * 16;
 	// else
@@ -1001,7 +1046,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		n = 0;
 	else
 		n = (qid - 1) % num_online_cpus();
-	queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
+	// queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
 	/* mod 28 is hard code for now. */
 	queue->io_cpu = (4 * qid) % 32;
 	// queue->io_cpu = 0;
@@ -1269,12 +1314,17 @@ int nd_conn_init_module(void)
 {
     struct nd_conn_ctrl_options* opts = kmalloc(sizeof(*opts), GFP_KERNEL);
 	nd_conn_wq = alloc_workqueue("nd_conn_wq",
-			WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+			WQ_MEM_RECLAIM, 0);
+
 	if (!nd_conn_wq)
+		return -ENOMEM;
+	nd_conn_wq_lat = alloc_workqueue("nd_conn_wq_lat",
+			WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+	if(!nd_conn_wq_lat)
 		return -ENOMEM;
     /* initialiize the option */
     // pr_info("HCTX_MAX_TYPES: %d\n", HCTX_MAX_TYPES);
-    opts->nr_io_queues = nd_params.num_nd_queues;
+    opts->nr_io_queues = nd_params.total_channels;
     opts->nr_write_queues = 0;
     opts->nr_poll_queues = 0;
     /* target address */

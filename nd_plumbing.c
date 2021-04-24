@@ -257,8 +257,14 @@ void nd_params_init(struct nd_params* params) {
     // matchiing parameters
     params->local_ip = "192.168.10.116";
     params->remote_ip = "192.168.10.117";
-    params->data_cpy_core = 8;
-    params->num_nd_queues = 8;
+    params->data_cpy_core = 12;
+    params->total_channels = 16;
+    /* start index of latency channel index */
+    params->lat_channel_idx = 8;
+    params->num_lat_channels = 1;
+    /* start index of thpt channel index */
+    params->thpt_channel_idx = 1;
+    params->num_thpt_channels = 2;
     params->alpha = 2;
     params->beta = 5;
     params->min_iter = 1;

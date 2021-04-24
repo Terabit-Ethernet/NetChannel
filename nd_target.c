@@ -5,6 +5,8 @@ static LIST_HEAD(ndt_conn_queue_list);
 static DEFINE_MUTEX(ndt_conn_queue_mutex);
 
 static struct workqueue_struct *ndt_conn_wq;
+static struct workqueue_struct *ndt_conn_wq_lat;
+
 static struct ndt_conn_port * ndt_port;
 
 #define NDT_CONN_RECV_BUDGET		8
@@ -28,6 +30,12 @@ void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
 	}
 	spin_unlock(&queue->state_lock);
 }
+
+static inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue)
+{
+	return queue->prio_class == 1;
+}
+
 
 void ndt_conn_accept_work(struct work_struct *w)
 {
@@ -210,7 +218,11 @@ void ndt_conn_data_ready(struct sock *sk)
 	// }
 	if (likely(queue)) {
 		// pr_info("conn data ready\n");
-		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		if(ndt_conn_is_latency(queue)) {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+		} else {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		}
 	}
 	read_unlock_bh(&sk->sk_callback_lock);
 }
@@ -231,7 +243,11 @@ void ndt_conn_write_space(struct sock *sk)
 
 	if (sk_stream_is_writeable(sk)) {
 		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
-		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		if(ndt_conn_is_latency(queue)) {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+		} else {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		}
 	}
 out:
 	read_unlock_bh(&sk->sk_callback_lock);
@@ -634,7 +650,11 @@ void ndt_conn_io_work(struct work_struct *w)
 	//  */
 	if (pending) {
 		// pr_info("pending is true\n");
-		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		if(ndt_conn_is_latency(queue)) {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+		} else {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		}
 	}
 }
 
@@ -665,6 +685,13 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		ret = queue->idx;
 		goto out_free_queue;
 	}
+	if (queue->idx >= nd_params.total_channels / 2) {
+		/* latency-sensitive channel */
+		queue->prio_class = 1;
+	} else
+		/* throughput-bound i10-lanes */
+		queue->prio_class = 0;
+
 	// ret = nvmet_tcp_alloc_cmd(queue, &queue->connect);
 	// if (ret)
 	// 	goto out_ida_remove;
@@ -686,7 +713,11 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	// hard code for now
 	queue->io_cpu = (cur_io_cpu * 4) % 32;
 	cur_io_cpu += 1;
-	queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	if(ndt_conn_is_latency(queue)) {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+	} else {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	}
 
 	return 0;
 out_destroy_sq:
@@ -720,8 +751,11 @@ int __init ndt_conn_init(void)
 {
 	int ret;
 
-	ndt_conn_wq = alloc_workqueue("ndt_conn_wq", WQ_HIGHPRI, 0);
+	ndt_conn_wq = alloc_workqueue("ndt_conn_wq", 0, 0);
 	if (!ndt_conn_wq)
+		return -ENOMEM;
+	ndt_conn_wq_lat =  alloc_workqueue("ndt_conn_wq_lat", WQ_HIGHPRI, 0);
+	if(!ndt_conn_wq_lat)
 		return -ENOMEM;
 	ndt_port = kzalloc(sizeof(*ndt_port), GFP_KERNEL);
 	ndt_port->local_ip = nd_params.local_ip;

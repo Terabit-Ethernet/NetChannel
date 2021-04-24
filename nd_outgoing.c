@@ -148,6 +148,8 @@ int nd_init_request(struct sock* sk, struct nd_conn_request *req)
 		pr_warn("WARNING: fail to allocat page \n");
 		return -ENOMEM;
 	}
+	/* set up the req priority */
+	req->prio_class = sk->sk_priority == 0? 0 : 1;
 
 	// req->queue = queue;
 	return 0;
@@ -240,6 +242,7 @@ struct nd_conn_request* construct_sync_ack_req(struct sock* sk) {
 	sync->type = SYNC_ACK;
 	sync->source = inet->inet_sport;
 	sync->dest = inet->inet_dport;
+
 	// sync->check = 0;
 	sync->doff = (sizeof(struct ndhdr)) << 2;
 
