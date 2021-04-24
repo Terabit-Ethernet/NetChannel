@@ -977,7 +977,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 	start_time = rdtsc();
 	while (1) {
 		int copied = 0;
-		int rpc_length = 16000;
+		int rpc_length = 4096;
 		// times--;
 		// if(times == 0)
 		// 	break;
@@ -989,7 +989,6 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 				printf("goto close\n");
 					goto close;
 			}
-			// printf("result:%d\n",result);
 			rpc_length -= result;
 			copied += result;
 			if(rpc_length == 0)
@@ -997,7 +996,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 			// return;
 		}
 		copied = 0;
-		rpc_length = 4000;
+		rpc_length = 4096;
 		while(1) {
 			int result = read(fd, buffer + copied,
 				rpc_length);
@@ -1031,6 +1030,24 @@ close:
 	for(uint32_t i = 0; i < latency.size(); i++) {
 		std::cout << "finish time: " << latency[i] << "\n"; 
 	}
+	return;
+}
+
+/**
+ * test_whileloop() - do nothing but a while loop
+ */
+void test_whileloop()
+{
+	// int flag = 1;
+	int times = 180;
+	uint64_t start_time = rdtsc();;
+	while (1) {
+		uint64_t  end;
+		end = rdtsc();
+		if(to_seconds(end-start_time) > times)
+			break;
+	}
+
 	return;
 }
 
@@ -1190,7 +1207,8 @@ void test_udpclose()
 
 int main(int argc, char** argv)
 {
-	int port, nextArg, tempArg;
+	int port, nextArg, tempArg, optval;
+	unsigned optlen;
 	struct sockaddr_in addr_in;
 	struct addrinfo *matching_addresses;
 	struct sockaddr *dest;
@@ -1347,8 +1365,15 @@ int main(int argc, char** argv)
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
 				printf("call ndpingpong\n");
 				test_ndpingpong(fd, dest, buffer);
-			} else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
+			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
+				printf("call whileloop\n");
+				test_whileloop();
+			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
+				optval = 0;
+				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
+				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+				printf("optval:%d\n", optval);
 				test_ndpingpong(fd, dest, buffer);
 			} 
 			 else {
