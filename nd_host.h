@@ -71,6 +71,7 @@ struct nd_conn_request {
 	struct ndhdr	*hdr;
 	struct sk_buff	*skb;
 	struct nd_conn_queue	*queue;
+	int prio_class;
 	// u32			data_len;
 	// u32			pdu_len;
 	// u32			pdu_sent;
@@ -121,10 +122,11 @@ struct nd_conn_ctrl {
 };
 
 struct nd_conn_queue {
+	int prio_class;
 	struct socket		*sock;
 	struct work_struct	io_work;
 	int			io_cpu;
-
+	int 	qid;
 	struct mutex		send_mutex;
 	struct llist_head	req_list;
 	struct list_head	send_list;

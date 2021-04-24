@@ -44,6 +44,7 @@ struct ndt_conn_queue {
 	struct ndt_conn_port	*port;
 	struct work_struct	io_work;
 	int io_cpu;
+	int prio_class;
 	// struct nvmet_cq		nvme_cq;
 	// struct nvmet_sq		nvme_sq;
 	struct sk_buff_head	receive_queue;
@@ -93,6 +94,7 @@ void ndt_conn_remove_port(struct ndt_conn_port *port);
 int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		struct socket *newsock);
 void ndt_conn_io_work(struct work_struct *w);
+void ndt_conn_io_work_lock_less(struct work_struct *w);
 int ndt_conn_set_queue_sock(struct ndt_conn_queue *queue);
 void ndt_conn_state_change(struct sock *sk);
 void ndt_conn_write_space(struct sock *sk);

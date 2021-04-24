@@ -116,8 +116,12 @@ struct nd_params {
 	char* local_ip;
 	char* remote_ip;
 	int data_cpy_core;
-	int num_nd_queues;
-
+	int total_channels;
+	/* for performance isolation */
+	int lat_channel_idx;
+	int num_lat_channels;
+	int thpt_channel_idx;
+	int num_thpt_channels;
 
 };
 
