@@ -74,6 +74,8 @@ int nd_dcopy_sche_rr(int last_qid) {
 
 		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
 		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
+		if(qid * 4 + nd_params.data_cpy_core == raw_smp_processor_id())
+			continue;
 		if(atomic_read(&queue->queue_size) >= queue->queue_threshold)
 			continue;
 		find = true;
