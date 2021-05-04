@@ -838,80 +838,21 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
-	uint64_t flow_size = 100000000000;
+	buffer_size = 256;
+	// uint64_t flow_size = 10000000000000;
+	int times = 180;
 	uint64_t write_len = 0;
-	// setbuf(stdout, NULL);
-	// printf("buffer size:%d\n", buffer_size);
-	//  printf("'%.*s'\n", buffer_size, buffer);
-	// int i = 0;
-	// uint32_t offset = write_len % flow_size;
-
-//	in->sin_zero[0] = flow_size >> 24 & 0xFF;
-//	in->sin_zero[1] = flow_size >> 16 & 0xFF;
-//	in->sin_zero[2] = flow_size >> 8 & 0xFF;
-//	in->sin_zero[3] = flow_size & 0xFF;
-	// struct addrinfo hints;
-	// struct addrinfo *matching_addresses;
-	// struct sockaddr *dest;
-	// int status;
-	// char buffer[1000] = "abcdefgh\n";
-	// // int64_t bytes_sent = 0;
-	// // int64_t start_bytes = 0;
-	// // uint64_t start_cycles = 0;
-	// // double elapsed, rate;
-	
-	// memset(&hints, 0, sizeof(struct addrinfo));
-	// hints.ai_family = AF_INET;
-	// hints.ai_socktype = SOCK_DGRAM;
-	// status = getaddrinfo(server_name, "80", &hints, &matching_addresses);
-	// if (status != 0) {
-	// 	printf("Couldn't look up address for %s: %s\n",
-	// 			server_name, gai_strerror(status));
-	// 	return;
-	// }
-	// dest = matching_addresses->ai_addr;
-	// ((struct sockaddr_in *) dest)->sin_port = htons(port);
-	
-	// int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
-	// if (fd == -1) {
-	// 	printf("Couldn't open client socket: %s\n", strerror(errno));
-	// 	return;
-	// }
-	// int gso_size = ETH_DATA_LEN - sizeof(struct iphdr) - sizeof(struct udphdr);
-	// if (setsockopt(fd, SOL_UDP, UDP_SEGMENT, &gso_size, sizeof(gso_size))) {
-	// 	return;
-	// }
-	// std::chrono::steady_clock::time_point start_clock = std::chrono::steady_clock::now();
-
-	// while (1) {
-	// 	start_bytes = bytes_sent = 0;
-	//     start_cycles = rdtsc();
-
-	// 	// if (bytes_sent > 1010000000)
-	// 	// 	break;
-	// 	if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
-	//             break;
-	// for (i = 0; i < 2; i++) {
-		if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
-			printf("Couldn't connect to dest %s\n", strerror(errno));
-			exit(1);
-		}
-		printf("connect done\n");
+	uint64_t start_time = rdtsc();
+	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
+		printf("Couldn't connect to dest %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("connect done\n");
 	    // for (int i = 0; i < count * 100; i++) {
-		while(write_len <= flow_size) {
-			// int cur_write_len = 0;
-			// offset = write_len % buffer_size;
-			// cur_write_len = buffer_size - offset < flow_size - write_len ? (buffer_size - offset) : (flow_size - write_len);
-			// /* no right way to do; change when adding the split skb buffer */
-			// if (cur_write_len < 40000) {
-			// 	offset = 0;
-			// 	cur_write_len = buffer_size - offset;
-			// }
-			// if (flow_size - write_len < 40000) {
-			// 	offset = 0;
-			// 	cur_write_len = flow_size - write_len;
-			// }
+		while(1) {
+
 	    	int result = write(fd, buffer, buffer_size);	
+			uint64_t end = rdtsc();
 
 			if( result < 0 ) {
 				if(errno == EMSGSIZE) {
@@ -920,12 +861,9 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 				}
 			} else {
 				write_len += result;
-				// if(write_len > 1000000) {
-				// 	printf("number of bytes:%d\n", write_len);
-				// }
-				// if(write_len != 0)
-				// 	printf("sent result:%d\n", result);
 			}
+			if(to_seconds(end-start_time) > times)
+				break;
 		}
 	// }
 		printf("%" PRIu64 "\n", write_len);
@@ -1039,7 +977,7 @@ close:
 void test_whileloop()
 {
 	// int flag = 1;
-	int times = 180;
+	int times = 1800;
 	uint64_t start_time = rdtsc();;
 	while (1) {
 		uint64_t  end;
@@ -1362,15 +1300,21 @@ int main(int argc, char** argv)
 			} else if (strcmp(argv[nextArg], "ndping") == 0) {
 				printf("call ndping\n");
 				test_ndping(fd, dest, buffer);
+			} else if (strcmp(argv[nextArg], "tcpping") == 0) {
+				fd = socket(AF_INET, SOCK_STREAM, 0);
+				printf("call tcpping\n");
+				test_ndping(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
 				printf("call ndpingpong\n");
+				optval = 6;
+                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
 				printf("call whileloop\n");
 				test_whileloop();
 			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				optval = 0;
+				optval = 6;
 				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
 				printf("optval:%d\n", optval);
