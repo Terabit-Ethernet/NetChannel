@@ -46,6 +46,7 @@
 #include <vector>
 // #include "homa.h"
 #include "test_utils.h"
+#include <sys/resource.h>
 //#include "../uapi_linux_nd.h"
 /* Log events to standard output. */
 bool verbose = false;
@@ -104,6 +105,8 @@ void aggre_thread(struct Agg_Stats *stats) {
 void nd_pingpong(int fd, struct sockaddr_in source)
 {
 	// int flag = 1;
+	int optval = 6;
+	unsigned optlen = 0;
 	char *buffer = (char*)malloc(2359104);
 	// int times = 10000;
 	// int cur_length = 0;
@@ -113,6 +116,15 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
+	int which = PRIO_PROCESS;
+	id_t pid;
+	int ret;
+
+	pid = getpid();
+	//ret = setpriority(which, pid, -20);
+	//std::cout << "ret "<< ret << std::endl;
+	ret = getpriority(which, pid);
+	std::cout << "priority " << ret << std::endl;
 	// int *int_buffer = reinterpret_cast<int*>(buffer);
 	if (verbose)
 		printf("New ND socket from %s\n", print_address(&source));
@@ -123,10 +135,14 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
+	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
+	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+	printf("optval:%d\n", optval);
+
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
 		int copied = 0;
-		int rpc_length = 16000;
+		int rpc_length = 4096;
 		// times--;
 		while(1) {
 			int result = read(fd, buffer + copied,
@@ -143,7 +159,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 			// return;
 		}
 		copied = 0;
-		rpc_length = 4000;
+		rpc_length = 4096;
 		// if(times == -1)
 		// 	break;
 		while(1) {
@@ -631,6 +647,7 @@ void nd_server(int port)
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	// uint64_t total_length = 0;
 	// int count = 0;
+	int i = 0;
 	int listen_fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 	// int listen_fd = socket(PF_INET, SOCK_STREAM, 0);
 
@@ -677,7 +694,12 @@ void nd_server(int port)
 		std::thread thread(nd_pingpong, stream, client_addr);
 
 		// std::thread thread(nd_connection, stream, client_addr);
+		cpu_set_t cpuset;
+		CPU_ZERO(&cpuset);
+		CPU_SET((i) % 2 * 4, &cpuset);
+		pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
 		thread.detach();
+		i += 1;	
 	}
 	// while (1) {
 	// 	struct sockaddr_in client_addr;

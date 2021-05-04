@@ -77,6 +77,7 @@ void init_agg_stats(struct Agg_Stats* stats, int interval_sec) {
 }
 
 void aggre_thread(struct Agg_Stats *stats) {
+	int time = 0;
 	init_agg_stats(stats, 1);
 	while(1) {
 		uint64_t start_cycle = rdtsc();
@@ -86,12 +87,11 @@ void aggre_thread(struct Agg_Stats *stats) {
     	std::this_thread::sleep_for (std::chrono::seconds(stats->interval_sec));
     	end_cycle = rdtsc();
     	bytes = atomic_load(&stats->interval_bytes);
-    	rate = (bytes)/ to_seconds(
-			end_cycle - start_cycle);
-		printf("Throughput: "
-		"%.2f Gbps, bytes: %f, time: %f\n", rate * 1e-09 * 8, (double) bytes, to_seconds(
+    	rate = (bytes)/ to_seconds(end_cycle - start_cycle);
+	printf("[%d] Throughput: " "%.2f Gbps  bytes: %f time: %f\n", time, rate * 1e-09 * 8, (double) bytes, to_seconds(
 		end_cycle - start_cycle));
     	atomic_store(&stats->interval_bytes, (unsigned long)0);
+	time += 1;
 	}
 }
 /**
@@ -297,6 +297,7 @@ void tcp_connection(int fd, struct sockaddr_in source)
 	close(fd);
 }
 
+void nd_connection(int fd, struct sockaddr_in source);
 /**
  * tcp_server() - Opens a TCP socket, accepts connections on that socket
  * (one thread per connection) and processes messages on those connections.
@@ -304,13 +305,21 @@ void tcp_connection(int fd, struct sockaddr_in source)
  */
 void tcp_server(int port)
 {
+	// char buffer[1000000];
+	// int result = 0;
+	// uint64_t start_cycle = 0, end_cycle = 0;
+	// uint64_t total_length = 0;
+	// int count = 0;
+	// int listen_fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 	int listen_fd = socket(PF_INET, SOCK_STREAM, 0);
+
 	if (listen_fd == -1) {
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
+	printf("reach here\n");
 	int option_value = 1;
-	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &option_value,
+	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
 		printf("Couldn't set SO_REUSEADDR on listen socket: %s",
 			strerror(errno));
@@ -325,6 +334,10 @@ void tcp_server(int port)
 		printf("Couldn't bind to port %d: %s\n", port, strerror(errno));
 		exit(1);
 	}
+	// struct timeval tv;
+	// tv.tv_usec = 100 * 1000;
+	// if (setsockopt(listen_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
+	// 	return;
 	while (1) {
 		struct sockaddr_in client_addr;
 		socklen_t addr_len = sizeof(client_addr);
@@ -336,11 +349,13 @@ void tcp_server(int port)
 				reinterpret_cast<sockaddr *>(&client_addr),
 				&addr_len);
 		if (stream < 0) {
-			printf("Couldn't accept incoming connection: %s",
+			printf("Couldn't accept incoming connection: %s\n",
 				strerror(errno));
 			exit(1);
 		}
-		std::thread thread(tcp_connection, stream, client_addr);
+		std::thread thread(nd_connection, stream, client_addr);
+
+		// std::thread thread(nd_connection, stream, client_addr);
 		thread.detach();
 	}
 }
@@ -476,8 +491,9 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	// int flag = 1;
 	char *buffer = (char*)malloc(2359104);
 	int times = 100;
-	// int cur_length = 0;
-	// bool streaming = false;
+	int optval;
+	//int cur_length = 0;
+	//bool streaming = false;
 	uint64_t count = 0;
 	uint64_t total_length = 0;
 	// uint64_t start_cycle = 0, end_cycle = 0;
@@ -493,6 +509,8 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
+	optval = 6;
+	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
 		int copied = 0;
@@ -773,7 +791,7 @@ int main(int argc, char** argv) {
 	// 	printf("port number:%i\n", port + i);
 	// 	workers.push_back(std::thread (homa_server, ip, port+i));
 	// }
-	// workers.push_back(std::thread(tcp_server, port));
+	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
 	workers.push_back(std::thread(nd_server, port));
 	workers.push_back(std::thread(aggre_thread, &agg_stats));
