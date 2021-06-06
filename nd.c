@@ -535,6 +535,9 @@ queue_req:
 		/* check the window is available */
 		if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
 			WARN_ON(nsk->sender.pending_req);
+			// if(ntohs(inet->inet_dport) == 4000) {
+			// 	printk("window is insufficient:%d %d \n", (ND_SKB_CB(skb)->seq), nsk->sender.sd_grant_nxt);
+			// }
 			// WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
 			if(nd_params.nd_debug) {
 				pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
@@ -601,6 +604,7 @@ extern struct nd_conn_ctrl* nd_ctrl;
 static int nd_sender_local_dcopy(struct sock* sk, struct msghdr *msg, 
 	int req_len, u32 seq, long timeo) {
 	struct sk_buff *skb = NULL;
+	struct inet_sock *inet = inet_sk(sk);
 	struct nd_sock *nsk = nd_sk(sk);
 	struct nd_dcopy_response *resp;
 	size_t copy;
@@ -664,7 +668,8 @@ push_skb:
 		llist_add(&resp->lentry, &nsk->sender.response_list);
 		seq += skb->len;
 		nsk->sender.pending_queue += skb->len;
-
+		// if(skb && ntohs(inet->inet_dport) == 4000)
+		// printk("data copy: %d \n", (ND_SKB_CB(skb)->seq));
 		skb = NULL;
 		resp = NULL;
 		continue;
@@ -825,6 +830,11 @@ local_sender_copy:
 			goto out_error;
 		nsk->sender.write_seq += copy;
 		copied += copy;
+		err = nd_push(sk, GFP_KERNEL);
+		if(READ_ONCE(sk->sk_backlog.tail) && nsk->sender.snd_una > nsk->sender.sd_grant_nxt) {
+			release_sock(sk);
+			lock_sock(sk);
+		}
 		continue;
 wait_for_memory:
 		/* wait for pending requests to be done */

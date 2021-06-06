@@ -324,6 +324,10 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 	return -1;
 }
 
+/* round-robin; will not select the previous one except if there is only one channel. */
+int nd_conn_sche_low_lat(void) {
+	return  raw_smp_processor_id() / 4 + nd_params.lat_channel_idx;
+}
 /* stick on one queue if the queue size is below than threshold; */
 // int nd_conn_sche_compact(bool avoid_check) {
 // 	struct nd_conn_queue *queue;
@@ -381,7 +385,10 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
+		if(req->prio_class)
+			qid = nd_conn_sche_low_lat();
+		else
+			qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
 
 		if(qid < 0)
 			return false;
