@@ -188,71 +188,71 @@ static inline bool nd_sack_extend(struct nd_sack_block *sp, u32 seq,
 
 /* RCV.NXT advances, some SACKs should be eaten. */
 
-static void nd_sack_remove(struct nd_sock *dsk)
-{
-	struct nd_sack_block *sp = &dsk->selective_acks[0];
-	int num_sacks = dsk->num_sacks;
-	int this_sack;
+// static void nd_sack_remove(struct nd_sock *dsk)
+// {
+// 	struct nd_sack_block *sp = &dsk->selective_acks[0];
+// 	int num_sacks = dsk->num_sacks;
+// 	int this_sack;
 
-	/* Empty ofo queue, hence, all the SACKs are eaten. Clear. */
-	if (RB_EMPTY_ROOT(&dsk->out_of_order_queue)) {
-		dsk->num_sacks = 0;
-		return;
-	}
+// 	/* Empty ofo queue, hence, all the SACKs are eaten. Clear. */
+// 	if (RB_EMPTY_ROOT(&dsk->out_of_order_queue)) {
+// 		dsk->num_sacks = 0;
+// 		return;
+// 	}
 
-	for (this_sack = 0; this_sack < num_sacks;) {
-		/* Check if the start of the sack is covered by RCV.NXT. */
-		if (!before(dsk->receiver.rcv_nxt, sp->start_seq)) {
-			int i;
+// 	for (this_sack = 0; this_sack < num_sacks;) {
+// 		/* Check if the start of the sack is covered by RCV.NXT. */
+// 		if (!before(dsk->receiver.rcv_nxt, sp->start_seq)) {
+// 			int i;
 
-			/* RCV.NXT must cover all the block! */
-			WARN_ON(before(dsk->receiver.rcv_nxt, sp->end_seq));
+// 			/* RCV.NXT must cover all the block! */
+// 			WARN_ON(before(dsk->receiver.rcv_nxt, sp->end_seq));
 
-			/* Zap this SACK, by moving forward any other SACKS. */
-			for (i = this_sack+1; i < num_sacks; i++)
-				dsk->selective_acks[i-1] = dsk->selective_acks[i];
-			num_sacks--;
-			continue;
-		}
-		this_sack++;
-		sp++;
-	}
-	dsk->num_sacks = num_sacks;
-}
+// 			/* Zap this SACK, by moving forward any other SACKS. */
+// 			for (i = this_sack+1; i < num_sacks; i++)
+// 				dsk->selective_acks[i-1] = dsk->selective_acks[i];
+// 			num_sacks--;
+// 			continue;
+// 		}
+// 		this_sack++;
+// 		sp++;
+// 	}
+// 	dsk->num_sacks = num_sacks;
+// }
 
 /* read sack info */
-void nd_get_sack_info(struct sock *sk, struct sk_buff *skb) {
-	struct nd_sock *dsk = nd_sk(sk);
-	const unsigned char *ptr = (skb_transport_header(skb) +
-				    sizeof(struct nd_token_hdr));
-	struct nd_token_hdr *th = nd_token_hdr(skb);
-	struct nd_sack_block_wire *sp_wire = (struct nd_sack_block_wire *)(ptr);
-	struct nd_sack_block *sp = dsk->selective_acks;
-	// struct sk_buff *skb;
-	int used_sacks;
-	int i, j;
-	if (!pskb_may_pull(skb, sizeof(struct nd_token_hdr) + sizeof(struct nd_sack_block_wire) * th->num_sacks)) {
-		return;		/* No space for header. */
-	}
-	dsk->num_sacks = th->num_sacks;
-	used_sacks = 0;
-	for (i = 0; i < dsk->num_sacks; i++) {
-		/* get_unaligned_be32 will host change the endian to be CPU order */
-		sp[used_sacks].start_seq = get_unaligned_be32(&sp_wire[i].start_seq);
-		sp[used_sacks].end_seq = get_unaligned_be32(&sp_wire[i].end_seq);
+// void nd_get_sack_info(struct sock *sk, struct sk_buff *skb) {
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	const unsigned char *ptr = (skb_transport_header(skb) +
+// 				    sizeof(struct nd_token_hdr));
+// 	struct nd_token_hdr *th = nd_token_hdr(skb);
+// 	struct nd_sack_block_wire *sp_wire = (struct nd_sack_block_wire *)(ptr);
+// 	struct nd_sack_block *sp = dsk->selective_acks;
+// 	// struct sk_buff *skb;
+// 	int used_sacks;
+// 	int i, j;
+// 	if (!pskb_may_pull(skb, sizeof(struct nd_token_hdr) + sizeof(struct nd_sack_block_wire) * th->num_sacks)) {
+// 		return;		/* No space for header. */
+// 	}
+// 	dsk->num_sacks = th->num_sacks;
+// 	used_sacks = 0;
+// 	for (i = 0; i < dsk->num_sacks; i++) {
+// 		/* get_unaligned_be32 will host change the endian to be CPU order */
+// 		sp[used_sacks].start_seq = get_unaligned_be32(&sp_wire[i].start_seq);
+// 		sp[used_sacks].end_seq = get_unaligned_be32(&sp_wire[i].end_seq);
 
-		used_sacks++;
-	}
+// 		used_sacks++;
+// 	}
 
-	/* order SACK blocks to allow in order walk of the retrans queue */
-	for (i = used_sacks - 1; i > 0; i--) {
-		for (j = 0; j < i; j++) {
-			if (after(sp[j].start_seq, sp[j + 1].start_seq)) {
-				swap(sp[j], sp[j + 1]);
-			}
-		}
-	}
-}
+// 	/* order SACK blocks to allow in order walk of the retrans queue */
+// 	for (i = used_sacks - 1; i > 0; i--) {
+// 		for (j = 0; j < i; j++) {
+// 			if (after(sp[j].start_seq, sp[j + 1].start_seq)) {
+// 				swap(sp[j], sp[j + 1]);
+// 			}
+// 		}
+// 	}
+// }
 
 /* assume hold the socket spinlock*/
 void nd_flow_wait_handler(struct sock *sk) {
@@ -591,12 +591,12 @@ static void nd_rcv_nxt_update(struct nd_sock *nsk, u32 seq)
 {
 	// struct sock *sk = (struct sock*) nsk;
 	// struct inet_sock *inet = inet_sk(sk);
-	u32 delta = seq - nsk->receiver.rcv_nxt;
+	u32 delta = seq - (u32)atomic_read(&nsk->receiver.rcv_nxt);
 	// u32 new_grant_nxt;
 	// int grant_bytes = calc_grant_bytes(sk);
 
 	nsk->receiver.bytes_received += delta;
-	WRITE_ONCE(nsk->receiver.rcv_nxt, seq);
+	atomic_set(&nsk->receiver.rcv_nxt, seq);
 	// printk("update the rcvnext :%u\n", nsk->receiver.rcv_nxt);
 	// new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
 	// if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win) {
@@ -619,7 +619,7 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 	struct sock *sk = (struct sock*)nsk;
 	gfp_t flag = sync? GFP_KERNEL: GFP_ATOMIC;
 	u32 new_grant_nxt;
-	new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+	new_grant_nxt = nd_window_size(nsk) + (u32)atomic_read(&nsk->receiver.rcv_nxt);
 	
 	// printk("new grant nxt:%u\n", new_);
 	if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt
@@ -873,7 +873,7 @@ static void nd_ofo_queue(struct sock *sk)
 	p = rb_first(&dsk->out_of_order_queue);
 	while (p) {
 		skb = rb_to_skb(p);
-		if (after(ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt))
+		if (after(ND_SKB_CB(skb)->seq,(u32)atomic_read(&dsk->receiver.rcv_nxt)))
 			break;
 		// ofo_queue -= skb->len;
 
@@ -885,7 +885,7 @@ static void nd_ofo_queue(struct sock *sk)
 		// }
 		p = rb_next(p);
 		rb_erase(&skb->rbnode, &dsk->out_of_order_queue);
-		if (unlikely(!after(ND_SKB_CB(skb)->end_seq, dsk->receiver.rcv_nxt))) {
+		if (unlikely(!after(ND_SKB_CB(skb)->end_seq, (u32)atomic_read(&dsk->receiver.rcv_nxt)))) {
 			nd_rmem_free_skb(sk, skb);
 			nd_drop(sk, skb);
 			continue;
@@ -1254,7 +1254,7 @@ int nd_data_queue(struct sock *sk, struct sk_buff *skb)
 	 *  Packets in sequence go to the receive queue.
 	 *  Out of sequence packets to the out_of_order_queue.
 	 */
-	if (ND_SKB_CB(skb)->seq == dsk->receiver.rcv_nxt) {
+	if (ND_SKB_CB(skb)->seq == (u32)atomic_read(&dsk->receiver.rcv_nxt)) {
 		// if (tcp_receive_window(tp) == 0) {
 		// 	NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPZEROWINDOWDROP);
 		// 	goto out_of_window;
@@ -1282,8 +1282,8 @@ queue_and_out:
 		// 		inet_csk(sk)->icsk_ack.pending |= ICSK_ACK_NOW;
 		// }
 
-		if (dsk->num_sacks)
-			nd_sack_remove(dsk);
+		// if (dsk->num_sacks)
+		// 	nd_sack_remove(dsk);
 
 		// tcp_fast_path_check(sk);
 
@@ -1291,7 +1291,7 @@ queue_and_out:
 			kfree_skb_partial(skb, fragstolen);
 		return 0;
 	}
-	if (!after(ND_SKB_CB(skb)->end_seq, dsk->receiver.rcv_nxt)) {
+	if (!after(ND_SKB_CB(skb)->end_seq, (u32)atomic_read(&dsk->receiver.rcv_nxt))) {
 		printk("duplicate drop\n");
 		printk("duplicate seq:%u\n", ND_SKB_CB(skb)->seq);
 		nd_rmem_free_skb(sk, skb);
@@ -1303,7 +1303,7 @@ queue_and_out:
 	// if (!before(ND_SKB_CB(skb)->seq, dsk->rcv_nxt + tcp_receive_window(dsk)))
 	// 	goto out_of_window;
 
-	if (unlikely(before(ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt))) {
+	if (unlikely(before(ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt)))) {
 		/* Partial packet, seq < rcv_next < end_seq; unlikely */
 		// tcp_dsack_set(sk, ND_SKB_CB(skb)->seq, dsk->rcv_nxt);
 
@@ -1474,9 +1474,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
  		bh_lock_sock(sk);
 		/* To Do: check sk_hol_queue */
 		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
-			wait_skb = skb_peek(&dsk->receiver.sk_hol_queue);
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			if(ND_SKB_CB(wait_skb)->end_seq - dsk->receiver.rcv_nxt >  nd_window_size(dsk)) {
+			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) >  nd_window_size(dsk)) {
 				continue;
 			}
 			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
@@ -1486,7 +1485,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
 		/* this might underestimate the current buffer size if socket is handling its backlog */
 		/* this part might needed to be changed later, because rcv_nxt */
-		if(ND_SKB_CB(skb)->end_seq - dsk->receiver.rcv_nxt <= nd_window_size(dsk)) {
+		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) <= nd_window_size(dsk)) {
 			nd_handle_data_pkt_lock(sk, skb);
 		} else {
 			oversize = true;
@@ -1501,9 +1500,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
 	    // printk("discard packet:%d\n", __LINE__);
 		// skb_dump(KERN_WARNING, skb, false);
-
 		sk_drops_add(sk, skb);
-		kfree_skb(skb);
 		goto drop;
 	}
 
@@ -1514,11 +1511,11 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	/* packets have to be stuck in the nd channel */
 	if(oversize)
 		return -1;
-
-
-
     return 0;
 drop:
+    if (refcounted) {
+        sock_put(sk);
+    }
     /* Discard frame. */
     kfree_skb(skb);
     return -2;
@@ -1570,7 +1567,7 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
 	}
 	WARN_ON(dh->type != DATA);
 	nd_v4_fill_cb(skb, dh);
-	printk("HOL pkt:%u core:%d", ND_SKB_CB(skb)->seq, raw_smp_processor_id());
+	// printk("HOL pkt:%u core:%d", ND_SKB_CB(skb)->seq, raw_smp_processor_id());
     // }
 	// printk("packet hash %u\n", skb->hash);
 	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
@@ -1583,9 +1580,8 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
 		// iph = ip_hdr(skb);
  		bh_lock_sock(sk);
 		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
-			wait_skb = skb_peek(&dsk->receiver.sk_hol_queue);
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			if(ND_SKB_CB(wait_skb)->end_seq - dsk->receiver.rcv_nxt > nd_window_size(dsk)) {
+			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) > nd_window_size(dsk)) {
 				continue;
 			}
 			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
@@ -1594,11 +1590,11 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
         // ret = 0;
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
 		/* this might underestimate the current buffer size if socket is handling its backlog */
-		if(ND_SKB_CB(skb)->end_seq - dsk->receiver.rcv_nxt <= nd_window_size(dsk)) {
+		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) <= nd_window_size(dsk)) {
 			nd_handle_data_pkt_lock(sk, skb);
 		} else {
 			oversize = true;
-			if( ntohl(dh->seq) == dsk->receiver.rcv_nxt) {
+			if( ntohl(dh->seq) == (u32)atomic_read(&dsk->receiver.rcv_nxt)) {
 				printk("seq:%u return true \n",  ntohl(dh->seq));
 				WARN_ON_ONCE(true);
 			}
@@ -1617,9 +1613,7 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
 	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
 	    // printk("discard packet:%d\n", __LINE__);
 		// skb_dump(KERN_WARNING, skb, false);
-
 		sk_drops_add(sk, skb);
-		kfree_skb(skb);
 		goto drop;
 	}
 
@@ -1635,6 +1629,9 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
 
     return 0;
 drop:
+    if (refcounted) {
+        sock_put(sk);
+    }
     /* Discard frame. */
     kfree_skb(skb);
     return -2;
@@ -1776,11 +1773,9 @@ void nd_release_cb(struct sock *sk)
 	/* handle pkts in the wait queue */
 	if (unlikely(flags & NDF_WAIT_DEFERRED)) {
 		skb_queue_walk_safe(&nsk->receiver.sk_hol_queue, skb, tmp) {
-			skb = skb_peek(&nsk->receiver.sk_hol_queue);
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			WARN_ON_ONCE(true);
-			if(ND_SKB_CB(skb)->end_seq - nsk->receiver.rcv_nxt > nd_window_size(nsk)) {
-				printk("release cb hol pkt seq:%u mem:%u rcv nxt:%u \n",ND_SKB_CB(skb)->seq, atomic_read(&sk->sk_rmem_alloc),  nsk->receiver.rcv_nxt );
+			if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&nsk->receiver.rcv_nxt) > nd_window_size(nsk)) {
+				// printk("release cb hol pkt seq:%u mem:%u rcv nxt:%u \n",ND_SKB_CB(skb)->seq, atomic_read(&sk->sk_rmem_alloc),  nsk->receiver.rcv_nxt );
 				continue;
 			}
 			__skb_unlink(skb, &nsk->receiver.sk_hol_queue);
@@ -2047,7 +2042,6 @@ int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queu
 	bool hol = false;
 
 	// WARN_ON(queue == NULL);
-	WARN_ON(ndt_queue->hol_skb);
 	while ((skb = __skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
@@ -2151,7 +2145,7 @@ int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queu
 			struct nd_sock *nsk;
 			struct ndt_channel_entry *entry;
 			WARN_ON(hrtimer_active(&ndt_queue->hol_timer));
-			WARN_ON(ndt_queue->hol_skb);
+			// WARN_ON(ndt_queue->hol_skb);
 			nh =  nd_hdr(skb);
 			vsk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(nh), nh->source,
 					nh->dest, sdif, &refcounted);
@@ -2172,9 +2166,11 @@ int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queu
 	 		test_and_set_bit(ND_CHANNEL_DEFERRED, &vsk->sk_tsq_flags);
 			bh_unlock_sock(vsk);
 			/* set the state of hrtimer and hol_skb */
+			spin_lock(&ndt_queue->hol_lock);
 			ndt_queue->hol_skb = skb;
 			hrtimer_start(&ndt_queue->hol_timer, ns_to_ktime(ndt_queue->hol_timeout_us *
 				NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+			spin_unlock(&ndt_queue->hol_lock);
 			hol = true;
 			if(refcounted)
 				sock_put(vsk);

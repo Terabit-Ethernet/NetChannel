@@ -87,7 +87,8 @@ struct ndt_conn_queue {
 	struct hrtimer		hol_timer;
 	int hol_timeout_us;
 	struct sk_buff *hol_skb;
-        struct list_head        hol_list;
+	spinlock_t		hol_lock;
+    // struct list_head        hol_list;
 	// struct nvmet_tcp_cmd	connect;
 
 	struct page_frag_cache	pf_cache;

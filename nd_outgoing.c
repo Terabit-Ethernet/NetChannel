@@ -263,70 +263,70 @@ struct nd_conn_request* construct_fin_req(struct sock* sk) {
 	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
 	return req;
 }
-struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,
-	 __u32 prev_grant_nxt, __u32 grant_nxt, bool handle_rtx) {
-	// int extra_bytes = 0;
-	struct nd_sock *dsk = nd_sk(sk);
-	struct sk_buff* skb = __construct_control_skb(sk, ND_HEADER_MAX_SIZE
-		 + dsk->num_sacks * sizeof(struct nd_sack_block_wire));
-	struct nd_token_hdr* fh;
-	struct ndhdr* dh;
-	struct nd_sack_block_wire *sack;
-	int i = 0;
-	bool manual_end_point = true;
-	if(unlikely(!skb)) {
-		return NULL;
-	}
-	fh = (struct nd_token_hdr *) skb_put(skb, sizeof(struct nd_token_hdr));
-	dh = (struct ndhdr*) (&fh->common);
-	dh->len = htons(sizeof(struct nd_token_hdr));
-	dh->type = TOKEN;
-	fh->priority = priority;
-	fh->rcv_nxt = dsk->receiver.rcv_nxt;
-	fh->grant_nxt = grant_nxt;
-	fh->num_sacks = 0;
-	// printk("TOKEN: new grant next:%u\n", fh->grant_nxt);
-	// printk("prev_grant_nxt:%u\n", prev_grant_nxt);
-	// printk("new rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
-	// printk("copied seq:%u\n", dsk->receiver.copied_seq);
-	if(handle_rtx && dsk->receiver.rcv_nxt < prev_grant_nxt) {
-		// printk("rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
-		while(i < dsk->num_sacks) {
-			__u32 start_seq = dsk->selective_acks[i].start_seq;
-			__u32 end_seq = dsk->selective_acks[i].end_seq;
+// struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,
+// 	 __u32 prev_grant_nxt, __u32 grant_nxt, bool handle_rtx) {
+// 	// int extra_bytes = 0;
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	struct sk_buff* skb = __construct_control_skb(sk, ND_HEADER_MAX_SIZE
+// 		 + dsk->num_sacks * sizeof(struct nd_sack_block_wire));
+// 	struct nd_token_hdr* fh;
+// 	struct ndhdr* dh;
+// 	struct nd_sack_block_wire *sack;
+// 	int i = 0;
+// 	bool manual_end_point = true;
+// 	if(unlikely(!skb)) {
+// 		return NULL;
+// 	}
+// 	fh = (struct nd_token_hdr *) skb_put(skb, sizeof(struct nd_token_hdr));
+// 	dh = (struct ndhdr*) (&fh->common);
+// 	dh->len = htons(sizeof(struct nd_token_hdr));
+// 	dh->type = TOKEN;
+// 	fh->priority = priority;
+// 	fh->rcv_nxt = dsk->receiver.rcv_nxt;
+// 	fh->grant_nxt = grant_nxt;
+// 	fh->num_sacks = 0;
+// 	// printk("TOKEN: new grant next:%u\n", fh->grant_nxt);
+// 	// printk("prev_grant_nxt:%u\n", prev_grant_nxt);
+// 	// printk("new rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
+// 	// printk("copied seq:%u\n", dsk->receiver.copied_seq);
+// 	if(handle_rtx && dsk->receiver.rcv_nxt < prev_grant_nxt) {
+// 		// printk("rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
+// 		while(i < dsk->num_sacks) {
+// 			__u32 start_seq = dsk->selective_acks[i].start_seq;
+// 			__u32 end_seq = dsk->selective_acks[i].end_seq;
 
-			if(start_seq > prev_grant_nxt)
-				goto next;
-			if(end_seq > prev_grant_nxt) {
-				end_seq = prev_grant_nxt;
-				manual_end_point = false;
-			}
+// 			if(start_seq > prev_grant_nxt)
+// 				goto next;
+// 			if(end_seq > prev_grant_nxt) {
+// 				end_seq = prev_grant_nxt;
+// 				manual_end_point = false;
+// 			}
 
-			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
-			sack->start_seq = htonl(start_seq);
-			printk("start seq:%u\n", start_seq);
-			printk("end seq:%u\n", end_seq);
+// 			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
+// 			sack->start_seq = htonl(start_seq);
+// 			printk("start seq:%u\n", start_seq);
+// 			printk("end seq:%u\n", end_seq);
 
-			sack->end_seq = htonl(end_seq);
-			fh->num_sacks++;
-		next:
-			i++;
-		}
-		if(manual_end_point) {
-			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
-			sack->start_seq = htonl(prev_grant_nxt);
-			sack->end_seq = htonl(prev_grant_nxt);
-			printk("sack start seq:%u\n", prev_grant_nxt);
-			fh->num_sacks++;
-		}
+// 			sack->end_seq = htonl(end_seq);
+// 			fh->num_sacks++;
+// 		next:
+// 			i++;
+// 		}
+// 		if(manual_end_point) {
+// 			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
+// 			sack->start_seq = htonl(prev_grant_nxt);
+// 			sack->end_seq = htonl(prev_grant_nxt);
+// 			printk("sack start seq:%u\n", prev_grant_nxt);
+// 			fh->num_sacks++;
+// 		}
 
-	}
+// 	}
 
-	// extra_bytes = ND_HEADER_MAX_SIZE - length;
-	// if (extra_bytes > 0)
-	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
-	return skb;
-}
+// 	// extra_bytes = ND_HEADER_MAX_SIZE - length;
+// 	// if (extra_bytes > 0)
+// 	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
+// 	return skb;
+// }
 
 struct sk_buff* construct_ack_pkt(struct sock* sk, __be32 rcv_nxt) {
 	// int extra_bytes = 0;

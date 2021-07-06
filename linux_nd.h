@@ -491,7 +491,7 @@ struct nd_sock {
 
 	/* protected by socket user lock*/
 	// uint32_t new_grant_nxt;
-    uint32_t num_sacks;
+    // uint32_t num_sacks;
 	struct nd_sack_block selective_acks[16]; /* The SACKS themselves*/
 
     // ktime_t start_time;
@@ -560,7 +560,7 @@ struct nd_sock {
 		// struct hrtimer flow_wait_timer;
 	    // ktime_t last_rtx_time;
 
-		uint32_t copied_seq;
+		atomic_t copied_seq;
 	    uint32_t bytes_received;
 	    // uint32_t received_count;
 	    // uint32_t max_gso_data;
@@ -568,7 +568,7 @@ struct nd_sock {
 		uint32_t grant_nxt;
 		uint32_t nxt_dcopy_cpu;
 	    /* current received bytes + 1*/
-	    uint32_t rcv_nxt;
+	    atomic_t rcv_nxt;
 	    uint32_t last_ack;
 	    // struct nd_sack_block duplicate_sack[1]; /* D-SACK block */
 	    // uint32_t max_seq_no_recv;

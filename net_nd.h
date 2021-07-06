@@ -87,15 +87,17 @@ static inline int nd_full_space(const struct sock *sk)
 static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 		uint32_t win;
 		struct sock *sk = (struct sock*) nsk;
-		win = READ_ONCE(sk->sk_rcvbuf) - (nsk->receiver.rcv_nxt - nsk->receiver.copied_seq) - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
+		win = READ_ONCE(sk->sk_rcvbuf) - ((u32)atomic_read(&nsk->receiver.rcv_nxt) - (u32)atomic_read(&nsk->receiver.copied_seq))
+			 - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
 		if(win > READ_ONCE(sk->sk_rcvbuf)) {
+			win = 0;
 			pr_info("win: %u\n", win);
 			pr_info("READ_ONCE(sk->sk_rcvbuf):%d\n", READ_ONCE(sk->sk_rcvbuf));
 			pr_info("grant nxt:%u\n", nsk->receiver.grant_nxt);
 			pr_info("(u32)atomic_read(&nsk->receiver.in_flight_copy_bytes:%u\n", atomic_read(&nsk->receiver.in_flight_copy_bytes));
-			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
-			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
-			WARN_ON(true);
+			pr_info("nsk->receiver.rcv_nxt:%u\n", (u32)atomic_read(&nsk->receiver.rcv_nxt));
+			pr_info("nsk->receiver.copied_seq:%u\n", (u32)atomic_read(&nsk->receiver.copied_seq));
+			// WARN_ON(true);
 		}
 	    win = min_t (uint32_t, win, nsk->default_win);
 	return win;
@@ -110,8 +112,8 @@ static inline uint32_t nd_free_space(struct nd_sock *nsk) {
 			pr_info("READ_ONCE(sk->sk_rcvbuf):%d\n", READ_ONCE(sk->sk_rcvbuf));
 			pr_info("atomic_read(&sk->sk_rmem_alloc):%u\n",atomic_read(&sk->sk_rmem_alloc));
 			pr_info("(u32)atomic_read(&nsk->receiver.in_flight_copy_bytes:%u\n", atomic_read(&nsk->receiver.in_flight_copy_bytes));
-			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
-			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
+			pr_info("nsk->receiver.rcv_nxt:%u\n", (u32)atomic_read(&nsk->receiver.rcv_nxt));
+			pr_info("nsk->receiver.copied_seq:%u\n", (u32)atomic_read(&nsk->receiver.copied_seq));
 			pr_info("sk->sk_backlog.len:%u\n", sk->sk_backlog.len);
 			WARN_ON(true);
 			buf = 0;

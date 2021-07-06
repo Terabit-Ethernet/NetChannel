@@ -622,9 +622,10 @@ void ndt_conn_io_work(struct work_struct *w)
 	int optlen, bufsize;
 	sock_rps_record_flow(queue->sock->sk);
 	/* To Do: check if pending skbs are in the queue; reinsert first, if fails, sleep and register hrtimer */
+	spin_lock_bh(&queue->hol_lock);
 	if(queue->hol_skb) {
 		WARN_ON(!hrtimer_active(&queue->hol_timer));
-		local_bh_disable();
+		// local_bh_disable();
 		ret = nd_rcv(queue->hol_skb);
 		if(ret != -1) {
 			/* cancel hrtimer */
@@ -633,8 +634,9 @@ void ndt_conn_io_work(struct work_struct *w)
 		} else {
 			hol = true;
 		}
-		local_bh_enable();
+		// local_bh_enable();
 	}
+	spin_unlock_bh(&queue->hol_lock);
 	if(hol) {
 		// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
 		// (char *)&bufsize, &optlen);
@@ -688,10 +690,13 @@ enum hrtimer_restart ndt_hol_timer_handler(struct hrtimer *timer)
 			hol_timer);
 	struct ndt_channel_entry* entry;
 	int ret = 0;
+	spin_lock_bh(&queue->hol_lock);
     WARN_ON(!queue->hol_skb);
 	nd_handle_hol_data_pkt(queue->hol_skb);
 	/* clean hol_skb state */
 	queue->hol_skb = NULL;
+	spin_unlock_bh(&queue->hol_lock);
+	// printk("timer handler: set hol skb to be null:%d\n", raw_smp_processor_id());
 resume_channel:
 	/* restart the nd channel processing */
 	if(ndt_conn_is_latency(queue)) {
@@ -723,9 +728,10 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	queue->hol_timer.function = &ndt_hol_timer_handler;
 	queue->hol_skb = NULL;
 	queue->hol_timeout_us = 1000;
-	INIT_LIST_HEAD(&queue->hol_list);
+	// INIT_LIST_HEAD(&queue->hol_list);
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);
+	spin_lock_init(&queue->hol_lock);
 	queue->state = NDT_CONN_Q_CONNECTING;
 	INIT_LIST_HEAD(&queue->free_list);
 	init_llist_head(&queue->resp_list);

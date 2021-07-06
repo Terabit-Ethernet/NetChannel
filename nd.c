@@ -211,7 +211,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 	u32 new_grant_nxt;
 	// struct inet_sock *inet = inet_sk(sk);
 	if(copied > 0) {
-		new_grant_nxt = nd_window_size(nsk) + nsk->receiver.rcv_nxt;
+		new_grant_nxt = nd_window_size(nsk) + (u32)atomic_read(&nsk->receiver.rcv_nxt);
 		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt && 
 			new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
 			/* send ack pkt for new window */
@@ -1359,7 +1359,7 @@ int nd_init_sock(struct sock *sk)
 	sk->sk_destruct = nd_destruct_sock;
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
-	WRITE_ONCE(dsk->num_sacks, 0);
+	// WRITE_ONCE(dsk->num_sacks, 0);
 
 
 	/* initialize the sndbuf and rcvbuf */
@@ -1383,9 +1383,9 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->sender.con_queue_id, 0);
 	WRITE_ONCE(dsk->sender.con_accumu_count, 0);
 
-	WRITE_ONCE(dsk->receiver.rcv_nxt, 0);
+	atomic_set(&dsk->receiver.rcv_nxt, 0);
 	WRITE_ONCE(dsk->receiver.last_ack, 0);
-	WRITE_ONCE(dsk->receiver.copied_seq, 0);
+	atomic_set(&dsk->receiver.copied_seq, 0);
 	WRITE_ONCE(dsk->receiver.grant_nxt, dsk->default_win);
 	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, nd_params.data_cpy_core);
 	WRITE_ONCE(dsk->receiver.rmem_exhausted, 0);
@@ -1443,371 +1443,371 @@ bool nd_try_send_token(struct sock *sk) {
 
 
 
-int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
-		int flags, int *addr_len)
-{
+// int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+// 		int flags, int *addr_len)
+// {
 
-	struct nd_sock *dsk = nd_sk(sk);
-	int copied = 0;
-	// u32 peek_seq;
-	u32 *seq;
-	unsigned long used;
-	int err;
-	// int inq;
-	int target;		/* Read at least this many bytes */
-	long timeo;
-	// int trigger_tokens = 1;
-	struct sk_buff *skb, *last, *tmp;
-	struct nd_dcopy_request *request;
-	// u32 urg_hole = 0;
-	// struct scm_timestamping_internal tss;
-	// int cmsg_flags;
-	// printk("recvmsg start \n");
-	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	int copied = 0;
+// 	// u32 peek_seq;
+// 	u32 *seq;
+// 	unsigned long used;
+// 	int err;
+// 	// int inq;
+// 	int target;		/* Read at least this many bytes */
+// 	long timeo;
+// 	// int trigger_tokens = 1;
+// 	struct sk_buff *skb, *last, *tmp;
+// 	struct nd_dcopy_request *request;
+// 	// u32 urg_hole = 0;
+// 	// struct scm_timestamping_internal tss;
+// 	// int cmsg_flags;
+// 	// printk("recvmsg start \n");
+// 	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
 	
-	/* hardcode for now */ 
-	// struct page *bpages[48];
-	// struct bio_vec bvec;
-	struct iov_iter biter;
-	struct bio_vec *bv_arr;
-	ssize_t bremain = len, blen;
-	int max_segs = MAX_PIN_PAGES;
-	int nr_segs = 0;
-	int qid;
-	// printk("convert bytes:%ld\n", ret);
+// 	/* hardcode for now */ 
+// 	// struct page *bpages[48];
+// 	// struct bio_vec bvec;
+// 	struct iov_iter biter;
+// 	struct bio_vec *bv_arr;
+// 	ssize_t bremain = len, blen;
+// 	int max_segs = MAX_PIN_PAGES;
+// 	int nr_segs = 0;
+// 	int qid;
+// 	// printk("convert bytes:%ld\n", ret);
 
-	// nd_rps_record_flow(sk);
-	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
-	WARN_ON(!llist_empty(&dsk->receiver.clean_page_list));
-	// if (unlikely(flags & MSG_ERRQUEUE))
-	// 	return inet_recv_error(sk, msg, len, addr_len);
-	// printk("start recvmsg \n");
-	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+// 	// nd_rps_record_flow(sk);
+// 	WARN_ON(atomic_read(&dsk->receiver.in_flight_copy_bytes) != 0);
+// 	WARN_ON(!llist_empty(&dsk->receiver.clean_page_list));
+// 	// if (unlikely(flags & MSG_ERRQUEUE))
+// 	// 	return inet_recv_error(sk, msg, len, addr_len);
+// 	// printk("start recvmsg \n");
+// 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
-	// printk("target bytes:%d\n", target);
+// 	// printk("target bytes:%d\n", target);
 
-	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
-	    (sk->sk_state == ND_ESTABLISH))
-		sk_busy_loop(sk, nonblock);
+// 	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
+// 	    (sk->sk_state == ND_ESTABLISH))
+// 		sk_busy_loop(sk, nonblock);
 
-	lock_sock(sk);
-	err = -ENOTCONN;
-
-
-	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
-	timeo = sock_rcvtimeo(sk, nonblock);
-
-	if (sk->sk_state != ND_ESTABLISH)
-		goto out;
-
-	/* init bvec page */	
-	bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
-	blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
-	nr_segs = biter.nr_segs;
-	bremain -= blen;
+// 	lock_sock(sk);
+// 	err = -ENOTCONN;
 
 
+// 	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
+// 	timeo = sock_rcvtimeo(sk, nonblock);
 
-	seq = &dsk->receiver.copied_seq;
-	dsk->receiver.nxt_dcopy_cpu = nd_params.data_cpy_core;
-	// printk("start queue\n");
-	do {
-		u32 offset;
-		/* Next get a buffer. */
+// 	if (sk->sk_state != ND_ESTABLISH)
+// 		goto out;
 
-		last = skb_peek_tail(&sk->sk_receive_queue);
-		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
-			last = skb;
-
-			/* Now that we have two receive queues this
-			 * shouldn't happen.
-			 */
-			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
-				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
-				 *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt,
-				 flags))
-				break;
-
-			offset = *seq - ND_SKB_CB(skb)->seq;
-
-			if (offset < skb->len) {
-				goto found_ok_skb; 
-			}
-			else {
-				WARN_ON(true);
-			}
-		}
+// 	/* init bvec page */	
+// 	bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+// 	blen = nd_dcopy_iov_init(msg, &biter, bv_arr,  bremain, max_segs);
+// 	nr_segs = biter.nr_segs;
+// 	bremain -= blen;
 
 
-		/* ToDo: we have to check whether pending requests are done */
-		/* Well, if we have backlog, try to process it now yet. */
 
-		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail)) {
-			break;
-		}
+// 	seq = &dsk->receiver.copied_seq;
+// 	dsk->receiver.nxt_dcopy_cpu = nd_params.data_cpy_core;
+// 	// printk("start queue\n");
+// 	do {
+// 		u32 offset;
+// 		/* Next get a buffer. */
 
-		if (copied) {
-			if (sk->sk_err ||
-			    sk->sk_state == TCP_CLOSE ||
-			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-			    !timeo ||
-			    signal_pending(current))
-				break;
-		} else {
-			if (sock_flag(sk, SOCK_DONE))
-				break;
+// 		last = skb_peek_tail(&sk->sk_receive_queue);
+// 		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
+// 			last = skb;
 
-			if (sk->sk_err) {
-				copied = sock_error(sk);
-				break;
-			}
+// 			/* Now that we have two receive queues this
+// 			 * shouldn't happen.
+// 			 */
+// 			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
+// 				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
+// 				 *seq, ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt),
+// 				 flags))
+// 				break;
 
-			if (sk->sk_shutdown & RCV_SHUTDOWN)
-				break;
+// 			offset = *seq - ND_SKB_CB(skb)->seq;
 
-			if (sk->sk_state == TCP_CLOSE) {
-				/* This occurs when user tries to read
-				 * from never connected socket.
-				 */
-				copied = -ENOTCONN;
-				break;
-			}
+// 			if (offset < skb->len) {
+// 				goto found_ok_skb; 
+// 			}
+// 			else {
+// 				WARN_ON(true);
+// 			}
+// 		}
 
-			if (!timeo) {
-				copied = -EAGAIN;
-				break;
-			}
 
-			if (signal_pending(current)) {
-				copied = sock_intr_errno(timeo);
-				break;
-			}
-		}
+// 		/* ToDo: we have to check whether pending requests are done */
+// 		/* Well, if we have backlog, try to process it now yet. */
 
-		// tcp_cleanup_rbuf(sk, copied);
-		// nd_try_send_ack(sk, copied);
-		// printk("release sock");
-		if (copied >= target) {
-			/* Do not sleep, just process backlog. */
-			/* Release sock will handle the backlog */
-			release_sock(sk);
-			lock_sock(sk);
-		} else {
-			sk_wait_data(sk, &timeo, last);
-		}
+// 		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail)) {
+// 			break;
+// 		}
 
-		continue;
+// 		if (copied) {
+// 			if (sk->sk_err ||
+// 			    sk->sk_state == TCP_CLOSE ||
+// 			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+// 			    !timeo ||
+// 			    signal_pending(current))
+// 				break;
+// 		} else {
+// 			if (sock_flag(sk, SOCK_DONE))
+// 				break;
 
-found_ok_skb:
-		/* Ok so how much can we use? */
-		used = skb->len - offset;
+// 			if (sk->sk_err) {
+// 				copied = sock_error(sk);
+// 				break;
+// 			}
+
+// 			if (sk->sk_shutdown & RCV_SHUTDOWN)
+// 				break;
+
+// 			if (sk->sk_state == TCP_CLOSE) {
+// 				/* This occurs when user tries to read
+// 				 * from never connected socket.
+// 				 */
+// 				copied = -ENOTCONN;
+// 				break;
+// 			}
+
+// 			if (!timeo) {
+// 				copied = -EAGAIN;
+// 				break;
+// 			}
+
+// 			if (signal_pending(current)) {
+// 				copied = sock_intr_errno(timeo);
+// 				break;
+// 			}
+// 		}
+
+// 		// tcp_cleanup_rbuf(sk, copied);
+// 		// nd_try_send_ack(sk, copied);
+// 		// printk("release sock");
+// 		if (copied >= target) {
+// 			/* Do not sleep, just process backlog. */
+// 			/* Release sock will handle the backlog */
+// 			release_sock(sk);
+// 			lock_sock(sk);
+// 		} else {
+// 			sk_wait_data(sk, &timeo, last);
+// 		}
+
+// 		continue;
+
+// found_ok_skb:
+// 		/* Ok so how much can we use? */
+// 		used = skb->len - offset;
 		
-		// if(blen == 0) {
-		// 	// pr_info("free bvec bv page:%d\n", __LINE__);
-		// 	// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
-		// 	// kfree(bv_arr);
-		// 	// pr_info("done:%d\n", __LINE__);
-		// 	// bv_arr = NULL;
-		// 	sk_wait_data_copy(sk, &timeo);
-		// 	nd_release_pages(bv_arr, true, nr_segs);
-		// 	kfree(bv_arr);
-		// }
-		if(blen < used)
-			used = blen;
+// 		// if(blen == 0) {
+// 		// 	// pr_info("free bvec bv page:%d\n", __LINE__);
+// 		// 	// pr_info("biter.bvec->bv_page:%p\n", bv_arr->bv_page);
+// 		// 	// kfree(bv_arr);
+// 		// 	// pr_info("done:%d\n", __LINE__);
+// 		// 	// bv_arr = NULL;
+// 		// 	sk_wait_data_copy(sk, &timeo);
+// 		// 	nd_release_pages(bv_arr, true, nr_segs);
+// 		// 	kfree(bv_arr);
+// 		// }
+// 		if(blen < used)
+// 			used = blen;
 
-		if (len < used) {
-			WARN_ON(true);
-			used = len;
-		}
+// 		if (len < used) {
+// 			WARN_ON(true);
+// 			used = len;
+// 		}
 
-        // unsigned cpu = cpumask_first(cpu_online_mask);
+//         // unsigned cpu = cpumask_first(cpu_online_mask);
 
-        // while (cpu < nr_cpu_ids) {
-        //         pr_info("CPU: %u, freq: %u kHz\n", cpu, cpufreq_get(cpu));
-        //         cpu = cpumask_next(cpu, cpu_online_mask);
-        // }
-		/* construct data copy request */
-		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
-		request->state = ND_DCOPY_RECV;
-		request->sk = sk;
-		request->clean_skb = (used + offset == skb->len);
-		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
-		request->skb = skb;
-		request->offset = offset;
-		request->len = used;
-		request->remain_len = used;
-		// dup_iter(&request->iter, &biter, GFP_KERNEL);
-		request->iter = biter;
-		// printk("cpu:%d req bytes:%d skb bytes:%d frags:%d\n", request->io_cpu,  request->len, skb->len, skb_shinfo(skb)->nr_frags);
-		// bytes_recvd[request->io_cpu] += request->len;
-		// pr_info("request:%p\n", request);
-		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
-		// request->iter = msg->msg_iter;
-		// pr_info("request->len: %d\n", request->len);
-		/* update the biter */
-		iov_iter_advance(&biter, used);
-		blen -= used;
+//         // while (cpu < nr_cpu_ids) {
+//         //         pr_info("CPU: %u, freq: %u kHz\n", cpu, cpufreq_get(cpu));
+//         //         cpu = cpumask_next(cpu, cpu_online_mask);
+//         // }
+// 		/* construct data copy request */
+// 		request = kzalloc(sizeof(struct nd_dcopy_request) ,GFP_KERNEL);
+// 		request->state = ND_DCOPY_RECV;
+// 		request->sk = sk;
+// 		request->clean_skb = (used + offset == skb->len);
+// 		request->io_cpu = dsk->receiver.nxt_dcopy_cpu;
+// 		request->skb = skb;
+// 		request->offset = offset;
+// 		request->len = used;
+// 		request->remain_len = used;
+// 		// dup_iter(&request->iter, &biter, GFP_KERNEL);
+// 		request->iter = biter;
+// 		// printk("cpu:%d req bytes:%d skb bytes:%d frags:%d\n", request->io_cpu,  request->len, skb->len, skb_shinfo(skb)->nr_frags);
+// 		// bytes_recvd[request->io_cpu] += request->len;
+// 		// pr_info("request:%p\n", request);
+// 		// pr_info("sizeof(struct nd_dcopy_request):%d\n", sizeof(struct nd_dcopy_request));
+// 		// request->iter = msg->msg_iter;
+// 		// pr_info("request->len: %d\n", request->len);
+// 		/* update the biter */
+// 		iov_iter_advance(&biter, used);
+// 		blen -= used;
 
-		if(blen == 0) {
-			request->bv_arr = bv_arr;
-			request->max_segs = nr_segs;
-			bv_arr = NULL;
-			nr_segs = 0;
-		}
-		// if (!(flags & MSG_TRUNC)) {
-		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
-		// 	// printk("copy data done: %d\n", used);
-		// 	if (err) {
-		// 		/* Exception. Bailout! */
-		// 		if (!copied)
-		// 			copied = -EFAULT;
-		// 		break;
-		// 	}
-		// }
+// 		if(blen == 0) {
+// 			request->bv_arr = bv_arr;
+// 			request->max_segs = nr_segs;
+// 			bv_arr = NULL;
+// 			nr_segs = 0;
+// 		}
+// 		// if (!(flags & MSG_TRUNC)) {
+// 		// 	err = skb_copy_datagram_msg(skb, offset, msg, used);
+// 		// 	// printk("copy data done: %d\n", used);
+// 		// 	if (err) {
+// 		// 		/* Exception. Bailout! */
+// 		// 		if (!copied)
+// 		// 			copied = -EFAULT;
+// 		// 		break;
+// 		// 	}
+// 		// }
 
-		WRITE_ONCE(*seq, *seq + used);
-		copied += used;
-		len -= used;
-		if (used + offset < skb->len)
-			goto queue_request;
-		// pr_info("copied_seq:%d\n", seq);
-		WARN_ON(used + offset > skb->len);
-		__skb_unlink(skb, &sk->sk_receive_queue);
-		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
-		// kfree_skb(skb);
+// 		WRITE_ONCE(*seq, *seq + used);
+// 		copied += used;
+// 		len -= used;
+// 		if (used + offset < skb->len)
+// 			goto queue_request;
+// 		// pr_info("copied_seq:%d\n", seq);
+// 		WARN_ON(used + offset > skb->len);
+// 		__skb_unlink(skb, &sk->sk_receive_queue);
+// 		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+// 		// kfree_skb(skb);
 
-queue_request:
-		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
-		/* queue the data copy request */
-		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
-		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
+// queue_request:
+// 		atomic_add(used, &dsk->receiver.in_flight_copy_bytes);
+// 		/* queue the data copy request */
+// 		// pr_info("old msg->msg_iter.iov_base:%p\n", msg->msg_iter.iov->iov_base);
+// 		// pr_info("old msg->msg_iter.iov_len:%ld\n", msg->msg_iter.iov->iov_len);
 		
-		qid = nd_dcopy_queue_request(request);
-		// pr_info("queue request:%d, skb->len:%d req->len:%d \n", qid, skb->len, request->len);
+// 		qid = nd_dcopy_queue_request(request);
+// 		// pr_info("queue request:%d, skb->len:%d req->len:%d \n", qid, skb->len, request->len);
 
-		// if(dsk->receiver.nxt_dcopy_cpu == -1) {
-		// 	dsk->receiver.nxt_dcopy_cpu = qid;
-		// 	// printk("new qid:%d\n", qid);
-		// }
-		if(blen == 0 && bremain > 0) {
-			ssize_t bsize = bremain;
-			int next_cpu = 0;
-			if(used + offset < skb->len) {
-				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
-			} else {
-				next_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
-				if(next_cpu != -1)
-					dsk->receiver.nxt_dcopy_cpu = next_cpu;
-			}
-			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
-			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
-			nr_segs = biter.nr_segs;
-			bremain -= blen;
-			// sk_wait_data_copy(sk, &timeo);
-		}
-		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
-		// pr_info("start wait \n");
-		// sk_wait_data_copy(sk, &timeo);
-		// pr_info("finish wait \n");
+// 		// if(dsk->receiver.nxt_dcopy_cpu == -1) {
+// 		// 	dsk->receiver.nxt_dcopy_cpu = qid;
+// 		// 	// printk("new qid:%d\n", qid);
+// 		// }
+// 		if(blen == 0 && bremain > 0) {
+// 			ssize_t bsize = bremain;
+// 			int next_cpu = 0;
+// 			if(used + offset < skb->len) {
+// 				bsize =  min_t(ssize_t, bsize, skb->len - offset - used);
+// 			} else {
+// 				next_cpu = nd_dcopy_sche_rr(dsk->receiver.nxt_dcopy_cpu);
+// 				if(next_cpu != -1)
+// 					dsk->receiver.nxt_dcopy_cpu = next_cpu;
+// 			}
+// 			bv_arr = kmalloc(MAX_PIN_PAGES * sizeof(struct bio_vec), GFP_KERNEL);
+// 			blen = nd_dcopy_iov_init(msg, &biter, bv_arr, bsize, max_segs);
+// 			nr_segs = biter.nr_segs;
+// 			bremain -= blen;
+// 			// sk_wait_data_copy(sk, &timeo);
+// 		}
+// 		// pr_info("skb_headlen(skb):%d\n", skb_headlen(skb));
+// 		// pr_info("start wait \n");
+// 		// sk_wait_data_copy(sk, &timeo);
+// 		// pr_info("finish wait \n");
 
-		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
-		// if(dsk->receiver.nxt_dcopy_cpu == 0)
-		// 	dsk->receiver.nxt_dcopy_cpu = 4;
-		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
-		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
-		// iov_iter_advance(&msg->msg_iter, used);
-		// pr_info("advance \n");
-		continue;
+// 		// dsk->receiver.nxt_dcopy_cpu = (dsk->receiver.nxt_dcopy_cpu + 4) % 32;
+// 		// if(dsk->receiver.nxt_dcopy_cpu == 0)
+// 		// 	dsk->receiver.nxt_dcopy_cpu = 4;
+// 		// pr_info("msg->msg_iter.count:%ld\n", msg->msg_iter.count);
+// 		// pr_info("msg->msg_iter.iov_offset:%ld\n", msg->msg_iter.iov_offset);
+// 		// iov_iter_advance(&msg->msg_iter, used);
+// 		// pr_info("advance \n");
+// 		continue;
 
-		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
-		// 	// nd_try_send_token(sk);
-		// 	trigger_tokens += 1;
+// 		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
+// 		// 	// nd_try_send_token(sk);
+// 		// 	trigger_tokens += 1;
 			
-		// }
-		// nd_try_send_token(sk);
+// 		// }
+// 		// nd_try_send_token(sk);
 
-		// tcp_rcv_space_adjust(sk);
+// 		// tcp_rcv_space_adjust(sk);
 
-// skip_copy:
-		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
-		// 	tp->urg_data = 0;
-		// 	tcp_fast_path_check(sk);
-		// }
-		// if (used + offset < skb->len)
-		// 	continue;
+// // skip_copy:
+// 		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
+// 		// 	tp->urg_data = 0;
+// 		// 	tcp_fast_path_check(sk);
+// 		// }
+// 		// if (used + offset < skb->len)
+// 		// 	continue;
 
-		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
-		// 	tcp_update_recv_tstamps(skb, &tss);
-		// 	cmsg_flags |= 2;
-		// }
-		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-		// 	goto found_fin_ok;
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		// continue;
+// 		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
+// 		// 	tcp_update_recv_tstamps(skb, &tss);
+// 		// 	cmsg_flags |= 2;
+// 		// }
+// 		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+// 		// 	goto found_fin_ok;
+// 		// if (!(flags & MSG_PEEK))
+// 		// 	sk_eat_skb(sk, skb);
+// 		// continue;
 
-// found_fin_ok:
-		/* Process the FIN. */
-		// WRITE_ONCE(*seq, *seq + 1);
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		// break;
-	} while (len > 0);
+// // found_fin_ok:
+// 		/* Process the FIN. */
+// 		// WRITE_ONCE(*seq, *seq + 1);
+// 		// if (!(flags & MSG_PEEK))
+// 		// 	sk_eat_skb(sk, skb);
+// 		// break;
+// 	} while (len > 0);
 	
-	/* free the bvec memory */
+// 	/* free the bvec memory */
 
 
-	/* According to UNIX98, msg_name/msg_namelen are ignored
-	 * on connected socket. I was just happy when found this 8) --ANK
-	 */
-	 	/* waiting data copy to be finishede */
-	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
-	// printk("start wait\n");
-	sk_wait_data_copy(sk, &timeo);
-	if(bv_arr) {
-		nd_release_pages(bv_arr, true, nr_segs);
-		kfree(bv_arr);
-	}
-	// pr_info("free bvec:%d\n", __LINE__);
-	// pr_info("biter.bvec:%p\n", biter.bvec);
-	// nd_release_pages(bv_arr, true, nr_segs);
-	// kfree(bv_arr);
-	// }
-	/* Clean up data we have read: This will do ACK frames. */
-	// tcp_cleanup_rbuf(sk, copied);
-	// nd_try_send_ack(sk, copied);
-	// if (dsk->receiver.copied_seq == dsk->total_length) {
-	// 	printk("call tcp close in the recv msg\n");
-	// 	nd_set_state(sk, TCP_CLOSE);
-	// } else {
-	// 	// nd_try_send_token(sk);
-	// }
-	release_sock(sk);
-	// printk("return");
-	// if (cmsg_flags) {
-	// 	if (cmsg_flags & 2)
-	// 		tcp_recv_timestamp(msg, sk, &tss);
-	// 	if (cmsg_flags & 1) {
-	// 		inq = tcp_inq_hint(sk);
-	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
-	// 	}
-	// }
-	// printk("recvmsg\n");
+// 	/* According to UNIX98, msg_name/msg_namelen are ignored
+// 	 * on connected socket. I was just happy when found this 8) --ANK
+// 	 */
+// 	 	/* waiting data copy to be finishede */
+// 	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
+// 	// printk("start wait\n");
+// 	sk_wait_data_copy(sk, &timeo);
+// 	if(bv_arr) {
+// 		nd_release_pages(bv_arr, true, nr_segs);
+// 		kfree(bv_arr);
+// 	}
+// 	// pr_info("free bvec:%d\n", __LINE__);
+// 	// pr_info("biter.bvec:%p\n", biter.bvec);
+// 	// nd_release_pages(bv_arr, true, nr_segs);
+// 	// kfree(bv_arr);
+// 	// }
+// 	/* Clean up data we have read: This will do ACK frames. */
+// 	// tcp_cleanup_rbuf(sk, copied);
+// 	// nd_try_send_ack(sk, copied);
+// 	// if (dsk->receiver.copied_seq == dsk->total_length) {
+// 	// 	printk("call tcp close in the recv msg\n");
+// 	// 	nd_set_state(sk, TCP_CLOSE);
+// 	// } else {
+// 	// 	// nd_try_send_token(sk);
+// 	// }
+// 	release_sock(sk);
+// 	// printk("return");
+// 	// if (cmsg_flags) {
+// 	// 	if (cmsg_flags & 2)
+// 	// 		tcp_recv_timestamp(msg, sk, &tss);
+// 	// 	if (cmsg_flags & 1) {
+// 	// 		inq = tcp_inq_hint(sk);
+// 	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
+// 	// 	}
+// 	// }
+// 	// printk("recvmsg\n");
 
-	return copied;
+// 	return copied;
 
-out:
-	release_sock(sk);
-	return err;
+// out:
+// 	release_sock(sk);
+// 	return err;
 
-// recv_urg:
-// 	err = tcp_recv_urg(sk, msg, len, flags);
-// 	goto out;
+// // recv_urg:
+// // 	err = tcp_recv_urg(sk, msg, len, flags);
+// // 	goto out;
 
-// recv_sndq:
-// 	// err = tcp_peek_sndq(sk, msg, len);
-// 	goto out;
-}
+// // recv_sndq:
+// // 	// err = tcp_peek_sndq(sk, msg, len);
+// // 	goto out;
+// }
 
 int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
@@ -1816,7 +1816,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 	struct nd_sock *dsk = nd_sk(sk);
 	int copied = 0;
 	// u32 peek_seq;
-	u32 *seq;
+	// u32 *seq;
 	unsigned long used;
 	int err;
 	int target;		/* Read at least this many bytes */
@@ -1860,7 +1860,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 	in_remote_cpy = false;
 	dsk->receiver.nxt_dcopy_cpu = nd_params.data_cpy_core;
 
-	seq = &dsk->receiver.copied_seq;
+	// seq = &dsk->receiver.copied_seq;
 	do {
 		u32 offset;
 		/* Next get a buffer. */
@@ -1872,13 +1872,13 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 			/* Now that we have two receive queues this
 			 * shouldn't happen.
 			 */
-			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
+			if (WARN(before((u32)atomic_read(&dsk->receiver.copied_seq), ND_SKB_CB(skb)->seq),
 				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
-				 *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt,
+				 (u32)atomic_read(&dsk->receiver.copied_seq), ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt),
 				 flags))
 				break;
 
-			offset = *seq - ND_SKB_CB(skb)->seq;
+			offset = (u32)atomic_read(&dsk->receiver.copied_seq) - ND_SKB_CB(skb)->seq;
 
 			if (offset < skb->len) {
 				goto found_ok_skb; 
@@ -2019,8 +2019,8 @@ pin_user_page:
 			bv_arr = NULL;
 			nr_segs = 0;
 		}
-
-		WRITE_ONCE(*seq, *seq + used);
+		atomic_set(&dsk->receiver.copied_seq, atomic_read(&dsk->receiver.copied_seq) + used);
+		// WRITE_ONCE(*seq, *seq + used);
 		copied += used;
 		len -= used;
 		if (used + offset < skb->len)
@@ -2066,7 +2066,8 @@ local_copy:
 				break;
 			}
 		}
-		WRITE_ONCE(*seq, *seq + used);
+		atomic_set(&dsk->receiver.copied_seq, atomic_read(&dsk->receiver.copied_seq) + used);
+		// WRITE_ONCE(*seq, *seq + used);
 		copied += used;
 		len -= used;
 		if (used + offset < skb->len)
@@ -2108,310 +2109,310 @@ out:
  * 	return it, otherwise we block.
  */
 
-int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
-		int flags, int *addr_len)
-{
+// int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+// 		int flags, int *addr_len)
+// {
 
-	struct nd_sock *dsk = nd_sk(sk);
-	int copied = 0;
-	// u32 peek_seq;
-	u32 *seq;
-	unsigned long used;
-	int err;
-	// int inq;
-	int target;		/* Read at least this many bytes */
-	long timeo;
-	// int trigger_tokens = 1;
-	struct sk_buff *skb, *last, *tmp;
-	// u32 urg_hole = 0;
-	// struct scm_timestamping_internal tss;
-	// int cmsg_flags;
-	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
-	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	int copied = 0;
+// 	// u32 peek_seq;
+// 	u32 *seq;
+// 	unsigned long used;
+// 	int err;
+// 	// int inq;
+// 	int target;		/* Read at least this many bytes */
+// 	long timeo;
+// 	// int trigger_tokens = 1;
+// 	struct sk_buff *skb, *last, *tmp;
+// 	// u32 urg_hole = 0;
+// 	// struct scm_timestamping_internal tss;
+// 	// int cmsg_flags;
+// 	// printk("recvmsg: sk->rxhash:%u\n", sk->sk_rxhash);
+// 	// printk("rcvmsg core:%d\n", raw_smp_processor_id());
 
-	// nd_rps_record_flow(sk);
+// 	// nd_rps_record_flow(sk);
 
-	// if (unlikely(flags & MSG_ERRQUEUE))
-	// 	return inet_recv_error(sk, msg, len, addr_len);
-	// printk("start recvmsg \n");
-	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+// 	// if (unlikely(flags & MSG_ERRQUEUE))
+// 	// 	return inet_recv_error(sk, msg, len, addr_len);
+// 	// printk("start recvmsg \n");
+// 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
-	// printk("target bytes:%d\n", target);
+// 	// printk("target bytes:%d\n", target);
 
-	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
-	    (sk->sk_state == ND_ESTABLISH))
-		sk_busy_loop(sk, nonblock);
+// 	if (sk_can_busy_loop(sk) && skb_queue_empty_lockless(&sk->sk_receive_queue) &&
+// 	    (sk->sk_state == ND_ESTABLISH))
+// 		sk_busy_loop(sk, nonblock);
 
-	lock_sock(sk);
-	err = -ENOTCONN;
-
-
-	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
-	timeo = sock_rcvtimeo(sk, nonblock);
-
-	if (sk->sk_state != ND_ESTABLISH)
-		goto out;
-	/* Urgent data needs to be handled specially. */
-	// if (flags & MSG_OOB)
-	// 	goto recv_urg;
-
-	// if (unlikely(tp->repair)) {
-	// 	err = -EPERM;
-		// if (!(flags & MSG_PEEK))
-		// 	goto out;
-
-		// if (tp->repair_queue == TCP_SEND_QUEUE)
-		// 	goto recv_sndq;
-
-		// err = -EINVAL;
-		// if (tp->repair_queue == TCP_NO_QUEUE)
-		// 	goto out;
-
-		/* 'common' recv queue MSG_PEEK-ing */
-//	}
-
-	seq = &dsk->receiver.copied_seq;
-	// if (flags & MSG_PEEK) {
-	// 	peek_seq = dsk->receiver.copied_seq;
-	// 	seq = &peek_seq;
-	// }
-
-	do {
-		u32 offset;
-
-		/* Are we at urgent data? Stop if we have read anything or have SIGURG pending. */
-		// if (tp->urg_data && tp->urg_seq == *seq) {
-		// 	if (copied)
-		// 		break;
-		// 	if (signal_pending(current)) {
-		// 		copied = timeo ? sock_intr_errno(timeo) : -EAGAIN;
-		// 		break;
-		// 	}
-		// }
-
-		/* Next get a buffer. */
-
-		last = skb_peek_tail(&sk->sk_receive_queue);
-		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
-			last = skb;
-
-			/* Now that we have two receive queues this
-			 * shouldn't happen.
-			 */
-			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
-				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
-				 *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt,
-				 flags))
-				break;
-
-			offset = *seq - ND_SKB_CB(skb)->seq;
-			// if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
-			// 	pr_err_once("%s: found a SYN, please report !\n", __func__);
-			// 	offset--;
-			// }
-			if (offset < skb->len) {
-				goto found_ok_skb; 
-			}
-			else {
-				WARN_ON(true);
-				// __skb_unlink(skb, &sk->sk_receive_queue);
-
-				// kfree_skb(skb);
-				// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
-			}
-			// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-			// 	goto found_fin_ok;
-			// WARN(!(flags & MSG_PEEK),
-			//      "TCP recvmsg seq # bug 2: copied %X, seq %X, rcvnxt %X, fl %X\n",
-			//      *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt, flags);
-		}
+// 	lock_sock(sk);
+// 	err = -ENOTCONN;
 
 
-		/* ToDo: we have to check whether pending requests are done */
-		/* Well, if we have backlog, try to process it now yet. */
+// 	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
+// 	timeo = sock_rcvtimeo(sk, nonblock);
 
-		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
-			break;
+// 	if (sk->sk_state != ND_ESTABLISH)
+// 		goto out;
+// 	/* Urgent data needs to be handled specially. */
+// 	// if (flags & MSG_OOB)
+// 	// 	goto recv_urg;
 
-		if (copied) {
-			if (sk->sk_err ||
-			    sk->sk_state == TCP_CLOSE ||
-			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-			    !timeo ||
-			    signal_pending(current))
-				break;
-		} else {
-			if (sock_flag(sk, SOCK_DONE))
-				break;
+// 	// if (unlikely(tp->repair)) {
+// 	// 	err = -EPERM;
+// 		// if (!(flags & MSG_PEEK))
+// 		// 	goto out;
 
-			if (sk->sk_err) {
-				copied = sock_error(sk);
-				break;
-			}
+// 		// if (tp->repair_queue == TCP_SEND_QUEUE)
+// 		// 	goto recv_sndq;
 
-			if (sk->sk_shutdown & RCV_SHUTDOWN)
-				break;
+// 		// err = -EINVAL;
+// 		// if (tp->repair_queue == TCP_NO_QUEUE)
+// 		// 	goto out;
 
-			if (sk->sk_state == TCP_CLOSE) {
-				/* This occurs when user tries to read
-				 * from never connected socket.
-				 */
-				copied = -ENOTCONN;
-				break;
-			}
+// 		/* 'common' recv queue MSG_PEEK-ing */
+// //	}
 
-			if (!timeo) {
-				copied = -EAGAIN;
-				break;
-			}
+// 	seq = &dsk->receiver.copied_seq;
+// 	// if (flags & MSG_PEEK) {
+// 	// 	peek_seq = dsk->receiver.copied_seq;
+// 	// 	seq = &peek_seq;
+// 	// }
 
-			if (signal_pending(current)) {
-				copied = sock_intr_errno(timeo);
-				break;
-			}
-		}
+// 	do {
+// 		u32 offset;
 
-		// tcp_cleanup_rbuf(sk, copied);
-		// nd_try_send_ack(sk, copied);
-		// printk("release sock");
-		if (copied >= target) {
-			/* Do not sleep, just process backlog. */
-			/* Release sock will handle the backlog */
-			// printk("call release sock1\n");
-			release_sock(sk);
-			lock_sock(sk);
-		} else {
-			sk_wait_data(sk, &timeo, last);
-		}
+// 		/* Are we at urgent data? Stop if we have read anything or have SIGURG pending. */
+// 		// if (tp->urg_data && tp->urg_seq == *seq) {
+// 		// 	if (copied)
+// 		// 		break;
+// 		// 	if (signal_pending(current)) {
+// 		// 		copied = timeo ? sock_intr_errno(timeo) : -EAGAIN;
+// 		// 		break;
+// 		// 	}
+// 		// }
 
-		// if ((flags & MSG_PEEK) &&
-		//     (peek_seq - copied - urg_hole != tp->copied_seq)) {
-		// 	net_dbg_ratelimited("TCP(%s:%d): Application bug, race in MSG_PEEK\n",
-		// 			    current->comm,
-		// 			    task_pid_nr(current));
-		// 	peek_seq = dsk->receiver.copied_seq;
-		// }
-		continue;
+// 		/* Next get a buffer. */
 
-found_ok_skb:
-		/* Ok so how much can we use? */
-		used = skb->len - offset;
-		if (len < used)
-			used = len;
-		// nd_try_send_token(sk);
+// 		last = skb_peek_tail(&sk->sk_receive_queue);
+// 		skb_queue_walk_safe(&sk->sk_receive_queue, skb, tmp) {
+// 			last = skb;
 
-		/* Do we have urgent data here? */
-		// if (tp->urg_data) {
-		// 	u32 urg_offset = tp->urg_seq - *seq;
-		// 	if (urg_offset < used) {
-		// 		if (!urg_offset) {
-		// 			if (!sock_flag(sk, SOCK_URGINLINE)) {
-		// 				WRITE_ONCE(*seq, *seq + 1);
-		// 				urg_hole++;
-		// 				offset++;
-		// 				used--;
-		// 				if (!used)
-		// 					goto skip_copy;
-		// 			}
-		// 		} else
-		// 			used = urg_offset;
-		// 	}
-		// }
+// 			/* Now that we have two receive queues this
+// 			 * shouldn't happen.
+// 			 */
+// 			if (WARN(before(*seq, ND_SKB_CB(skb)->seq),
+// 				 "ND recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
+// 				 *seq, ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt),
+// 				 flags))
+// 				break;
 
-		if (!(flags & MSG_TRUNC)) {
-			err = skb_copy_datagram_msg(skb, offset, msg, used);
-			// printk("copy data done: %d\n", used);
-			if (err) {
-				WARN_ON(true);
-				/* Exception. Bailout! */
-				if (!copied)
-					copied = -EFAULT;
-				break;
-			}
-		}
+// 			offset = *seq - ND_SKB_CB(skb)->seq;
+// 			// if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
+// 			// 	pr_err_once("%s: found a SYN, please report !\n", __func__);
+// 			// 	offset--;
+// 			// }
+// 			if (offset < skb->len) {
+// 				goto found_ok_skb; 
+// 			}
+// 			else {
+// 				WARN_ON(true);
+// 				// __skb_unlink(skb, &sk->sk_receive_queue);
 
-		WRITE_ONCE(*seq, *seq + used);
-		copied += used;
-		len -= used;
-		if (used + offset < skb->len)
-			continue;
-		__skb_unlink(skb, &sk->sk_receive_queue);
-		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
-		kfree_skb(skb);
+// 				// kfree_skb(skb);
+// 				// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+// 			}
+// 			// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+// 			// 	goto found_fin_ok;
+// 			// WARN(!(flags & MSG_PEEK),
+// 			//      "TCP recvmsg seq # bug 2: copied %X, seq %X, rcvnxt %X, fl %X\n",
+// 			//      *seq, ND_SKB_CB(skb)->seq, dsk->receiver.rcv_nxt, flags);
+// 		}
 
-		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
-		// 	// nd_try_send_token(sk);
-		// 	trigger_tokens += 1;
+
+// 		/* ToDo: we have to check whether pending requests are done */
+// 		/* Well, if we have backlog, try to process it now yet. */
+
+// 		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
+// 			break;
+
+// 		if (copied) {
+// 			if (sk->sk_err ||
+// 			    sk->sk_state == TCP_CLOSE ||
+// 			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+// 			    !timeo ||
+// 			    signal_pending(current))
+// 				break;
+// 		} else {
+// 			if (sock_flag(sk, SOCK_DONE))
+// 				break;
+
+// 			if (sk->sk_err) {
+// 				copied = sock_error(sk);
+// 				break;
+// 			}
+
+// 			if (sk->sk_shutdown & RCV_SHUTDOWN)
+// 				break;
+
+// 			if (sk->sk_state == TCP_CLOSE) {
+// 				/* This occurs when user tries to read
+// 				 * from never connected socket.
+// 				 */
+// 				copied = -ENOTCONN;
+// 				break;
+// 			}
+
+// 			if (!timeo) {
+// 				copied = -EAGAIN;
+// 				break;
+// 			}
+
+// 			if (signal_pending(current)) {
+// 				copied = sock_intr_errno(timeo);
+// 				break;
+// 			}
+// 		}
+
+// 		// tcp_cleanup_rbuf(sk, copied);
+// 		// nd_try_send_ack(sk, copied);
+// 		// printk("release sock");
+// 		if (copied >= target) {
+// 			/* Do not sleep, just process backlog. */
+// 			/* Release sock will handle the backlog */
+// 			// printk("call release sock1\n");
+// 			release_sock(sk);
+// 			lock_sock(sk);
+// 		} else {
+// 			sk_wait_data(sk, &timeo, last);
+// 		}
+
+// 		// if ((flags & MSG_PEEK) &&
+// 		//     (peek_seq - copied - urg_hole != tp->copied_seq)) {
+// 		// 	net_dbg_ratelimited("TCP(%s:%d): Application bug, race in MSG_PEEK\n",
+// 		// 			    current->comm,
+// 		// 			    task_pid_nr(current));
+// 		// 	peek_seq = dsk->receiver.copied_seq;
+// 		// }
+// 		continue;
+
+// found_ok_skb:
+// 		/* Ok so how much can we use? */
+// 		used = skb->len - offset;
+// 		if (len < used)
+// 			used = len;
+// 		// nd_try_send_token(sk);
+
+// 		/* Do we have urgent data here? */
+// 		// if (tp->urg_data) {
+// 		// 	u32 urg_offset = tp->urg_seq - *seq;
+// 		// 	if (urg_offset < used) {
+// 		// 		if (!urg_offset) {
+// 		// 			if (!sock_flag(sk, SOCK_URGINLINE)) {
+// 		// 				WRITE_ONCE(*seq, *seq + 1);
+// 		// 				urg_hole++;
+// 		// 				offset++;
+// 		// 				used--;
+// 		// 				if (!used)
+// 		// 					goto skip_copy;
+// 		// 			}
+// 		// 		} else
+// 		// 			used = urg_offset;
+// 		// 	}
+// 		// }
+
+// 		if (!(flags & MSG_TRUNC)) {
+// 			err = skb_copy_datagram_msg(skb, offset, msg, used);
+// 			// printk("copy data done: %d\n", used);
+// 			if (err) {
+// 				WARN_ON(true);
+// 				/* Exception. Bailout! */
+// 				if (!copied)
+// 					copied = -EFAULT;
+// 				break;
+// 			}
+// 		}
+
+// 		WRITE_ONCE(*seq, *seq + used);
+// 		copied += used;
+// 		len -= used;
+// 		if (used + offset < skb->len)
+// 			continue;
+// 		__skb_unlink(skb, &sk->sk_receive_queue);
+// 		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+// 		kfree_skb(skb);
+
+// 		// if (copied > 3 * trigger_tokens * dsk->receiver.max_gso_data) {
+// 		// 	// nd_try_send_token(sk);
+// 		// 	trigger_tokens += 1;
 			
-		// }
-		// nd_try_send_token(sk);
+// 		// }
+// 		// nd_try_send_token(sk);
 
-		// tcp_rcv_space_adjust(sk);
+// 		// tcp_rcv_space_adjust(sk);
 
-// skip_copy:
-		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
-		// 	tp->urg_data = 0;
-		// 	tcp_fast_path_check(sk);
-		// }
-		// if (used + offset < skb->len)
-		// 	continue;
+// // skip_copy:
+// 		// if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
+// 		// 	tp->urg_data = 0;
+// 		// 	tcp_fast_path_check(sk);
+// 		// }
+// 		// if (used + offset < skb->len)
+// 		// 	continue;
 
-		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
-		// 	tcp_update_recv_tstamps(skb, &tss);
-		// 	cmsg_flags |= 2;
-		// }
-		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-		// 	goto found_fin_ok;
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		continue;
+// 		// if (TCP_SKB_CB(skb)->has_rxtstamp) {
+// 		// 	tcp_update_recv_tstamps(skb, &tss);
+// 		// 	cmsg_flags |= 2;
+// 		// }
+// 		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+// 		// 	goto found_fin_ok;
+// 		// if (!(flags & MSG_PEEK))
+// 		// 	sk_eat_skb(sk, skb);
+// 		continue;
 
-// found_fin_ok:
-		/* Process the FIN. */
-		// WRITE_ONCE(*seq, *seq + 1);
-		// if (!(flags & MSG_PEEK))
-		// 	sk_eat_skb(sk, skb);
-		// break;
-	} while (len > 0);
+// // found_fin_ok:
+// 		/* Process the FIN. */
+// 		// WRITE_ONCE(*seq, *seq + 1);
+// 		// if (!(flags & MSG_PEEK))
+// 		// 	sk_eat_skb(sk, skb);
+// 		// break;
+// 	} while (len > 0);
 
-	/* According to UNIX98, msg_name/msg_namelen are ignored
-	 * on connected socket. I was just happy when found this 8) --ANK
-	 */
+// 	/* According to UNIX98, msg_name/msg_namelen are ignored
+// 	 * on connected socket. I was just happy when found this 8) --ANK
+// 	 */
 	
-	/* Clean up data we have read: This will do ACK frames. */
-	// tcp_cleanup_rbuf(sk, copied);
-	// nd_try_send_ack(sk, copied);
-	// if (dsk->receiver.copied_seq == dsk->total_length) {
-	// 	printk("call tcp close in the recv msg\n");
-	// 	nd_set_state(sk, TCP_CLOSE);
-	// } else {
-	// 	// nd_try_send_token(sk);
-	// }
-	release_sock(sk);
+// 	/* Clean up data we have read: This will do ACK frames. */
+// 	// tcp_cleanup_rbuf(sk, copied);
+// 	// nd_try_send_ack(sk, copied);
+// 	// if (dsk->receiver.copied_seq == dsk->total_length) {
+// 	// 	printk("call tcp close in the recv msg\n");
+// 	// 	nd_set_state(sk, TCP_CLOSE);
+// 	// } else {
+// 	// 	// nd_try_send_token(sk);
+// 	// }
+// 	release_sock(sk);
 
-	// if (cmsg_flags) {
-	// 	if (cmsg_flags & 2)
-	// 		tcp_recv_timestamp(msg, sk, &tss);
-	// 	if (cmsg_flags & 1) {
-	// 		inq = tcp_inq_hint(sk);
-	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
-	// 	}
-	// }
-	// printk("recvmsg\n");
-	return copied;
+// 	// if (cmsg_flags) {
+// 	// 	if (cmsg_flags & 2)
+// 	// 		tcp_recv_timestamp(msg, sk, &tss);
+// 	// 	if (cmsg_flags & 1) {
+// 	// 		inq = tcp_inq_hint(sk);
+// 	// 		put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
+// 	// 	}
+// 	// }
+// 	// printk("recvmsg\n");
+// 	return copied;
 
-out:
-	release_sock(sk);
-	return err;
+// out:
+// 	release_sock(sk);
+// 	return err;
 
-// recv_urg:
-// 	err = tcp_recv_urg(sk, msg, len, flags);
-// 	goto out;
+// // recv_urg:
+// // 	err = tcp_recv_urg(sk, msg, len, flags);
+// // 	goto out;
 
-// recv_sndq:
-// 	// err = tcp_peek_sndq(sk, msg, len);
-// 	goto out;
-}
+// // recv_sndq:
+// // 	// err = tcp_peek_sndq(sk, msg, len);
+// // 	goto out;
+// }
 
 int nd_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
