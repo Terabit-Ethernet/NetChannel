@@ -109,11 +109,11 @@ int nd_pq_size(struct nd_pq* pq);
 // 	struct inet_sock *inet);
 
 /*ND incoming function*/
-void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue);
+int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue);
 // bool nd_try_send_token(struct sock *sk);
 // void nd_get_sack_info(struct sock *sk, struct sk_buff *skb);
 // enum hrtimer_restart nd_new_epoch(struct hrtimer *timer);
-
+int nd_handle_hol_data_pkt(struct sk_buff *skb);
 int nd_handle_data_pkt(struct sk_buff *skb);
 // int nd_handle_flow_sync_pkt(struct sk_buff *skb);
 int nd_handle_sync_pkt(struct sk_buff *skb);

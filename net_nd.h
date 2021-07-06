@@ -101,6 +101,24 @@ static inline uint32_t nd_window_size(struct nd_sock *nsk) {
 	return win;
 }
 
+static inline uint32_t nd_free_space(struct nd_sock *nsk) {
+		uint32_t buf;
+		struct sock *sk = (struct sock*) nsk;
+		buf = READ_ONCE(sk->sk_rcvbuf) - atomic_read(&sk->sk_rmem_alloc) - sk->sk_backlog.len;
+		
+		if(buf > READ_ONCE(sk->sk_rcvbuf)) {
+			pr_info("READ_ONCE(sk->sk_rcvbuf):%d\n", READ_ONCE(sk->sk_rcvbuf));
+			pr_info("atomic_read(&sk->sk_rmem_alloc):%u\n",atomic_read(&sk->sk_rmem_alloc));
+			pr_info("(u32)atomic_read(&nsk->receiver.in_flight_copy_bytes:%u\n", atomic_read(&nsk->receiver.in_flight_copy_bytes));
+			pr_info("nsk->receiver.rcv_nxt:%u\n", nsk->receiver.rcv_nxt);
+			pr_info("nsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
+			pr_info("sk->sk_backlog.len:%u\n", sk->sk_backlog.len);
+			WARN_ON(true);
+			buf = 0;
+		}
+	return buf;
+}
+
 static inline void nd_rps_record_flow(const struct sock *sk)
 {
 // 	struct nd_sock *dsk = nd_sk(sk);

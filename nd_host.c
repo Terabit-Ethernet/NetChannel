@@ -909,8 +909,10 @@ void nd_conn_io_work(struct work_struct *w)
 			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 		}
 	}
-		// ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
-	nd_conn_wake_up_all_socks(queue->ctrl);
+	// ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	/* To Do: only wake up all socks if there is available space */
+	if(atomic_read(&queue->cur_queue_size) < queue->queue_size)
+			nd_conn_wake_up_all_socks(queue->ctrl);
 }
 
 
@@ -918,11 +920,11 @@ void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
 	uint32_t i;
 	spin_lock_bh(&ctrl->sock_wait_lock);
 	// printk("add sleep sock\n");
-	if(nsk->wait_on_nd_conns)
+	if(nsk->sender.wait_on_nd_conns)
 		goto queue_work;
-	nsk->wait_cpu = raw_smp_processor_id();
-	nsk->wait_on_nd_conns = true;
-	list_add_tail(&nsk->wait_list, &ctrl->sock_wait_list);
+	nsk->sender.wait_cpu = raw_smp_processor_id();
+	nsk->sender.wait_on_nd_conns = true;
+	list_add_tail(&nsk->tx_wait_list, &ctrl->sock_wait_list);
 queue_work:
 	spin_unlock_bh(&ctrl->sock_wait_lock);
 	for(i = 0; i < ctrl->queue_count; i++) {
@@ -937,9 +939,9 @@ queue_work:
 
 void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
 	spin_lock_bh(&ctrl->sock_wait_lock);
-	if(nsk->wait_on_nd_conns) {
-		list_del_init(&nsk->wait_list);
-		nsk->wait_on_nd_conns = false;
+	if(nsk->sender.wait_on_nd_conns) {
+		list_del_init(&nsk->tx_wait_list);
+		nsk->sender.wait_on_nd_conns = false;
 	}
 	spin_unlock_bh(&ctrl->sock_wait_lock);
 }
@@ -947,10 +949,10 @@ void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
 void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
 	struct nd_sock *nsk; 
 	spin_lock_bh(&ctrl->sock_wait_lock);
-	list_for_each_entry(nsk, &ctrl->sock_wait_list, wait_list) {
-		WARN_ON(!nsk->wait_on_nd_conns);
-		queue_work_on(nsk->wait_cpu, ctrl->sock_wait_wq, &nsk->tx_work);
-		nsk->wait_on_nd_conns = false;
+	list_for_each_entry(nsk, &ctrl->sock_wait_list, tx_wait_list) {
+		WARN_ON(!nsk->sender.wait_on_nd_conns);
+		queue_work_on(nsk->sender.wait_cpu, ctrl->sock_wait_wq, &nsk->tx_work);
+		nsk->sender.wait_on_nd_conns = false;
 	}
 	INIT_LIST_HEAD(&ctrl->sock_wait_list);
 	spin_unlock_bh(&ctrl->sock_wait_lock);

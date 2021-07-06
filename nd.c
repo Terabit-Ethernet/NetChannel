@@ -533,20 +533,20 @@ int nd_push(struct sock *sk, gfp_t flag) {
 		// nsk->sender.write_seq += skb->len;
 queue_req:
 		/* check the window is available */
-		if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
-			WARN_ON(nsk->sender.pending_req);
-			// if(ntohs(inet->inet_dport) == 4000) {
-			// 	printk("window is insufficient:%d %d \n", (ND_SKB_CB(skb)->seq), nsk->sender.sd_grant_nxt);
-			// }
-			// WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
-			if(nd_params.nd_debug) {
-				pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
-				pr_info(" (ND_SKB_CB(skb)->seq + skb->len):%u\n",  (ND_SKB_CB(skb)->seq + skb->len));
-			}
-			nsk->sender.pending_req = req;
-			ret = -EMSGSIZE;
-			break;
-		}
+		// if(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) > nsk->default_win) {
+		// 	WARN_ON(nsk->sender.pending_req);
+		// 	// if(ntohs(inet->inet_dport) == 4000) {
+		// 	// 	printk("window is insufficient:%d %d \n", (ND_SKB_CB(skb)->seq), nsk->sender.sd_grant_nxt);
+		// 	// }
+		// 	// WARN_ON(nsk->sender.sd_grant_nxt - (ND_SKB_CB(skb)->seq + skb->len) < (1<<30));
+		// 	if(nd_params.nd_debug) {
+		// 		pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
+		// 		pr_info(" (ND_SKB_CB(skb)->seq + skb->len):%u\n",  (ND_SKB_CB(skb)->seq + skb->len));
+		// 	}
+		// 	nsk->sender.pending_req = req;
+		// 	ret = -EMSGSIZE;
+		// 	break;
+		// }
 		seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
 		// req->queue = &nd_ctrl->queues[htons(inet->inet_sport) % nd_params.nd_num_queue];
@@ -604,7 +604,6 @@ extern struct nd_conn_ctrl* nd_ctrl;
 static int nd_sender_local_dcopy(struct sock* sk, struct msghdr *msg, 
 	int req_len, u32 seq, long timeo) {
 	struct sk_buff *skb = NULL;
-	struct inet_sock *inet = inet_sk(sk);
 	struct nd_sock *nsk = nd_sk(sk);
 	struct nd_dcopy_response *resp;
 	size_t copy;
@@ -1361,10 +1360,7 @@ int nd_init_sock(struct sock *sk)
 	// sk->sk_write_space = sk_stream_write_space;
 	dsk->unsolved = 0;
 	WRITE_ONCE(dsk->num_sacks, 0);
-	INIT_WORK(&dsk->tx_work, nd_tx_work);
-	WRITE_ONCE(dsk->wait_cpu, 0);
-	WRITE_ONCE(dsk->wait_on_nd_conns, false);
-	INIT_LIST_HEAD(&dsk->wait_list);
+
 
 	/* initialize the sndbuf and rcvbuf */
 	WRITE_ONCE(sk->sk_sndbuf, nd_params.wmem_default);
@@ -1372,6 +1368,10 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->default_win , min_t(uint32_t, nd_params.bdp, READ_ONCE(sk->sk_rcvbuf)));
 
 	// INIT_LIST_HEAD(&dsk->match_link);
+	INIT_WORK(&dsk->tx_work, nd_tx_work);
+	INIT_LIST_HEAD(&dsk->tx_wait_list);
+	WRITE_ONCE(dsk->sender.wait_cpu, 0);
+	WRITE_ONCE(dsk->sender.wait_on_nd_conns, false);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
@@ -1390,6 +1390,8 @@ int nd_init_sock(struct sock *sk)
 	WRITE_ONCE(dsk->receiver.nxt_dcopy_cpu, nd_params.data_cpy_core);
 	WRITE_ONCE(dsk->receiver.rmem_exhausted, 0);
 	WRITE_ONCE(dsk->receiver.prev_grant_bytes, 0);
+	INIT_LIST_HEAD(&dsk->receiver.hol_channel_list);
+	skb_queue_head_init(&dsk->receiver.sk_hol_queue);
 
 	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
 	dsk->receiver.free_skb_num = 0;
@@ -1583,7 +1585,7 @@ int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock
 		}
 
 		// tcp_cleanup_rbuf(sk, copied);
-		nd_try_send_ack(sk, copied);
+		// nd_try_send_ack(sk, copied);
 		// printk("release sock");
 		if (copied >= target) {
 			/* Do not sleep, just process backlog. */
@@ -1773,7 +1775,7 @@ queue_request:
 	// }
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
-	nd_try_send_ack(sk, copied);
+	// nd_try_send_ack(sk, copied);
 	// if (dsk->receiver.copied_seq == dsk->total_length) {
 	// 	printk("call tcp close in the recv msg\n");
 	// 	nd_set_state(sk, TCP_CLOSE);
@@ -1932,7 +1934,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 		}
 
 		// tcp_cleanup_rbuf(sk, copied);
-		nd_try_send_ack(sk, copied);
+		// nd_try_send_ack(sk, copied);
 		// printk("release sock");
 		if (copied >= target) {
 			/* Do not sleep, just process backlog. */
@@ -2090,7 +2092,7 @@ local_copy:
 		kfree(bv_arr);
 	}
 
-	nd_try_send_ack(sk, copied);
+	// nd_try_send_ack(sk, copied);
 	release_sock(sk);
 	return copied;
 
@@ -2270,7 +2272,7 @@ int nd_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		}
 
 		// tcp_cleanup_rbuf(sk, copied);
-		nd_try_send_ack(sk, copied);
+		// nd_try_send_ack(sk, copied);
 		// printk("release sock");
 		if (copied >= target) {
 			/* Do not sleep, just process backlog. */
@@ -2378,7 +2380,7 @@ found_ok_skb:
 	
 	/* Clean up data we have read: This will do ACK frames. */
 	// tcp_cleanup_rbuf(sk, copied);
-	nd_try_send_ack(sk, copied);
+	// nd_try_send_ack(sk, copied);
 	// if (dsk->receiver.copied_seq == dsk->total_length) {
 	// 	printk("call tcp close in the recv msg\n");
 	// 	nd_set_state(sk, TCP_CLOSE);
@@ -2495,7 +2497,7 @@ int nd_v4_early_demux(struct sk_buff *skb)
 	// return 0;
 }
 
-
+/* oversize: -1, drop: -2, normal: 0 */
 int nd_rcv(struct sk_buff *skb)
 {
 	// printk("receive nd rcv\n");
@@ -2541,9 +2543,7 @@ int nd_rcv(struct sk_buff *skb)
 drop:
 
 	kfree_skb(skb);
-	return 0;
-
-	return 0;
+	return -2;
 	// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
 }
 
@@ -2553,6 +2553,9 @@ void nd_destroy_sock(struct sock *sk)
 	// struct udp_hslot* hslot = udp_hashslot(sk->sk_prot->h.udp_table, sock_net(sk),
 	// 				     nd_sk(sk)->nd_port_hash);
 	struct nd_sock *up = nd_sk(sk);
+	struct ndt_channel_entry *entry, *temp;
+	struct ndt_conn_queue *queue;
+	struct sk_buff *skb;
 	// struct inet_sock *inet = inet_sk(sk);
 	// struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
 	// local_bh_disable();
@@ -2583,7 +2586,25 @@ void nd_destroy_sock(struct sock *sk)
 	nd_write_queue_purge(sk);
 	nd_read_queue_purge(sk);
 	// pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
-
+	/* hol state are protected by the spin lock */
+	local_bh_disable();
+	bh_lock_sock(sk);
+	while((skb_peek(&up->receiver.sk_hol_queue))) {
+		skb = skb_peek(&up->receiver.sk_hol_queue);
+		kfree(skb);
+	}
+	list_for_each_entry_safe(entry, temp, &up->receiver.hol_channel_list, list_link) {
+		queue = entry->queue;
+		if(ndt_conn_is_latency(queue)) {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+		} else {
+			queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+		}
+		kfree(entry);
+	}
+	bh_unlock_sock(sk);
+	local_bh_enable();
+	
 	release_sock(sk);
 	/* remove from sleep wait queue */
 	nd_conn_remove_sleep_sock(nd_ctrl, up);

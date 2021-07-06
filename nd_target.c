@@ -1,11 +1,12 @@
 #include "nd_target.h"
 #include "nd_impl.h"
+#include "net_nd.h"
 static DEFINE_IDA(ndt_conn_queue_ida);
 static LIST_HEAD(ndt_conn_queue_list);
 static DEFINE_MUTEX(ndt_conn_queue_mutex);
 
-static struct workqueue_struct *ndt_conn_wq;
-static struct workqueue_struct *ndt_conn_wq_lat;
+struct workqueue_struct *ndt_conn_wq;
+struct workqueue_struct *ndt_conn_wq_lat;
 
 static struct ndt_conn_port * ndt_port;
 
@@ -13,8 +14,10 @@ static struct ndt_conn_port * ndt_port;
 #define NDT_CONN_SEND_BUDGET		8
 #define NDT_CONN_IO_WORK_BUDGET	128
 
+
 static int cur_io_cpu = 0;
-static inline int queue_cpu(struct ndt_conn_queue *queue)
+
+inline int queue_cpu(struct ndt_conn_queue *queue)
 {
 	return queue->io_cpu;
 	// return 0;
@@ -31,12 +34,10 @@ void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
 	spin_unlock(&queue->state_lock);
 }
 
-static inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue)
+inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue)
 {
 	return queue->prio_class == 1;
 }
-
-
 void ndt_conn_accept_work(struct work_struct *w)
 {
 	struct ndt_conn_port *port =
@@ -487,10 +488,9 @@ int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 	int ret = 0;
 	struct socket *sock = queue->sock;
 	read_descriptor_t desc;
-
+	WARN_ON(!sock);
 	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
 		return -EBUSY;
-
 	desc.arg.data = queue;
 	desc.error = 0;
 	desc.count = budget; /* give more than one skb per call */
@@ -616,13 +616,34 @@ void ndt_conn_io_work(struct work_struct *w)
 {
 	struct ndt_conn_queue *queue =
 		container_of(w, struct ndt_conn_queue, io_work);
-	bool pending;
+	bool pending, hol = false;
 	int ret, ops = 0;
-	// int optlen, bufsize;
+
+	int optlen, bufsize;
 	sock_rps_record_flow(queue->sock->sk);
+	/* To Do: check if pending skbs are in the queue; reinsert first, if fails, sleep and register hrtimer */
+	if(queue->hol_skb) {
+		WARN_ON(!hrtimer_active(&queue->hol_timer));
+		local_bh_disable();
+		ret = nd_rcv(queue->hol_skb);
+		if(ret != -1) {
+			/* cancel hrtimer */
+			hrtimer_cancel(&queue->hol_timer);
+			queue->hol_skb = NULL;
+		} else {
+			hol = true;
+		}
+		local_bh_enable();
+	}
+	if(hol) {
+		// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
+		// (char *)&bufsize, &optlen);
+		// pr_info("buffer size receiver:%d\n", bufsize);
+		// printk("hol return :%d \n", raw_smp_processor_id());
+		return;
+	}
 	do {
 		pending = false;
-
 		ret = ndt_conn_try_recv(queue, NDT_CONN_IO_WORK_BUDGET - ops, &ops);
 		if (ret > 0) {
 			pending = true;
@@ -632,7 +653,9 @@ void ndt_conn_io_work(struct work_struct *w)
 			return;
 		}
 		/* parsing packet; not sure if it should includes in while loop when accounting budget */
-		pass_to_vs_layer(queue, &queue->receive_queue);
+		ret = pass_to_vs_layer(queue, &queue->receive_queue);
+		if(ret < 0)
+			return;
 		// pr_info("ops:%d\n", ops);
 		// ret = ndt_conn_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
@@ -658,6 +681,28 @@ void ndt_conn_io_work(struct work_struct *w)
 	}
 }
 
+enum hrtimer_restart ndt_hol_timer_handler(struct hrtimer *timer)
+{
+	struct ndt_conn_queue *queue =
+		container_of(timer, struct ndt_conn_queue,
+			hol_timer);
+	struct ndt_channel_entry* entry;
+	int ret = 0;
+    WARN_ON(!queue->hol_skb);
+	nd_handle_hol_data_pkt(queue->hol_skb);
+	/* clean hol_skb state */
+	queue->hol_skb = NULL;
+resume_channel:
+	/* restart the nd channel processing */
+	if(ndt_conn_is_latency(queue)) {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+	} else {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+	}
+	return HRTIMER_NORESTART;
+}
+
+
 int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		struct socket *newsock)
 {
@@ -673,6 +718,12 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	queue->sock = newsock;
 	queue->port = port;
 	queue->snd_request = NULL;
+	/* initialize the hrtimer for HOL */
+	hrtimer_init(&queue->hol_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
+	queue->hol_timer.function = &ndt_hol_timer_handler;
+	queue->hol_skb = NULL;
+	queue->hol_timeout_us = 1000;
+	INIT_LIST_HEAD(&queue->hol_list);
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);
 	queue->state = NDT_CONN_Q_CONNECTING;

@@ -15,6 +15,8 @@
 #include "uapi_linux_nd.h"
 // #include "nd_host.h"
 /* ND Connection Listerning Port */
+extern struct workqueue_struct *ndt_conn_wq;
+extern struct workqueue_struct *ndt_conn_wq_lat;
 struct ndt_conn_port {
 	struct socket		*sock;
 	struct work_struct	accept_work;
@@ -81,6 +83,11 @@ struct ndt_conn_queue {
 	int			idx;
 	struct list_head	queue_list;
 
+	/* handle the HOL timer */
+	struct hrtimer		hol_timer;
+	int hol_timeout_us;
+	struct sk_buff *hol_skb;
+        struct list_head        hol_list;
 	// struct nvmet_tcp_cmd	connect;
 
 	struct page_frag_cache	pf_cache;
@@ -90,6 +97,13 @@ struct ndt_conn_queue {
 	void (*write_space)(struct sock *);
 };
 
+struct ndt_channel_entry {
+    struct ndt_conn_queue* queue;
+    struct list_head list_link;
+};
+
+inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue);
+inline int queue_cpu(struct ndt_conn_queue *queue);
 void ndt_conn_remove_port(struct ndt_conn_port *port);
 int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		struct socket *newsock);

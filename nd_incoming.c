@@ -643,7 +643,7 @@ static void nd_drop(struct sock *sk, struct sk_buff *skb)
         // __kfree_skb(skb);
 }
 
-static void nd_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
+static void nd_v4_fill_cb(struct sk_buff *skb,
                            const struct ndhdr *dh)
 {
         /* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
@@ -1343,7 +1343,7 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
                 return true;
         }
 		/* sk_add_backlog add skb->truesize, but we have fraglist skbs */
-		sk->sk_backlog.len -= skb->truesize + ND_SKB_CB(skb)->total_size;
+		sk->sk_backlog.len +=  ND_SKB_CB(skb)->total_size - skb->truesize;
         // atomic_add(skb->truesize, &dsk->receiver.backlog_len);
 
         return false;
@@ -1351,93 +1351,84 @@ bool nd_add_backlog(struct sock *sk, struct sk_buff *skb, bool omit_check)
  }
 
 /* asssume socket user lock is hold */
-static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
-		uint32_t count, total_len, i, seq;
-		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
-		struct iphdr *iph;
-		struct ndhdr *dh;
+// static void nd_handle_data_skb(struct sock* sk, struct sk_buff* skb) {
+// 		uint32_t count, total_len, i, seq;
+// 		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
+// 		struct iphdr *iph;
+// 		struct ndhdr *dh;
 	
-		iph = ip_hdr(skb);
-		dh =  nd_hdr(skb);
-		/* handle the first packet which contains the header */
-		count = ND_SKB_CB(skb)->count;
-		total_len = ND_SKB_CB(skb)->total_len;
+// 		iph = ip_hdr(skb);
+// 		dh =  nd_hdr(skb);
+// 		/* handle the first packet which contains the header */
+// 		count = ND_SKB_CB(skb)->count;
+// 		total_len = ND_SKB_CB(skb)->total_len;
 
 
-		skb_shinfo(skb)->frag_list = NULL;
-		ND_SKB_CB(skb)->count = 0;
-		ND_SKB_CB(skb)->total_len = 0;
-		ND_SKB_CB(skb)->total_size = 0;
-		nd_v4_fill_cb(skb, iph, dh);
-		if(nd_params.nd_debug) {
-			pr_info("ND_SKB_CB(head)->seq = seq:%u\n", ND_SKB_CB(skb)->seq);
-			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
-		}
-		seq = ND_SKB_CB(skb)->end_seq;
+// 		skb_shinfo(skb)->frag_list = NULL;
+// 		ND_SKB_CB(skb)->count = 0;
+// 		ND_SKB_CB(skb)->total_len = 0;
+// 		ND_SKB_CB(skb)->total_size = 0;
+// 		nd_v4_fill_cb(skb, dh);
+// 		if(nd_params.nd_debug) {
+// 			pr_info("ND_SKB_CB(head)->seq = seq:%u\n", ND_SKB_CB(skb)->seq);
+// 			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
+// 		}
+// 		seq = ND_SKB_CB(skb)->end_seq;
 
-		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
-		nd_data_queue(sk, skb);
-		/* handle the rest of packets */
-		for(i = 0; i < count; i++) {
-			// WARN_ON(!head);
-			ND_SKB_CB(head)->seq = seq;
-			ND_SKB_CB(head)->end_seq = seq + head->len;
-			temp = head->next;
-			head->next = NULL;
-			if(nd_params.nd_debug) {
-				pr_info("ND_SKB_CB(head)->seq = seq:%u\n", seq);
-				// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(head)->end_seq);
+// 		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
+// 		nd_data_queue(sk, skb);
+// 		/* handle the rest of packets */
+// 		for(i = 0; i < count; i++) {
+// 			// WARN_ON(!head);
+// 			ND_SKB_CB(head)->seq = seq;
+// 			ND_SKB_CB(head)->end_seq = seq + head->len;
+// 			temp = head->next;
+// 			head->next = NULL;
+// 			if(nd_params.nd_debug) {
+// 				pr_info("ND_SKB_CB(head)->seq = seq:%u\n", seq);
+// 				// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(head)->end_seq);
 
-			}
-			// pr_info("ND_SKB_CB(head)->end_seq = seq + head->len:%u\n", seq + head->len);
-			/* update the seq */
-			seq = ND_SKB_CB(head)->end_seq;
-			nd_data_queue(sk, head);
-			head = temp;
-		}
-	return ;
-}
+// 			}
+// 			// pr_info("ND_SKB_CB(head)->end_seq = seq + head->len:%u\n", seq + head->len);
+// 			/* update the seq */
+// 			seq = ND_SKB_CB(head)->end_seq;
+// 			nd_data_queue(sk, head);
+// 			head = temp;
+// 		}
+// 	return ;
+// }
 static void nd_handle_data_skb_new(struct sock* sk, struct sk_buff* skb) {
-		uint32_t count, total_len, i, seq;
-		struct sk_buff* head = skb_shinfo(skb)->frag_list, *temp; 
-		struct iphdr *iph;
-		struct ndhdr *dh;
-	
-		iph = ip_hdr(skb);
-		dh =  nd_hdr(skb);
-		/* handle the first packet which contains the header */
-		count = ND_SKB_CB(skb)->count;
-		total_len = ND_SKB_CB(skb)->total_len;
-
-		ND_SKB_CB(skb)->count = 0;
-		ND_SKB_CB(skb)->total_len = 0;
-		ND_SKB_CB(skb)->total_size = 0;
-		if(nd_params.nd_debug) {
-			pr_info("ND_SKB_CB(head)->seq = seq:%u\n", ND_SKB_CB(skb)->seq);
-			// pr_info("ND_SKB_CB(head)->endseq:%u\n", ND_SKB_CB(skb)->end_seq);
-		}
-		/* handle the rest of packets */
-		for(i = 0; i < count; i++) {
-			// WARN_ON(!head);
-			// head->next = NULL;
-
-			/* update the len, data_len, truesize */
-			skb->truesize += head->truesize;
-			skb->data_len += head->len;
-			skb->len += head->len;
-			head = head->next;
-		}
-		nd_v4_fill_cb(skb, iph, dh);
+		// pr_info("ND_SKB_CB(head)->seq = seq:%u core:%d \n", ND_SKB_CB(skb)->seq, raw_smp_processor_id());
 		__skb_pull(skb, nd_hdr(skb)->doff >> 2);
 		nd_data_queue(sk, skb);
 	return ;
 }
 
+/* assuming hold the bh lock of sock */
+static void nd_handle_data_pkt_lock(struct sock *sk, struct sk_buff *skb) {
+	if (!sock_owned_by_user(sk)) {
+		/* current place to set rxhash for RFS/RPS */
+		// printk("skb->hash:%u\n", skb->hash);
+		// sock_rps_save_rxhash(sk, skb)
+		//  printk("put into the data queue\n");
+		nd_handle_data_skb_new(sk, skb);
+		// nd_send_grant(dsk, false);
+		if (!sock_flag(sk, SOCK_DEAD)) {
+			sk->sk_data_ready(sk);
+		}
+		// nd_check_flow_finished_at_receiver(dsk);;
+	} else {
+		// printk("add to backlog\n");
+		/* omit check for now */
+		nd_add_backlog(sk, skb, true);
+			// goto discard_and_relse;
+	}
+	return;
+}
 /**
  * nd_data_pkt() - Handler for incoming DATA packets
  * @skb:     Incoming packet; size known to be large enough for the header.
  *           This function now owns the packet.
- * @rpc:     Information about the RPC corresponding to this packet.
  * 
  * Return: Zero means the function completed successfully. Nonzero means
  * that the RPC had to be unlocked and deleted because the socket has been
@@ -1449,11 +1440,13 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 	struct nd_sock *dsk;
 	struct ndhdr *dh;
 	struct sock *sk;
-	// struct iphdr *iph;
+	struct sk_buff *wait_skb, *tmp;
+	struct iphdr *iph;
 	int sdif = inet_sdif(skb);
 
 	bool refcounted = false;
 	bool discard = false;
+	bool oversize = false;
 	// printk("receive data pkt\n");
 	if (!pskb_may_pull(skb, sizeof(struct ndhdr)))
 		goto drop;		/* No space for header. */
@@ -1467,7 +1460,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
     if(!sk) {
     	goto drop;
 	}
-	
+	nd_v4_fill_cb(skb, dh);
     // }
 	// printk("packet hash %u\n", skb->hash);
 	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
@@ -1479,28 +1472,26 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		dsk = nd_sk(sk);
 		// iph = ip_hdr(skb);
  		bh_lock_sock(sk);
-
+		/* To Do: check sk_hol_queue */
+		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
+			wait_skb = skb_peek(&dsk->receiver.sk_hol_queue);
+			/* this might underestimate the current buffer size if socket is handling its backlog */
+			if(ND_SKB_CB(wait_skb)->end_seq - dsk->receiver.rcv_nxt >  nd_window_size(dsk)) {
+				continue;
+			}
+			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
+			nd_handle_data_pkt_lock(sk, wait_skb);
+		}
         // ret = 0;
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
-        if (!sock_owned_by_user(sk)) {
-			/* current place to set rxhash for RFS/RPS */
-			// printk("skb->hash:%u\n", skb->hash);
-		 	// sock_rps_save_rxhash(sk, skb)
-			//  printk("put into the data queue\n");
-			nd_handle_data_skb_new(sk, skb);
-			nd_send_grant(dsk, false);
-			if (!sock_flag(sk, SOCK_DEAD)) {
-				sk->sk_data_ready(sk);
-			}
-			// nd_check_flow_finished_at_receiver(dsk);;
-        } else {
-        	// printk("add to backlog\n");
-			/* omit check for now */
-            if (nd_add_backlog(sk, skb, true)) {
-            	discard = true;
-                // goto discard_and_relse;
-            }
-        }
+		/* this might underestimate the current buffer size if socket is handling its backlog */
+		/* this part might needed to be changed later, because rcv_nxt */
+		if(ND_SKB_CB(skb)->end_seq - dsk->receiver.rcv_nxt <= nd_window_size(dsk)) {
+			nd_handle_data_pkt_lock(sk, skb);
+		} else {
+			oversize = true;
+		}
+		/* handle the current pkt */
         bh_unlock_sock(sk);
 	} else {
 		discard = true;
@@ -1513,11 +1504,16 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 
 		sk_drops_add(sk, skb);
 		kfree_skb(skb);
+		goto drop;
 	}
 
     if (refcounted) {
         sock_put(sk);
     }
+
+	/* packets have to be stuck in the nd channel */
+	if(oversize)
+		return -1;
 
 
 
@@ -1525,7 +1521,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 drop:
     /* Discard frame. */
     kfree_skb(skb);
-    return 0;
+    return -2;
 
 // discard_and_relse:
 //     printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
@@ -1536,6 +1532,123 @@ drop:
 //     goto drop;
 	// kfree_skb(skb);
 }
+
+/**
+ * nd_handle_hol_data_pkt() - Handler for incoming DATA packets
+ * @skb:     Incoming packet; size known to be large enough for the header.
+ *           This function now owns the packet.
+ * 
+ * Return: Zero means the function completed successfully. Nonzero means
+ * that the RPC had to be unlocked and deleted because the socket has been
+ * shut down; the caller should not access the RPC anymore. Note: this method
+ * may change the RPC's state to RPC_READY.
+ */
+int nd_handle_hol_data_pkt(struct sk_buff *skb)
+{
+	struct nd_sock *dsk;
+	struct ndhdr *dh;
+	struct sock *sk;
+	struct sk_buff *wait_skb, *tmp;
+	// struct iphdr *iph;
+	int sdif = inet_sdif(skb);
+
+	bool refcounted = false;
+	bool discard = false;
+	bool oversize = false;
+	// printk("receive data pkt\n");
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr)))
+		goto drop;		/* No space for header. */
+	dh =  nd_hdr(skb);
+	// sk = skb_steal_sock(skb);
+	// if(!sk) {
+	// WARN_ON(skb_dst(skb) == NULL);
+	// WARN_ON(skb_dst(skb)->dev == NULL);
+	sk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(dh), dh->source,
+            dh->dest, sdif, &refcounted);
+    if(!sk) {
+    	goto drop;
+	}
+	WARN_ON(dh->type != DATA);
+	nd_v4_fill_cb(skb, dh);
+	printk("HOL pkt:%u core:%d", ND_SKB_CB(skb)->seq, raw_smp_processor_id());
+    // }
+	// printk("packet hash %u\n", skb->hash);
+	// printk("oacket is l4 hash:%d\n", skb->l4_hash);
+	// printk("receive packet core:%d\n", raw_smp_processor_id());
+	// printk("dport:%d\n", ntohs(inet_sk(sk)->inet_dport));
+	// printk("skb seq:%u\n", ND_SKB_CB(skb)->seq);
+	// printk("skb address:%p\n", skb);
+	if(sk && sk->sk_state == ND_ESTABLISH) {
+		dsk = nd_sk(sk);
+		// iph = ip_hdr(skb);
+ 		bh_lock_sock(sk);
+		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
+			wait_skb = skb_peek(&dsk->receiver.sk_hol_queue);
+			/* this might underestimate the current buffer size if socket is handling its backlog */
+			if(ND_SKB_CB(wait_skb)->end_seq - dsk->receiver.rcv_nxt > nd_window_size(dsk)) {
+				continue;
+			}
+			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
+			nd_handle_data_pkt_lock(sk, wait_skb);
+		}
+        // ret = 0;
+		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
+		/* this might underestimate the current buffer size if socket is handling its backlog */
+		if(ND_SKB_CB(skb)->end_seq - dsk->receiver.rcv_nxt <= nd_window_size(dsk)) {
+			nd_handle_data_pkt_lock(sk, skb);
+		} else {
+			oversize = true;
+			if( ntohl(dh->seq) == dsk->receiver.rcv_nxt) {
+				printk("seq:%u return true \n",  ntohl(dh->seq));
+				WARN_ON_ONCE(true);
+			}
+			/* add to hol skb to the socket wait queue */
+			__skb_queue_tail(&dsk->receiver.sk_hol_queue, skb);
+			/* add to wait queue flags */
+			test_and_set_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
+		}
+		/* handle the current pkt */
+        bh_unlock_sock(sk);
+	} else {
+		discard = true;
+	}
+	
+	if (discard) {
+	    // printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
+	    // printk("discard packet:%d\n", __LINE__);
+		// skb_dump(KERN_WARNING, skb, false);
+
+		sk_drops_add(sk, skb);
+		kfree_skb(skb);
+		goto drop;
+	}
+
+    if (refcounted) {
+        sock_put(sk);
+    }
+
+	/* packets have to be stuck in the nd channel */
+	if(oversize)
+		return -1;
+
+
+
+    return 0;
+drop:
+    /* Discard frame. */
+    kfree_skb(skb);
+    return -2;
+
+// discard_and_relse:
+//     printk("seq num:%u\n", ND_SKB_CB(skb)->seq);
+//     printk("discard packet due to memory:%d\n", __LINE__);
+//     sk_drops_add(sk, skb);
+//     if (refcounted)
+//             sock_put(sk);
+//     goto drop;
+	// kfree_skb(skb);
+}
+
 
 /* should hold the lock, before calling this function；
  * This function is only called for backlog handling from the release_sock()
@@ -1551,9 +1664,8 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	// printk("backlog rcv\n");
 
 	if(dh->type == DATA) {
-		// pr_info("handle backlog\n");
 		nd_handle_data_skb_new(sk, skb);
-		nd_send_grant(dsk, true);
+		// nd_send_grant(dsk, true);
 		if (!sock_flag(sk, SOCK_DEAD)) {
 			sk->sk_data_ready(sk);
 		}
@@ -1607,6 +1719,99 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 	return 0;
 }
 
+
+/**
+ * nd_release_cb - nd release_sock() callback
+ * @sk: socket
+ *
+ * called from release_sock() to perform protocol dependent
+ * actions before socket release.
+ */
+void nd_release_cb(struct sock *sk)
+{
+	unsigned long flags, nflags;
+	struct nd_sock* nsk = nd_sk(sk);
+	struct sk_buff *skb, *tmp;
+	/* perform an atomic operation only if at least one flag is set */
+	do {
+		flags = sk->sk_tsq_flags;
+		if (!(flags & ND_DEFERRED_ALL))
+			return;
+		nflags = flags & ~ND_DEFERRED_ALL;
+	} while (cmpxchg(&sk->sk_tsq_flags, flags, nflags) != flags);
+
+	// if (flags & TCPF_TSQ_DEFERRED) {
+	// 	tcp_tsq_write(sk);
+	// 	__sock_put(sk);
+	// }
+	/* Here begins the tricky part :
+	 * We are called from release_sock() with :
+	 * 1) BH disabled
+	 * 2) sk_lock.slock spinlock held
+	 * 3) socket owned by us (sk->sk_lock.owned == 1)
+	 *
+	 * But following code is meant to be called from BH handlers,
+	 * so we should keep BH disabled, but early release socket ownership
+	 */
+	sock_release_ownership(sk);
+
+	/* First check read memory */
+	// if (flags & NDF_RMEM_CHECK_DEFERRED) {
+	// 	nd_rem_check_handler(sk);
+	// }
+
+	// if (flags & NDF_CLEAN_TIMER_DEFERRED) {
+	// 	nd_clean_rtx_queue(sk);
+	// 	// __sock_put(sk);
+	// }
+	// if (flags & NDF_TOKEN_TIMER_DEFERRED) {
+	// 	WARN_ON(true);
+	// 	nd_token_timer_defer_handler(sk);
+	// 	// __sock_put(sk);
+	// }
+	// if (flags & NDF_RTX_DEFERRED) {
+	// 	WARN_ON(true);
+	// 	nd_write_timer_handler(sk);
+	// }
+	/* handle pkts in the wait queue */
+	if (unlikely(flags & NDF_WAIT_DEFERRED)) {
+		skb_queue_walk_safe(&nsk->receiver.sk_hol_queue, skb, tmp) {
+			skb = skb_peek(&nsk->receiver.sk_hol_queue);
+			/* this might underestimate the current buffer size if socket is handling its backlog */
+			WARN_ON_ONCE(true);
+			if(ND_SKB_CB(skb)->end_seq - nsk->receiver.rcv_nxt > nd_window_size(nsk)) {
+				printk("release cb hol pkt seq:%u mem:%u rcv nxt:%u \n",ND_SKB_CB(skb)->seq, atomic_read(&sk->sk_rmem_alloc),  nsk->receiver.rcv_nxt );
+				continue;
+			}
+			__skb_unlink(skb, &nsk->receiver.sk_hol_queue);
+			nd_handle_data_skb_new(sk, skb);
+			// nd_send_grant(dsk, true);
+		}
+		if(skb_peek(&nsk->receiver.sk_hol_queue)) {
+			test_and_set_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
+		}
+	}
+	/* wake up hol channels */
+	if(flags & NDF_CHANNEL_DEFERRED) {
+		struct ndt_channel_entry *entry, *temp;
+		struct ndt_conn_queue *queue;
+		list_for_each_entry_safe(entry, temp, &nsk->receiver.hol_channel_list, list_link) {
+			queue = entry->queue;
+			if(ndt_conn_is_latency(queue)) {
+				queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
+			} else {
+				queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
+			}
+			kfree(entry);
+		}
+		INIT_LIST_HEAD(&nsk->receiver.hol_channel_list);
+	}
+	// if (flags & TCPF_MTU_REDUCED_DEFERRED) {
+	// 	inet_csk(sk)->icsk_af_ops->mtu_reduced(sk);
+	// 	__sock_put(sk);
+	// }
+}
+EXPORT_SYMBOL(nd_release_cb);
 
 /*
  if skb.len < len(ndhdr),
@@ -1804,15 +2009,45 @@ int nd_split_and_merge(struct sk_buff_head* queue, struct sk_buff* skb, int need
 	return 0;
 }
 
-void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue) {
+/* reorganize skb; this part might not need to be used later*/
+static void reparse_skb(struct sk_buff* skb) {
+		uint32_t count, total_len, i;
+		struct sk_buff* head = skb_shinfo(skb)->frag_list; 
+		struct iphdr *iph;
+		struct ndhdr *dh;
+	
+		iph = ip_hdr(skb);
+		dh =  nd_hdr(skb);
+		/* handle the first packet which contains the header */
+		count = ND_SKB_CB(skb)->count;
+		total_len = ND_SKB_CB(skb)->total_len;
+
+		ND_SKB_CB(skb)->count = 0;
+		ND_SKB_CB(skb)->total_len = 0;
+		ND_SKB_CB(skb)->total_size = 0;
+		/* handle the rest of packets */
+		for(i = 0; i < count; i++) {
+			// WARN_ON(!head);
+			// head->next = NULL;
+			/* update the len, data_len, truesize */
+			skb->truesize += head->truesize;
+			skb->data_len += head->len;
+			skb->len += head->len;
+			head = head->next;
+		}
+}
+
+int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue) {
 	struct sock *sk = ndt_queue->sock->sk;
 	struct sk_buff *skb;
 	struct ndhdr* nh;
 	int need_bytes = 0;
 	int ret;
 	struct iphdr* iph;
-	// printk("pass_to_vs_layer core:%d\n", raw_smp_processor_id());
+	bool hol = false;
+
 	// WARN_ON(queue == NULL);
+	WARN_ON(ndt_queue->hol_skb);
 	while ((skb = __skb_dequeue(queue)) != NULL) {
 		// pr_info("%d skb->len:%d\n",__LINE__,  skb->len);
 		// pr_info("!skb_has_frag_list(skb): %d\n", (!skb_has_frag_list(skb)));
@@ -1834,7 +2069,6 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 			if(ret == -ENOMEM) {
 				goto push_back;
 				// pr_info("reach here: %d\n", __LINE__);
-				return;
 			}
 			/* pull again */
 			pskb_may_pull(skb, sizeof(struct ndhdr));
@@ -1866,13 +2100,15 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 				if(ret == -ENOMEM) {
 					// pr_info("go to push back\n");
 					goto push_back;
-					return;
+
 				}
 			}
 			if(need_bytes < 0) {
 				nd_split(queue, skb, ntohs(nh->len) + sizeof(struct ndhdr));
 				ND_SKB_CB(skb)->total_len += need_bytes;
 			}
+			/* reparse skb */
+			reparse_skb(skb);
 		}else {
 			/* this split should always be suceessful */
 			nd_split(queue, skb, sizeof(struct ndhdr));
@@ -1903,17 +2139,58 @@ void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* que
 		// }
 		// 	pr_info("reach here:%d\n", __LINE__);
 			// skb_dump(KERN_WARNING, skb, false);
-			local_bh_disable();
-			/* pass to the virutal socket layer */
-			nd_rcv(skb);
-			local_bh_enable();
+		
+		local_bh_disable();
+		/* pass to the virutal socket layer */
+		ret = nd_rcv(skb);
+		/* To Do: add hrtimer if fails to adding to the socket and break the loop; */
+		if(ret == -1) {
+			int sdif = inet_sdif(skb);
+			bool refcounted = false;
+			struct sock *vsk;
+			struct nd_sock *nsk;
+			struct ndt_channel_entry *entry;
+			WARN_ON(hrtimer_active(&ndt_queue->hol_timer));
+			WARN_ON(ndt_queue->hol_skb);
+			nh =  nd_hdr(skb);
+			vsk = __nd_lookup_skb(&nd_hashinfo, skb, __nd_hdrlen(nh), nh->source,
+					nh->dest, sdif, &refcounted);
+			if(unlikely(!vsk)) {
+				kfree_skb(skb);
+				goto skip_vsk;
+			}
+			nsk = nd_sk(vsk);
+			entry = kmalloc(sizeof(struct ndt_channel_entry), GFP_ATOMIC);
+			if(!entry) {
+				WARN_ON(true);
+			}
+			entry->queue = ndt_queue;
+			INIT_LIST_HEAD(&entry->list_link);
+			/* get socket lock */
+			bh_lock_sock(vsk);
+			list_add_tail(&entry->list_link, &nsk->receiver.hol_channel_list);
+	 		test_and_set_bit(ND_CHANNEL_DEFERRED, &vsk->sk_tsq_flags);
+			bh_unlock_sock(vsk);
+			/* set the state of hrtimer and hol_skb */
+			ndt_queue->hol_skb = skb;
+			hrtimer_start(&ndt_queue->hol_timer, ns_to_ktime(ndt_queue->hol_timeout_us *
+				NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+			hol = true;
+			if(refcounted)
+				sock_put(vsk);
+		}
+skip_vsk:
+		local_bh_enable();
+		if(hol)
+			return - 1;
 		//  } else {
 		// 	pr_info("finish here:%d\n", __LINE__);
 		//  	kfree_skb(skb);
 		//  }
 	}
-	return;
+	return 0;
 push_back:
 	// printk("push back skb\n");
 	skb_queue_head(queue, skb);
+	return 0;
 }

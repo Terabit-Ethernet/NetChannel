@@ -67,7 +67,9 @@ enum ndcsq_enum {
 	ND_RMEM_CHECK_DEFERRED,  /* Read Memory Check once release sock */
 	ND_RTX_DEFERRED,
 	ND_WAIT_DEFERRED,
+	ND_CHANNEL_DEFERRED,
 };
+
 
 enum ndcsq_flags {
 	// TSQF_THROTTLED			= (1UL << TSQ_THROTTLED),
@@ -78,7 +80,16 @@ enum ndcsq_flags {
 	NDF_RMEM_CHECK_DEFERRED	= (1UL << ND_RMEM_CHECK_DEFERRED),
 	NDF_RTX_DEFERRED	= (1UL << ND_RTX_DEFERRED),
 	NDF_WAIT_DEFERRED = (1UL << ND_WAIT_DEFERRED),
+	NDF_CHANNEL_DEFERRED = (1UL << ND_CHANNEL_DEFERRED),
 };
+
+#define ND_DEFERRED_ALL (NDF_TSQ_DEFERRED |		\
+			  NDF_CLEAN_TIMER_DEFERRED |	    \
+			  NDF_TOKEN_TIMER_DEFERRED |	    \
+			  NDF_RMEM_CHECK_DEFERRED |	        \
+			  NDF_RTX_DEFERRED |	            \
+			  NDF_WAIT_DEFERRED	|			\
+			  NDF_CHANNEL_DEFERRED)
 
 struct nd_params {
 	bool nd_debug;
@@ -279,7 +290,6 @@ struct nd_rts {
     struct nd_peer* peer;
     int remaining_sz;
  	struct list_head list_link;
-
 };
 struct nd_grant {
     bool prompt;
@@ -487,13 +497,14 @@ struct nd_sock {
     // ktime_t start_time;
 	// struct list_head match_link;
 
-	struct list_head wait_list;
-	struct work_struct tx_work;
-	int wait_cpu;
-	bool wait_on_nd_conns;
 	uint32_t default_win;
 
 	struct page_frag_cache	pf_cache;
+
+	/* flow control due to the stuck of channel */
+	struct list_head tx_wait_list;
+	struct work_struct tx_work;
+
 
     /* sender */
     struct nd_sender {
@@ -520,7 +531,10 @@ struct nd_sock {
 	    // uint32_t total_bytes_sent;
 	    // uint32_t bytes_from_user;
 	    // int remaining_pkts_at_sender;
-
+	
+		/* bookkeeping the waiting channel info and state */
+		int wait_cpu;
+		bool wait_on_nd_conns;
 		/* ND metric */
 	    // uint64_t first_byte_send_time;
 
@@ -580,6 +594,9 @@ struct nd_sock {
 		// atomic_t in_flight_bytes;
 
 		// struct work_struct token_xmit_struct;
+		/* this queue is for HOL blocking */
+		struct sk_buff_head	sk_hol_queue;
+		struct list_head  hol_channel_list;
 
     } receiver;
 
