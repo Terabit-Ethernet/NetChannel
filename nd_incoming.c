@@ -1475,7 +1475,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		/* To Do: check sk_hol_queue */
 		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) >  nd_window_size(dsk)) {
+			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) >=  nd_window_size(dsk)) {
 				continue;
 			}
 			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
@@ -1485,7 +1485,7 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
 		/* this might underestimate the current buffer size if socket is handling its backlog */
 		/* this part might needed to be changed later, because rcv_nxt */
-		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) <= nd_window_size(dsk)) {
+		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) < nd_window_size(dsk)) {
 			nd_handle_data_pkt_lock(sk, skb);
 		} else {
 			oversize = true;
@@ -1581,7 +1581,7 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
  		bh_lock_sock(sk);
 		skb_queue_walk_safe(&dsk->receiver.sk_hol_queue, wait_skb, tmp) {
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) > nd_window_size(dsk)) {
+			if(ND_SKB_CB(wait_skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) >= nd_window_size(dsk)) {
 				continue;
 			}
 			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
@@ -1590,7 +1590,7 @@ int nd_handle_hol_data_pkt(struct sk_buff *skb)
         // ret = 0;
 		// printk("atomic backlog len:%d\n", atomic_read(&dsk->receiver.backlog_len));
 		/* this might underestimate the current buffer size if socket is handling its backlog */
-		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) <= nd_window_size(dsk)) {
+		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) < nd_window_size(dsk)) {
 			nd_handle_data_pkt_lock(sk, skb);
 		} else {
 			oversize = true;
@@ -1774,7 +1774,7 @@ void nd_release_cb(struct sock *sk)
 	if (unlikely(flags & NDF_WAIT_DEFERRED)) {
 		skb_queue_walk_safe(&nsk->receiver.sk_hol_queue, skb, tmp) {
 			/* this might underestimate the current buffer size if socket is handling its backlog */
-			if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&nsk->receiver.rcv_nxt) > nd_window_size(nsk)) {
+			if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&nsk->receiver.rcv_nxt) >= nd_window_size(nsk)) {
 				// printk("release cb hol pkt seq:%u mem:%u rcv nxt:%u \n",ND_SKB_CB(skb)->seq, atomic_read(&sk->sk_rmem_alloc),  nsk->receiver.rcv_nxt );
 				continue;
 			}
