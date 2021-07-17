@@ -57,7 +57,7 @@
 #include <net/tcp.h>
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h> // cpumask_{first,next}(), cpu_online_mask
-
+#include <linux/delay.h>
 // #include "linux_nd.h"
 // #include "net_nd.h"
 // #include "net_ndlite.h"
@@ -1823,8 +1823,6 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 	long timeo;
 	struct sk_buff *skb, *last, *tmp;
 	struct nd_dcopy_request *request;
-
-	
 	/* hardcode for now */ 
 	struct iov_iter biter;
 	struct bio_vec *bv_arr = NULL;
@@ -2086,13 +2084,11 @@ local_copy:
 	 */
 	 	/* waiting data copy to be finishede */
 	// while(atomic_read(&nsk->receiver.in_flight_copy_bytes) != 0) {
-
 	sk_wait_data_copy(sk, &timeo);
 	if(bv_arr) {
 		nd_release_pages(bv_arr, true, nr_segs);
 		kfree(bv_arr);
 	}
-
 	// nd_try_send_ack(sk, copied);
 	release_sock(sk);
 	return copied;
@@ -2507,8 +2503,10 @@ int nd_rcv(struct sk_buff *skb)
 	// printk("skb->len:%d\n", skb->len);
 	WARN_ON(skb == NULL);
 
-	if (!pskb_may_pull(skb, sizeof(struct ndhdr)))
+	if (!pskb_may_pull(skb, sizeof(struct ndhdr))) {
+		printk("header space not enough\n");
 		goto drop;		/* No space for header. */
+	}
 
 	dh = nd_hdr(skb);
 	// printk("dh == NULL?: %d\n", dh == NULL);
@@ -2542,7 +2540,7 @@ int nd_rcv(struct sk_buff *skb)
 
 
 drop:
-
+	printk("drop randomly:%d\n", raw_smp_processor_id());
 	kfree_skb(skb);
 	return -2;
 	// return __nd4_lib_rcv(skb, &nd_table, IPPROTO_VIRTUAL_SOCK);
@@ -2556,7 +2554,8 @@ void nd_destroy_sock(struct sock *sk)
 	struct nd_sock *up = nd_sk(sk);
 	struct ndt_channel_entry *entry, *temp;
 	struct ndt_conn_queue *queue;
-	struct sk_buff *skb;
+	struct sk_buff *skb, *tmp;
+
 	// struct inet_sock *inet = inet_sk(sk);
 	// struct rcv_core_entry *entry = &rcv_core_tab.table[raw_smp_processor_id()];
 	// local_bh_disable();
@@ -2564,6 +2563,8 @@ void nd_destroy_sock(struct sock *sk)
 	// hrtimer_cancel(&up->receiver.flow_wait_timer);
 	// test_and_clear_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
 	lock_sock(sk);
+	local_bh_disable();
+	bh_lock_sock(sk);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_ESTABLISH) {
 		nd_conn_queue_request(construct_fin_req(sk), up, false, true);
@@ -2588,12 +2589,14 @@ void nd_destroy_sock(struct sock *sk)
 	nd_read_queue_purge(sk);
 	// pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	/* hol state are protected by the spin lock */
-	local_bh_disable();
-	bh_lock_sock(sk);
-	while((skb_peek(&up->receiver.sk_hol_queue))) {
-		skb = skb_peek(&up->receiver.sk_hol_queue);
-		kfree(skb);
+	skb_queue_walk_safe(&up->receiver.sk_hol_queue, skb, tmp) {
+		__skb_unlink(skb, &up->receiver.sk_hol_queue);
+		atomic_sub(skb->truesize, &tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_alloc);
+		atomic_sub(skb->len, &tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_len);
+		ND_SKB_CB(skb)->queue = NULL;
+		kfree_skb(skb);
 	}
+	
 	list_for_each_entry_safe(entry, temp, &up->receiver.hol_channel_list, list_link) {
 		queue = entry->queue;
 		if(ndt_conn_is_latency(queue)) {
@@ -2605,7 +2608,6 @@ void nd_destroy_sock(struct sock *sk)
 	}
 	bh_unlock_sock(sk);
 	local_bh_enable();
-	
 	release_sock(sk);
 	/* remove from sleep wait queue */
 	nd_conn_remove_sleep_sock(nd_ctrl, up);

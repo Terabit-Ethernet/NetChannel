@@ -27,7 +27,7 @@
 #include <linux/ipv6.h>
 #include <linux/seq_file.h>
 #include <linux/poll.h>
-
+#include "nd_target.h"
 #include "linux_nd.h"
 
 #define ND_NUM_SACKS 16
@@ -46,12 +46,13 @@ enum nd_queue {
 struct nd_skb_cb {
 	__u32 seq; /* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + datalen	*/
-	__u32       total_len; /* this for aggregating packts */
+	// __u32       total_len; /* this for aggregating packts */
 	__u32       count; /* the number of skbs in fraglist */
-	__u32 		total_size;
+	// __u32 		total_size;
 	__u32 orig_offset;
 
 	struct sk_buff* tail; /* tail of skb's fraglist */
+	struct ndt_conn_queue *queue;
 	__u8 		has_old_frag_list;
 // 	union {
 // 		struct inet_skb_parm	h4;

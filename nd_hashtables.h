@@ -380,17 +380,21 @@ static inline struct sock *__nd_lookup_skb(struct inet_hashinfo *hashinfo,
 					     const int sdif,
 					     bool *refcounted)
 {
-	struct sock *sk = skb_steal_sock(skb);
+	// struct sock *sk = skb_steal_sock(skb);
 	const struct iphdr *iph = ip_hdr(skb);
 
 	*refcounted = true;
-	if (sk)
-		return sk;
-
+	// if (sk)
+	// 	return sk;
+	/* use 0 for inet_iif(skb) part */
 	return __nd_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
 			     doff, iph->saddr, sport,
-			     iph->daddr, dport, inet_iif(skb), sdif,
+			     iph->daddr, dport, 0, sdif,
 			     refcounted);
+	// return __nd_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
+	// 		     doff, iph->saddr, sport,
+	// 		     iph->daddr, dport, inet_iif(skb), sdif,
+	// 		     refcounted);
 }
 
 // u32 inet6_ehashfn(const struct net *net,
