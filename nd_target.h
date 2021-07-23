@@ -88,6 +88,8 @@ struct ndt_conn_queue {
 	int hol_timeout_us;
 	struct sk_buff *hol_skb;
 	spinlock_t		hol_lock;
+	struct work_struct	delay_ack_work;
+
     // struct list_head        hol_list;
 	// struct nvmet_tcp_cmd	connect;
 

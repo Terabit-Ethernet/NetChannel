@@ -34,7 +34,7 @@ int ndt_tcp_read_sock(struct ndt_conn_queue* queue, read_descriptor_t *desc,
 	u32 seq = tp->copied_seq;
 	u32 offset;
 	int copied = 0;
-	int hol_len = tp->rcvq_space.hol_len, hol_len_diff;
+	// int hol_len = tp->rcvq_space.hol_len, hol_len_diff;
 	if (sk->sk_state == TCP_LISTEN)
 		return -ENOTCONN;
 	while ((skb = tcp_recv_skb(sk, seq, &offset)) != NULL) {
@@ -90,15 +90,28 @@ int ndt_tcp_read_sock(struct ndt_conn_queue* queue, read_descriptor_t *desc,
 	/* parsing packet; not sure if it should includes in while loop when accounting budget */
 	pass_to_vs_layer(queue, &queue->receive_queue);
 	/* get hol alloc diff */
-	hol_len_diff = atomic_read(&tp->hol_len) - hol_len;
+	// hol_len_diff = atomic_read(&tp->hol_len) - hol_len;
 
 	tcp_rcv_space_adjust(sk);
-	tp->rcvq_space.hol_len += hol_len_diff;
-	copied -= hol_len_diff;
+	// tp->rcvq_space.hol_len += hol_len_diff;
+	// copied -= hol_len_diff;
 	/* Clean up data we have read: This will do ACK frames. */
 	if (copied > 0) {
 		tcp_recv_skb(sk, seq, &offset);
-		tcp_cleanup_rbuf(sk, copied);
+		// if(raw_smp_processor_id() == 8)
+		// 	printk("may send ack");
+		if(atomic_read(&tp->hol_alloc) == 0) {
+			tcp_cleanup_rbuf(sk, copied);
+			if(hrtimer_active(&queue->hol_timer)) {
+				hrtimer_cancel(&queue->hol_timer);
+			}
+		} else {
+			/* setup a hrtimer */
+			if(!hrtimer_active(&queue->hol_timer)) {
+				hrtimer_start(&queue->hol_timer, ns_to_ktime(queue->hol_timeout_us *
+					NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+			}
+		}
 	}
 	return 0;
 }
@@ -460,7 +473,6 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 			ND_SKB_CB(skb)->has_old_frag_list = 0;
 		}
 	desc->count -= 1;
-
 	return orig_len;
 }
 
@@ -666,11 +678,33 @@ void ndt_conn_io_work(struct work_struct *w)
 	}
 }
 
+void ndt_delay_ack_work(struct work_struct *w) {
+	struct ndt_conn_queue *queue =
+		container_of(w, struct ndt_conn_queue, delay_ack_work);
+	struct socket *sock = queue->sock;
+	WARN_ON(!sock);
+	if (unlikely(!sock))
+		return;
+	/* try to send delay*/
+	lock_sock(sock->sk);
+
+	// if(raw_smp_processor_id() == 8)
+	// 	pr_info("send delay ack; hol alloc:%d\n", atomic_read(&tcp_sk(sock->sk)->hol_alloc));
+	__tcp_send_ack(sock->sk, tcp_sk(sock->sk)->rcv_nxt);
+	release_sock(sock->sk);
+	if(atomic_read(&tcp_sk(sock->sk)->hol_alloc) != 0) {
+		// if(!hrtimer_active(&queue->hol_timer))
+			hrtimer_start(&queue->hol_timer, ns_to_ktime(queue->hol_timeout_us *
+					NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+		return;
+	}
+}
+
 enum hrtimer_restart ndt_hol_timer_handler(struct hrtimer *timer)
 {
-// 	struct ndt_conn_queue *queue =
-// 		container_of(timer, struct ndt_conn_queue,
-// 			hol_timer);
+	struct ndt_conn_queue *queue =
+		container_of(timer, struct ndt_conn_queue,
+			hol_timer);
 // 	struct ndt_channel_entry* entry;
 // 	int ret = 0;
 // 	spin_lock_bh(&queue->hol_lock);
@@ -681,12 +715,13 @@ enum hrtimer_restart ndt_hol_timer_handler(struct hrtimer *timer)
 // 	spin_unlock_bh(&queue->hol_lock);
 // 	// printk("timer handler: set hol skb to be null:%d\n", raw_smp_processor_id());
 // resume_channel:
-// 	/* restart the nd channel processing */
-// 	if(ndt_conn_is_latency(queue)) {
-// 		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
-// 	} else {
-// 		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->io_work);
-// 	}
+
+ 	/* send the delay ack */
+	if(ndt_conn_is_latency(queue)) {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->delay_ack_work);
+	} else {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->delay_ack_work);
+	}
 	return HRTIMER_NORESTART;
 }
 
@@ -712,7 +747,8 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	hrtimer_init(&queue->hol_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
 	queue->hol_timer.function = &ndt_hol_timer_handler;
 	queue->hol_skb = NULL;
-	queue->hol_timeout_us = 1000;
+	queue->hol_timeout_us = 100;
+	INIT_WORK(&queue->delay_ack_work, ndt_delay_ack_work);
 	// INIT_LIST_HEAD(&queue->hol_list);
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);

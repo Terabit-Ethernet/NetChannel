@@ -1418,7 +1418,7 @@ static void nd_handle_data_pkt_lock(struct sock *sk, struct sk_buff *skb) {
 		}
 		// nd_check_flow_finished_at_receiver(dsk);;
 	} else {
-		// printk("add to backlog\n");
+		// printk("add to backlog: %d\n", raw_smp_processor_id());
 		/* omit check for now */
 		nd_add_backlog(sk, skb, true);
 			// goto discard_and_relse;
@@ -1491,7 +1491,17 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 			__skb_unlink(wait_skb, &dsk->receiver.sk_hol_queue);
 			atomic_sub(wait_skb->truesize, &tcp_sk(ND_SKB_CB(wait_skb)->queue->sock->sk)->hol_alloc);
 			atomic_sub(wait_skb->len, &tcp_sk(ND_SKB_CB(wait_skb)->queue->sock->sk)->hol_len);
-			// printk("reduce hol alloc:%d\n", atomic_read(&tcp_sk(wait_skb->sk)->hol_alloc));			
+			// printk("reduce hol alloc:%d\n", atomic_read(&tcp_sk(wait_skb->sk)->hol_alloc));
+			if(atomic_read(&tcp_sk(ND_SKB_CB(wait_skb)->queue->sock->sk)->hol_alloc) == 0) {
+				if(ndt_conn_is_latency(ND_SKB_CB(skb)->queue)) {
+					queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq_lat, &ND_SKB_CB(skb)->queue->delay_ack_work);
+				} else {
+					queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq, &ND_SKB_CB(skb)->queue->delay_ack_work);
+				}
+				if(hrtimer_active(&ND_SKB_CB(skb)->queue->hol_timer)) {
+					hrtimer_cancel(&ND_SKB_CB(skb)->queue->hol_timer);
+				}
+			}		
 			ND_SKB_CB(wait_skb)->queue = NULL;
 			nd_handle_data_pkt_lock(sk, wait_skb);
 
@@ -1502,6 +1512,8 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 		/* this part might needed to be changed later, because rcv_nxt */
 		if(ND_SKB_CB(skb)->end_seq - (u32)atomic_read(&dsk->receiver.rcv_nxt) < nd_window_size(dsk)) {
 			nd_handle_data_pkt_lock(sk, skb);
+			// printk("handle data pkt lock seq:%u rcv next:%u core:%d\n",
+			// 	ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt),  raw_smp_processor_id());	
 			// printk("rcv_nxt:%u\n", (u32)atomic_read(&dsk->receiver.rcv_nxt));
 		} else {
 			// oversize = true;
@@ -1516,7 +1528,9 @@ int nd_handle_data_pkt(struct sk_buff *skb)
 			__skb_queue_tail(&dsk->receiver.sk_hol_queue, skb);
 			/* add to wait queue flags */
 			test_and_set_bit(ND_WAIT_DEFERRED, &sk->sk_tsq_flags);
-			// printk("add hol alloc:%d core:%d\n", atomic_read(&tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_alloc), raw_smp_processor_id());	
+			// printk("add hol alloc:%d  seq:%u rcv next:%u copied seq:%u core:%d\n", atomic_read(&tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_alloc),
+			// 	ND_SKB_CB(skb)->seq, (u32)atomic_read(&dsk->receiver.rcv_nxt),  (u32)atomic_read(&dsk->receiver.copied_seq),  raw_smp_processor_id());
+			// printk("rmem alloc:%d backlog len:%d \n", atomic_read(&sk->sk_rmem_alloc), sk->sk_backlog.len );	
 			// printk("rcv_nxt:%u\n", (u32)atomic_read(&dsk->receiver.rcv_nxt));
 		
 
@@ -1815,10 +1829,15 @@ void nd_release_cb(struct sock *sk)
 			/* reduce the truesize of hol_alloc of tcp socket */
 			atomic_sub(skb->truesize, &tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_alloc);
 			atomic_sub(skb->len, &tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_len);
-			if(ndt_conn_is_latency(ND_SKB_CB(skb)->queue)) {
-				queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq_lat, &ND_SKB_CB(skb)->queue->io_work);
-			} else {
-				queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq, &ND_SKB_CB(skb)->queue->io_work);
+			if(atomic_read(&tcp_sk(ND_SKB_CB(skb)->queue->sock->sk)->hol_alloc) == 0) {
+				if(ndt_conn_is_latency(ND_SKB_CB(skb)->queue)) {
+					queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq_lat, &ND_SKB_CB(skb)->queue->delay_ack_work);
+				} else {
+					queue_work_on(queue_cpu(ND_SKB_CB(skb)->queue), ndt_conn_wq, &ND_SKB_CB(skb)->queue->delay_ack_work);
+				}
+				if(hrtimer_active(&ND_SKB_CB(skb)->queue->hol_timer)) {
+					hrtimer_cancel(&ND_SKB_CB(skb)->queue->hol_timer);
+				}
 			}
 			ND_SKB_CB(skb)->queue = NULL;
 			nd_handle_data_skb_new(sk, skb);
