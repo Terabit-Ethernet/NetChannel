@@ -1343,7 +1343,7 @@ int nd_conn_init_module(void)
     opts->host_traddr = nd_params.local_ip;
     // opts->host_port = "10000";
 
-    opts->queue_size = 1024;
+    opts->queue_size = 32;
 	opts->compact_high_thre = 256;
 	opts->compact_low_thre = 2;
     opts->tos = 0;
