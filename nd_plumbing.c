@@ -221,7 +221,9 @@ static void nd_v4_reqsk_destructor(struct request_sock *req)
 
         // printk("call reqsk destructor\n");
         // printk("ireq option is NULL:%d\n", inet_rsk(req)->ireq_opt == NULL);
-        kfree(rcu_dereference_protected(inet_rsk(req)->ireq_opt, 1));
+        // WARN_ON_ONCE(inet_rsk(req)->ireq_opt == NULL);
+	if(inet_rsk(req)->ireq_opt != NULL)
+		kfree(rcu_dereference_protected(inet_rsk(req)->ireq_opt, 1));
 }
 
 struct request_sock_ops nd_request_sock_ops __read_mostly = {
@@ -255,16 +257,16 @@ void nd_params_init(struct nd_params* params) {
     params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
-    params->local_ip = "192.168.10.116";
-    params->remote_ip = "192.168.10.117";
-    params->data_cpy_core = 12;
+    params->local_ip = "192.168.10.117";
+    params->remote_ip = "192.168.10.116";
+    params->data_cpy_core = 0;
     params->total_channels = 16;
     /* start index of latency channel index */
     params->lat_channel_idx = 8;
     params->num_lat_channels = 1;
     /* start index of thpt channel index */
-    params->thpt_channel_idx = 1;
-    params->num_thpt_channels = 2;
+    params->thpt_channel_idx = 2;
+    params->num_thpt_channels = 1;
     params->alpha = 2;
     params->beta = 5;
     params->min_iter = 1;
