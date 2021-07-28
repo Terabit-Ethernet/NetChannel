@@ -689,7 +689,7 @@ void ndt_delay_ack_work(struct work_struct *w) {
 	lock_sock(sock->sk);
 
 	// if(raw_smp_processor_id() == 8)
-	// 	pr_info("send delay ack; hol alloc:%d\n", atomic_read(&tcp_sk(sock->sk)->hol_alloc));
+//	pr_info("send delay ack; hol alloc:%d\n", atomic_read(&tcp_sk(sock->sk)->hol_alloc));
 	__tcp_send_ack(sock->sk, tcp_sk(sock->sk)->rcv_nxt);
 	release_sock(sock->sk);
 	if(atomic_read(&tcp_sk(sock->sk)->hol_alloc) != 0) {
@@ -747,7 +747,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	hrtimer_init(&queue->hol_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
 	queue->hol_timer.function = &ndt_hol_timer_handler;
 	queue->hol_skb = NULL;
-	queue->hol_timeout_us = 100;
+	queue->hol_timeout_us = 1000;
 	INIT_WORK(&queue->delay_ack_work, ndt_delay_ack_work);
 	// INIT_LIST_HEAD(&queue->hol_list);
 	// queue->nr_cmds = 0;
