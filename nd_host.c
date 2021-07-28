@@ -917,7 +917,7 @@ void nd_conn_io_work(struct work_struct *w)
 
 
 void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
-	uint32_t i;
+	uint32_t i, index;
 	spin_lock_bh(&ctrl->sock_wait_lock);
 	// printk("add sleep sock\n");
 	if(nsk->sender.wait_on_nd_conns)
@@ -927,11 +927,12 @@ void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
 	list_add_tail(&nsk->tx_wait_list, &ctrl->sock_wait_list);
 queue_work:
 	spin_unlock_bh(&ctrl->sock_wait_lock);
-	for(i = 0; i < ctrl->queue_count; i++) {
-		if(nd_conn_queue_is_lat(&ctrl->queues[i])) {
-			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq_lat, &ctrl->queues[i].io_work);
+	for(i = 0; i < nd_params.num_thpt_channels; i++) {
+		index = i + nd_params.thpt_channel_idx;
+		if(nd_conn_queue_is_lat(&ctrl->queues[index])) {
+			queue_work_on(ctrl->queues[index].io_cpu, nd_conn_wq_lat, &ctrl->queues[index].io_work);
 		}else {
-			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+			queue_work_on(ctrl->queues[index].io_cpu, nd_conn_wq, &ctrl->queues[index].io_work);
 		}
 		// queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
 	}
