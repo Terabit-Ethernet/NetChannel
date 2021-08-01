@@ -24,6 +24,17 @@ inline int queue_cpu(struct ndt_conn_queue *queue)
 	// return queue->sock->sk->sk_incoming_cpu;
 }
 
+static inline void ndt_sk_eat_skb(struct sock *sk, struct sk_buff *skb)
+{
+	__skb_unlink(skb, &sk->sk_receive_queue);
+	if(skb->destructor) 
+		skb->destructor(skb);
+	/* get from skb_clone */
+	skb->next = skb->prev = NULL;
+	skb->sk = NULL;
+	skb->destructor = NULL;
+}
+
 /* copied from tcp_read_sock; the only change is adding pass_to_vs_layer before sending tcp ack. */
 int ndt_tcp_read_sock(struct ndt_conn_queue* queue, read_descriptor_t *desc,
 		  sk_read_actor_t recv_actor)
@@ -62,26 +73,13 @@ int ndt_tcp_read_sock(struct ndt_conn_queue* queue, read_descriptor_t *desc,
 				copied += used;
 				offset += used;
 			}
-			/* If recv_actor drops the lock (e.g. TCP splice
-			 * receive) the skb pointer might be invalid when
-			 * getting here: tcp_collapse might have deleted it
-			 * while aggregating skbs from the socket queue.
-			 */
-			skb = tcp_recv_skb(sk, seq - 1, &offset);
-			if (!skb)
-				break;
-			/* TCP coalescing might have appended data to the skb.
-			 * Try to splice more frags
-			 */
-			if (offset + 1 != skb->len)
-				continue;
 		}
-		if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN) {
-			sk_eat_skb(sk, skb);
-			++seq;
-			break;
-		}
-		sk_eat_skb(sk, skb);
+		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN) {
+		// 	ndt_sk_eat_skb(sk, skb);
+		// 	++seq;
+		// 	break;
+		// }
+		// ndt_sk_eat_skb(sk, skb);
 		if (!desc->count)
 			break;
 		WRITE_ONCE(tp->copied_seq, seq);
@@ -464,14 +462,16 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb;
 
-	skb = skb_clone(orig_skb, GFP_KERNEL);
+	// skb = skb_clone(orig_skb, GFP_KERNEL);
+	ndt_sk_eat_skb(queue->sock->sk, orig_skb);
+	skb = orig_skb;
 	__skb_queue_tail(&queue->receive_queue, skb);
 	ND_SKB_CB(skb)->orig_offset = orig_offset;
-		if(skb_has_frag_list(skb)) {
-			ND_SKB_CB(skb)->has_old_frag_list = 1;
-		} else {
-			ND_SKB_CB(skb)->has_old_frag_list = 0;
-		}
+	if(skb_has_frag_list(skb)) {
+		ND_SKB_CB(skb)->has_old_frag_list = 1;
+	} else {
+		ND_SKB_CB(skb)->has_old_frag_list = 0;
+	}
 	desc->count -= 1;
 	return orig_len;
 }
