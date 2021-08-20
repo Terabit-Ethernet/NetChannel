@@ -328,6 +328,28 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 int nd_conn_sche_low_lat(void) {
 	return  raw_smp_processor_id() / 4 + nd_params.lat_channel_idx;
 }
+
+/* round-robin; will not select the previous one except if there is only one channel. */
+int nd_conn_sche_src_port(int src_port, bool avoid_check, int pri_class) {
+        struct nd_conn_queue *queue;
+        int qid;
+        if(pri_class)
+                qid = src_port % nd_params.num_lat_channels + nd_params.lat_channel_idx;
+        else
+                qid = src_port % nd_params.num_thpt_channels + nd_params.thpt_channel_idx;
+        queue = &nd_ctrl->queues[qid];
+        if(atomic_read(&queue->cur_queue_size)
+                >= queue->queue_size && !avoid_check) {
+                /* update the count */
+                // cur_count = 0;
+                return -1;
+        } else {
+                return qid;
+                // cur_count++;
+        }
+        return -1;
+}
+
 /* stick on one queue if the queue size is below than threshold; */
 // int nd_conn_sche_compact(bool avoid_check) {
 // 	struct nd_conn_queue *queue;
@@ -376,6 +398,7 @@ int nd_conn_sche_low_lat(void) {
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		bool sync, bool avoid_check)
 {
+        struct inet_sock *inet = inet_sk((struct sock*)nsk);
 	struct nd_conn_queue *queue = req->queue;
 	// static u32 queue_id = 0;
 	bool empty;
@@ -385,10 +408,11 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 	if(queue == NULL) {
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		if(req->prio_class)
-			qid = nd_conn_sche_low_lat();
-		else
-			qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
+		// if(req->prio_class)
+		// 	qid = nd_conn_sche_low_lat();
+		// else
+	//		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
+                        qid = nd_conn_sche_src_port(ntohs(inet->inet_sport), avoid_check, req->prio_class);
 
 		if(qid < 0)
 			return false;
