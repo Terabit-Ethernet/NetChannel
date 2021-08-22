@@ -1372,6 +1372,7 @@ int nd_init_sock(struct sock *sk)
 	INIT_LIST_HEAD(&dsk->tx_wait_list);
 	WRITE_ONCE(dsk->sender.wait_cpu, 0);
 	WRITE_ONCE(dsk->sender.wait_on_nd_conns, false);
+	WRITE_ONCE(dsk->sender.wait_queue, NULL);
 	WRITE_ONCE(dsk->sender.write_seq, 0);
 	WRITE_ONCE(dsk->sender.snd_nxt, 0);
 	WRITE_ONCE(dsk->sender.snd_una, 0);
@@ -1396,7 +1397,7 @@ int nd_init_sock(struct sock *sk)
 	atomic_set(&dsk->receiver.in_flight_copy_bytes, 0);
 	dsk->receiver.free_skb_num = 0;
 	init_llist_head(&dsk->receiver.clean_page_list);
-
+	WRITE_ONCE(dsk->sche_policy, nd_params.nd_default_sche_policy);
 
 	kfree_skb(sk->sk_tx_skb_cache);
 	sk->sk_tx_skb_cache = NULL;
@@ -2610,7 +2611,7 @@ void nd_destroy_sock(struct sock *sk)
 	local_bh_enable();
 	release_sock(sk);
 	/* remove from sleep wait queue */
-	nd_conn_remove_sleep_sock(nd_ctrl, up);
+	nd_conn_remove_sleep_sock(up->sender.wait_queue, up);
 	cancel_work_sync(&up->tx_work);
 	/*  */
 	// bh_unlock_sock(sk);

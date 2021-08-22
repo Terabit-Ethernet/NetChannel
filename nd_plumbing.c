@@ -210,6 +210,13 @@ static struct ctl_table nd_ctl_table[] = {
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
+                {
+                .procname       = "nd_default_sche_policy",
+                .data           = &nd_params.nd_default_sche_policy,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
         {}
 };
 
@@ -257,16 +264,16 @@ void nd_params_init(struct nd_params* params) {
     params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
-    params->local_ip = "192.168.10.117";
-    params->remote_ip = "192.168.10.116";
+    params->local_ip = "192.168.10.116";
+    params->remote_ip = "192.168.10.117";
     params->data_cpy_core = 0;
     params->total_channels = 16;
     /* start index of latency channel index */
     params->lat_channel_idx = 8;
-    params->num_lat_channels = 1;
+    params->num_lat_channels = 4;
     /* start index of thpt channel index */
-    params->thpt_channel_idx = 2;
-    params->num_thpt_channels = 1;
+    params->thpt_channel_idx = 4;
+    params->num_thpt_channels = 4;
     params->alpha = 2;
     params->beta = 5;
     params->min_iter = 1;
@@ -274,10 +281,11 @@ void nd_params_init(struct nd_params* params) {
     params->iter_size = params->beta * params->control_pkt_rtt * 1000;
     params->epoch_size = params->num_iters * params->iter_size * params->alpha;
     params->rmem_default = 6289600;
-    params->wmem_default = 6289600;
+    params->wmem_default = 589600;
     params->short_flow_size = params->bdp;
     params->control_pkt_bdp = params->control_pkt_rtt * params->bandwidth * 1000 / 8;
     params->data_budget = 1000000;
+    params->nd_default_sche_policy = SCHE_SRC_PORT;
     printk("params->control_pkt_bdp:%d\n", params->control_pkt_bdp);
 }
 /**
