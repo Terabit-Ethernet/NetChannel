@@ -18,6 +18,7 @@
 #include <net/netns/hash.h>
 #include "uapi_linux_nd.h"
 // #include "nd_host.h"
+// #include "nd_host.h"
 #define ND_MESSAGE_BUCKETS 1024
 /**
  * define ND_PEERTAB_BUCKETS - Number of bits in the bucket index for a
@@ -38,6 +39,10 @@ enum {
 	ND_ACTIVE,
 };
 
+enum {
+	SCHE_RR,
+	SCHE_SRC_PORT,
+};
 enum {
 	/* The initial state is TCP_CLOSE */
 	/* Sender and receiver state are easier to debug.*/
@@ -133,6 +138,7 @@ struct nd_params {
 	int num_lat_channels;
 	int thpt_channel_idx;
 	int num_thpt_channels;
+	int nd_default_sche_policy;
 
 };
 
@@ -505,6 +511,7 @@ struct nd_sock {
 	struct list_head tx_wait_list;
 	struct work_struct tx_work;
 
+	int sche_policy;
 
     /* sender */
     struct nd_sender {
@@ -535,6 +542,7 @@ struct nd_sock {
 		/* bookkeeping the waiting channel info and state */
 		int wait_cpu;
 		bool wait_on_nd_conns;
+		void* wait_queue;
 		/* ND metric */
 	    // uint64_t first_byte_send_time;
 

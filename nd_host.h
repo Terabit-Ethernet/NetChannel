@@ -101,10 +101,10 @@ struct nd_conn_ctrl {
 
 	/* other member variables */
 	struct list_head	list;
-	/* socket wait list */
-	spinlock_t sock_wait_lock;
-	struct list_head sock_wait_list;
-	struct workqueue_struct *sock_wait_wq;
+	// /* socket wait list */
+	// spinlock_t sock_wait_lock;
+	// struct list_head sock_wait_list;
+	// struct workqueue_struct *sock_wait_wq;
 
 	// struct blk_mq_tag_set	admin_tag_set;
 	struct sockaddr_storage addr;
@@ -160,7 +160,11 @@ struct nd_conn_queue {
 	// __le32			recv_ddgst;
 
 	// struct page_frag_cache	pf_cache;
-
+	/* socket wait list */
+	spinlock_t sock_wait_lock;
+	struct list_head sock_wait_list;
+	struct workqueue_struct *sock_wait_wq;
+	
 	void (*state_change)(struct sock *);
 	void (*data_ready)(struct sock *);
 	void (*write_space)(struct sock *);
@@ -172,8 +176,8 @@ struct nd_conn_pdu {
 };
 
 void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk);
-void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk);
-void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl);
+void nd_conn_remove_sleep_sock(struct nd_conn_queue *queue, struct nd_sock* nsk);
+void nd_conn_wake_up_all_socks(struct nd_conn_queue *queue);
 
 // int nd_conn_init_request(struct nd_conn_request *req, int queue_id);
 int nd_conn_try_send_cmd_pdu(struct nd_conn_request *req); 
