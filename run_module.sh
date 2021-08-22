@@ -3,8 +3,8 @@
 #sudo sysctl -w net.ipv4.tcp_mem='20000000 20000000 20000000' 
 #sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 20000000'
 #sudo sysctl -w net.ipv4.tcp_wmem='4096 65536 20000000'
-sudo ethtool -G ens2f0 rx 256
-sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 6000000'
+sudo ethtool -G ens2f0 rx 1024
+#sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 6000000'
 echo 0 | sudo tee /proc/sys/kernel/sched_autogroup_enabled
 sudo ethtool -L ens2f0 combined 32
 sudo sysctl -w net.core.default_qdisc=pfifo_fast
@@ -14,7 +14,7 @@ sudo ./enable_arfs.sh ens2f0
 
 sudo sysctl /net/nd/nd_add_host=1
 sudo sysctl /net/nd/nd_num_queue=2
-sudo sysctl /net/nd/nd_num_dc_thread=2
+sudo sysctl /net/nd/nd_num_dc_thread=1
 
 # disable abishek virtual env
 #sudo virsh net-autostart --disable default

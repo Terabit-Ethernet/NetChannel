@@ -210,9 +210,23 @@ static struct ctl_table nd_ctl_table[] = {
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
         },
-                {
+        {
                 .procname       = "nd_default_sche_policy",
                 .data           = &nd_params.nd_default_sche_policy,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+        {
+                .procname       = "num_thpt_channels",
+                .data           = &nd_params.num_thpt_channels,
+                .maxlen         = sizeof(int),
+                .mode           = 0644,
+                .proc_handler   = nd_dointvec
+        },
+        {
+                .procname       = "num_lat_channels",
+                .data           = &nd_params.num_lat_channels,
                 .maxlen         = sizeof(int),
                 .mode           = 0644,
                 .proc_handler   = nd_dointvec
