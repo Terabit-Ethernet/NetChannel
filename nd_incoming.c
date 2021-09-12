@@ -626,7 +626,7 @@ static inline void nd_send_grant(struct nd_sock *nsk, bool sync) {
 		&& new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
 		/* send ack pkt for new window */
 		 nsk->receiver.grant_nxt = new_grant_nxt;
-		nd_conn_queue_request(construct_ack_req(sk, flag), nsk, sync, true);
+		nd_conn_queue_request(construct_ack_req(sk, flag), nsk, sync, true, true);
 		if(nd_params.nd_debug)
 			pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 	} else {
@@ -966,7 +966,7 @@ int nd_handle_sync_pkt(struct sk_buff *skb) {
 			// }
 			/* currently assume at the target side */
 			/* ToDo: sync can be true; */
-			nd_conn_queue_request(construct_sync_ack_req(child), nsk, false, true);
+			nd_conn_queue_request(construct_sync_ack_req(child), nsk, false, true, true);
 		}
 	} else {
 		goto free;

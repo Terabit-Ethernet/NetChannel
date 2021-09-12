@@ -293,7 +293,7 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 	// if(nd_params.nd_num_queue == 1)
 	// 	i = 0;
 	/* advance to the next queue */
-	if(cur_count == nd_ctrl->queues[last_q].compact_low_thre) {
+	if(cur_count >= nd_ctrl->queues[last_q].compact_low_thre) {
 		last_q = (last_q + 1) % num_queue + lower_bound;
 		// cur_count = 0;
 	}
@@ -397,12 +397,13 @@ int nd_conn_sche_src_port(int src_port, bool avoid_check, int pri_class) {
 // }
 
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
-		bool sync, bool avoid_check)
+		bool sync, bool avoid_check, bool last)
 {
         struct inet_sock *inet = inet_sk((struct sock*)nsk);
-	struct nd_conn_queue *queue = req->queue;
+	struct nd_conn_queue *queue = req->queue, *last_q;
 	// static u32 queue_id = 0;
 	bool empty;
+	bool push = false;
 	int ret;
 	int qid = 0;
 	WARN_ON(nsk == NULL);
@@ -413,25 +414,47 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		// 	qid = nd_conn_sche_low_lat();
 		// else
 	//		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
-        if(nsk->sche_policy == SCHE_SRC_PORT)
+        	if(nsk->sche_policy == SCHE_SRC_PORT)
 			qid = nd_conn_sche_src_port(ntohs(inet->inet_sport), avoid_check, req->prio_class);
 		else if(nsk->sche_policy == SCHE_RR)
 			qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
-
-		if(qid < 0)
+		
+		if(qid < 0) {
+			/* wake up previous queue */
+			if(nsk->sender.con_queue_id != - 1) {
+				last_q =  &nd_ctrl->queues[nsk->sender.con_queue_id];
+				if(nd_conn_queue_is_lat(last_q)) {
+					queue_work_on(last_q->io_cpu, nd_conn_wq_lat, &last_q->io_work);
+				}else {
+					queue_work_on(last_q->io_cpu, nd_conn_wq, &last_q->io_work);
+				}					
+			}
 			return false;
+		}
 		req->queue = &nd_ctrl->queues[qid];
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
 		atomic_add(1, &queue->cur_queue_size);
 		/* update nsk state */
-		if(qid == nsk->sender.con_queue_id)
-			nsk->sender.con_accumu_count += 1;
-		else {
-			/* reinitalize the sk state */
-			nsk->sender.con_accumu_count = 1;
-			nsk->sender.con_queue_id = qid;
+		if(nsk->sche_policy == SCHE_RR) {
+			if(qid == nsk->sender.con_queue_id)
+				nsk->sender.con_accumu_count += 1;
+			else {
+				/* wake up previous queue */
+				// printk("wake up previous channel:%d\n", nsk->sender.con_queue_id);
+				if(nsk->sender.con_queue_id != - 1) {
+					last_q =  &nd_ctrl->queues[nsk->sender.con_queue_id];
+					if(nd_conn_queue_is_lat(last_q)) {
+						queue_work_on(last_q->io_cpu, nd_conn_wq_lat, &last_q->io_work);
+					}else {
+						queue_work_on(last_q->io_cpu, nd_conn_wq, &last_q->io_work);
+					}					
+				}
+				/* reinitalize the sk state */
+				nsk->sender.con_accumu_count = 1;
+			}
 		}
+		nsk->sender.con_queue_id = qid;
 		// queue_id += 1;
 	} else {
 		atomic_add(1, &queue->cur_queue_size);
@@ -458,8 +481,9 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		// if(ret == -EAGAIN)
 		// 	queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
-	} else {
+	} else if(last){
 		/* data packets always go here */
+		// printk("wake up last channel:%d\n", nsk->sender.con_queue_id);
 		if(nd_conn_queue_is_lat(queue)) {
 			queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
 		}else {
@@ -962,8 +986,10 @@ void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
 	}
 	queue = &ctrl->queues[qid];
 	spin_lock_bh(&queue->sock_wait_lock);
-	if(nsk->sender.wait_on_nd_conns)
+	if(nsk->sender.wait_on_nd_conns) {
+		spin_unlock_bh(&queue->sock_wait_lock);
 		goto queue_work;
+	}
 	nsk->sender.wait_cpu = raw_smp_processor_id();
 	nsk->sender.wait_on_nd_conns = true;
 	/* might have to add ref count later */
@@ -1415,7 +1441,7 @@ int nd_conn_init_module(void)
 
     opts->queue_size = 32;
 	opts->compact_high_thre = 256;
-	opts->compact_low_thre = 2;
+	opts->compact_low_thre = 6;
     opts->tos = 0;
     pr_info("create the ctrl \n");
     nd_ctrl = nd_conn_create_ctrl(opts);

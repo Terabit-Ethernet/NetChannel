@@ -648,7 +648,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
 	/* send sync request */
-    nd_conn_queue_request(construct_sync_req(sk), nsk, true, true);
+    nd_conn_queue_request(construct_sync_req(sk), nsk, true, true, true);
 	nd_set_state(sk, ND_SYNC_SENT);
 
 	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 

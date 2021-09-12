@@ -217,7 +217,7 @@ void nd_try_send_ack(struct sock *sk, int copied) {
 			/* send ack pkt for new window */
 			// printk("nd window size:%u\n",  nd_window_size(nsk));
 			nsk->receiver.grant_nxt = new_grant_nxt;
-			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), nsk, false, true);
+			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), nsk, false, true, true);
 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
 			// total_send_ack++;
 		}
@@ -550,7 +550,7 @@ queue_req:
 		seq = ND_SKB_CB(skb)->seq + skb->len;
 		/* queue the request */
 		// req->queue = &nd_ctrl->queues[htons(inet->inet_sport) % nd_params.nd_num_queue];
-		push_success = nd_conn_queue_request(req, nsk, false, false);
+		push_success = nd_conn_queue_request(req, nsk, false, false, !nd_snd_q_ready(sk));
 		if(!push_success) {
 			WARN_ON(nsk->sender.pending_req);
 			// pr_info("add to sleep sock:%d\n", __LINE__);
@@ -829,7 +829,8 @@ local_sender_copy:
 			goto out_error;
 		nsk->sender.write_seq += copy;
 		copied += copy;
-		err = nd_push(sk, GFP_KERNEL);
+		if(eor)
+			err = nd_push(sk, GFP_KERNEL);
 		if(READ_ONCE(sk->sk_backlog.tail) && nsk->sender.snd_una > nsk->sender.sd_grant_nxt) {
 			release_sock(sk);
 			lock_sock(sk);
@@ -2568,7 +2569,7 @@ void nd_destroy_sock(struct sock *sk)
 	bh_lock_sock(sk);
 	up->receiver.flow_finish_wait = false;
 	if(sk->sk_state == ND_ESTABLISH) {
-		nd_conn_queue_request(construct_fin_req(sk), up, false, true);
+		nd_conn_queue_request(construct_fin_req(sk), up, false, true, true);
 		// nd_xmit_control(construct_fin_pkt(sk), sk, inet->inet_dport); 
 	}      
 	// printk("reach here:%d", __LINE__);
