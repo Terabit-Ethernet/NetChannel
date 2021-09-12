@@ -202,7 +202,7 @@ void nd_conn_data_ready(struct sock *sk);
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid);
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
-		bool sync, bool avoid_check);
+		bool sync, bool avoid_check, bool last);
 // void nd_conn_error_recovery_work(struct work_struct *work);
 void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown);
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl);
