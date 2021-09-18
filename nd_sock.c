@@ -531,14 +531,15 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	flow_len = (uint32_t)usin->sin_zero[0] << 24 |
       (uint32_t)usin->sin_zero[1] << 16 |
       (uint32_t)usin->sin_zero[2] << 8  |
-      (uint32_t)usin->sin_zero[3];	
-    WARN_ON(sk->sk_state != TCP_CLOSE);
+      (uint32_t)usin->sin_zero[3];
+    if(sk->sk_state == ND_ESTABLISH)
+	return 0;
+	//WARN_ON(sk->sk_state != TCP_CLOSE);
     if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
 	if (usin->sin_family != AF_INET)
 		return -EAFNOSUPPORT;
-
 	nexthop = daddr = usin->sin_addr.s_addr;
 	inet_opt = rcu_dereference_protected(inet->inet_opt,
 					     lockdep_sock_is_held(sk));
@@ -555,6 +556,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			      RT_CONN_FLAGS(sk), sk->sk_bound_dev_if,
 			      IPPROTO_VIRTUAL_SOCK,
 			      orig_sport, orig_dport, sk);
+
 	if (IS_ERR(rt)) {
 		err = PTR_ERR(rt);
 		if (err == -ENETUNREACH)
@@ -566,7 +568,6 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		ip_rt_put(rt);
 		return -ENETUNREACH;
 	}
-
 	if (!inet_opt || !inet_opt->opt.srr)
 		daddr = fl4->daddr;
 
