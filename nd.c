@@ -2643,6 +2643,7 @@ int nd_setsockopt(struct sock *sk, int level, int optname,
 	printk(KERN_WARNING "unimplemented setsockopt invoked on ND socket:"
 			" level %d, optname %d, optlen %d\n",
 			level, optname, optlen);
+	return 0;
 	return -EINVAL;
 	// if (level == SOL_VIRTUAL_SOCK)
 	// 	return nd_lib_setsockopt(sk, level, optname, optval, optlen,

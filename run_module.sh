@@ -13,8 +13,10 @@ sudo tc qdisc add dev ens2f0 root mq
 sudo ./enable_arfs.sh ens2f0
 
 sudo sysctl /net/nd/nd_add_host=1
-sudo sysctl /net/nd/nd_num_queue=2
-sudo sysctl /net/nd/nd_num_dc_thread=1
+sudo ethtool -K ens2f0 tso on gso on gro on lro off
+sudo ifconfig ens2f0 mtu 9000
+#sudo sysctl /net/nd/nd_num_queue=2
+#sudo sysctl /net/nd/nd_num_dc_thread=1
 
 # disable abishek virtual env
 #sudo virsh net-autostart --disable default
