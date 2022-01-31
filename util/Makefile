@@ -2,7 +2,7 @@
 
 CFLAGS := -Wall -Werror -g -fno-strict-aliasing -O3 -I..
 
-BINS := netdriver_test  pingpong_server server
+BINS := netdriver_test  pingpong_server pingpong_server_async server
 
 OBJS := $(patsubst %,%.o,$(BINS))
 	
