@@ -34,6 +34,7 @@
 #include <linux/mm.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/net.h>
 #include <linux/slab.h>
 #include <net/tcp_states.h>
 #include <linux/skbuff.h>
@@ -1184,6 +1185,7 @@ int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int ret = 0;
 	lock_sock(sk);
 	// nd_rps_record_flow(sk);
+	printk("sendmsg\n");
 	ret = nd_sendmsg_new2_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
@@ -1416,7 +1418,33 @@ EXPORT_SYMBOL_GPL(nd_init_sock);
 
 int nd_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
-	printk(KERN_WARNING "unimplemented ioctl invoked on ND socket\n");
+	struct net *net;
+	void __user *argp = (void __user *)arg;
+	int pid, err;
+	net = sock_net(sk);
+	if (cmd == SIOCGIFCONF) {
+		struct ifconf ifc;
+		if (copy_from_user(&ifc, argp, sizeof(struct ifconf)))
+			return -EFAULT;
+		rtnl_lock();
+		err = dev_ifconf(net, &ifc, sizeof(struct ifreq));
+		rtnl_unlock();
+		if (!err && copy_to_user(argp, &ifc, sizeof(struct ifconf)))
+			err = -EFAULT;
+		return 0;
+	} else {
+		struct ifreq ifr;
+		bool need_copyout;
+		if (copy_from_user(&ifr, argp, sizeof(struct ifreq)))
+			return -EFAULT;
+		err = dev_ioctl(net, cmd, &ifr, &need_copyout);
+		if (!err && need_copyout)
+			if (copy_to_user(argp, &ifr, sizeof(struct ifreq)))
+				return -EFAULT;
+		return 0;
+	}
+	printk(KERN_WARNING "unimplemented ioctl invoked on ND socket:%d \n", cmd);
+
 	return -ENOSYS;
 }
 EXPORT_SYMBOL(nd_ioctl);
