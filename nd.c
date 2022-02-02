@@ -1185,7 +1185,6 @@ int nd_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int ret = 0;
 	lock_sock(sk);
 	// nd_rps_record_flow(sk);
-	printk("sendmsg\n");
 	ret = nd_sendmsg_new2_locked(sk, msg, len);
 	release_sock(sk);
 	return ret;
