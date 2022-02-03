@@ -838,9 +838,8 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
-	buffer_size = 256;
 	// uint64_t flow_size = 10000000000000;
-	int times = 180;
+	int times = 60;
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
@@ -850,7 +849,6 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	printf("connect done\n");
 	    // for (int i = 0; i < count * 100; i++) {
 		while(1) {
-
 	    	int result = write(fd, buffer, buffer_size);	
 			uint64_t end = rdtsc();
 
@@ -1306,18 +1304,19 @@ int main(int argc, char** argv)
 				test_ndping(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
 				printf("call ndpingpong\n");
-				optval = 6;
-                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
+				optval = 7;
+                		setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
 				printf("call whileloop\n");
 				test_whileloop();
 			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				optval = 6;
-				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
+				optval = 7;
+                                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-				printf("optval:%d\n", optval);
+                                printf("optval:%d\n", optval);
+
 				test_ndpingpong(fd, dest, buffer);
 			} 
 			 else {
