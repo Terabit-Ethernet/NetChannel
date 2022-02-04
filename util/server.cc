@@ -297,6 +297,46 @@ void tcp_connection(int fd, struct sockaddr_in source)
 	close(fd);
 }
 
+/**
+ * nd_connection() - Handles messages arriving on a given socket.
+ * @fd:           File descriptor for the socket over which messages
+ *                will arrive.
+ * @client_addr:  Information about the client (for messages).
+ */
+void nd_outputfile(int fd, struct sockaddr_in source)
+{
+	FILE* file = fopen("debug_server", "w");
+	char *buffer = (char*)malloc(2359104);
+	uint64_t count = 0;
+	uint64_t total_length = 0;
+	while (1) {
+		int result = read(fd, buffer,
+				2359104);
+		int write_total_len = 0, write_len;
+		if (result < 0) {
+			// if (errno == ECONNRESET)
+				break;
+		}
+		while(write_total_len < result) {
+			write_len = fwrite(buffer + write_total_len, 1, result - write_total_len, file);
+			write_total_len += write_len;
+		}
+		total_length += result;
+		count++;
+		if (result == 0)
+			break;
+		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
+		std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
+	}
+		printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!");
+	if (verbose)
+		printf("Closing TCP socket from %s\n", print_address(&source));
+	close(fd);
+	free(buffer);
+	fclose(file);
+}
+
 void nd_connection(int fd, struct sockaddr_in source);
 /**
  * tcp_server() - Opens a TCP socket, accepts connections on that socket
@@ -353,12 +393,13 @@ void tcp_server(int port)
 				strerror(errno));
 			exit(1);
 		}
-		std::thread thread(nd_connection, stream, client_addr);
-
 		// std::thread thread(nd_connection, stream, client_addr);
+
+		std::thread thread(nd_outputfile, stream, client_addr);
 		thread.detach();
 	}
 }
+
 
 /**
  * nd_connection() - Handles messages arriving on a given socket.
@@ -509,7 +550,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
-	optval = 6;
+	optval = 0;
 	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {

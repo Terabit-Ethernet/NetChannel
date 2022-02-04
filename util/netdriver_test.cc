@@ -605,6 +605,38 @@ void print_help(const char *name)
 
 // }
 
+/* test correctness */
+void send_file(std::string filename, int socket_fd,  struct sockaddr *dest) {
+	int buffer_size = 10000000, nread;
+	char *buf = (char*)malloc(buffer_size);
+	FILE *file = fopen(filename.c_str(), "r");
+
+	if (connect(socket_fd, dest, sizeof(struct sockaddr_in)) == -1) {
+		printf("Couldn't connect to dest %s\n", strerror(errno));
+		exit(1);
+	}
+	
+	while ((nread = fread(buf, 1, buffer_size, file)) > 0) {
+		int write_len = 0;
+		while(write_len < nread) {
+	    	int result = write(socket_fd, buf + write_len, buffer_size - write_len);	
+			if( result < 0 ) {
+				if(errno == EMSGSIZE) {
+					// printf("Socket write failed: %s %d\n", strerror(errno), result);
+					break;
+				}
+			} else {
+				write_len += result;
+			}
+		}
+	}
+	if(feof(file)) {
+		std::cout << "finish sending" << std::endl;
+	}
+	fclose(file);
+	return;
+}
+
 /**
  * test_tcpstream() - Measure throughput of a TCP socket using --length as
  * the size of the buffer for each write system call.
@@ -838,8 +870,9 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
+	buffer_size = 256;
 	// uint64_t flow_size = 10000000000000;
-	int times = 60;
+	int times = 180;
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
@@ -849,6 +882,7 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	printf("connect done\n");
 	    // for (int i = 0; i < count * 100; i++) {
 		while(1) {
+
 	    	int result = write(fd, buffer, buffer_size);	
 			uint64_t end = rdtsc();
 
@@ -1304,8 +1338,8 @@ int main(int argc, char** argv)
 				test_ndping(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
 				printf("call ndpingpong\n");
-				optval = 7;
-                		setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
+				optval = 6;
+                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
 				printf("call whileloop\n");
@@ -1313,12 +1347,14 @@ int main(int argc, char** argv)
 			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
 				optval = 7;
-                                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
+				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-                                printf("optval:%d\n", optval);
-
+				printf("optval:%d\n", optval);
 				test_ndpingpong(fd, dest, buffer);
-			} 
+			} else if (strcmp(argv[nextArg], "sendfile") == 0) {
+				fd = socket(AF_INET, SOCK_STREAM, 0);
+				send_file("debug", fd, dest);
+			}
 			 else {
 				printf("Unknown operation '%s'\n", argv[nextArg]);
 				exit(1);
