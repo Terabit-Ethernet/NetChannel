@@ -967,7 +967,7 @@ void nd_conn_io_work(struct work_struct *w)
 			nd_conn_wake_up_all_socks(queue);
 }
 
-
+/* assume hold socket lock */
 void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
 	uint32_t qid = 0;
 	struct sock *sk = (struct sock*)(nsk);
