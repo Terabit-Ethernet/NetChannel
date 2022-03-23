@@ -582,7 +582,8 @@ void nd_tx_work(struct work_struct *w)
 	if (likely(sk->sk_socket)) {
 		if(sk_stream_memory_free(sk)) {
 			sk->sk_write_space(sk);
-		} else if(err == -EDQUOT){
+		} 
+		if(err == -EDQUOT){
 			/* push back since there is no space */
 			nd_conn_add_sleep_sock(nd_ctrl, nsk);
 		}
@@ -725,7 +726,6 @@ static int nd_sendmsg_new2_locked(struct sock *sk, struct msghdr *msg, size_t le
 		  !(msg->msg_flags & MSG_MORE) : !!(msg->msg_flags & MSG_EOR);
 	int err = -EPIPE;
 	// int i = 0;
-	
 	/* hardcode for now */
 	struct nd_dcopy_request *request;
 	struct iov_iter biter;
@@ -830,8 +830,9 @@ local_sender_copy:
 			goto out_error;
 		nsk->sender.write_seq += copy;
 		copied += copy;
-		if(eor)
+		if(eor) {
 			err = nd_push(sk, GFP_KERNEL);
+		}
 		if(READ_ONCE(sk->sk_backlog.tail) && nsk->sender.snd_una > nsk->sender.sd_grant_nxt) {
 			release_sock(sk);
 			lock_sock(sk);
@@ -859,13 +860,15 @@ wait_for_memory:
 	// nd_fetch_dcopy_response(sk);
 	if (eor) {
 		// if(!skb_queue_empty(&sk->sk_write_queue)) {
-			// printk("call nd push\n");
-			nd_push(sk, GFP_KERNEL);
+			err = nd_push(sk, GFP_KERNEL);
+			if(err == -EDQUOT){
+				// pr_info("add to sleep sock send msg\n");
+				nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			} 
 		// }
 	}
 
 	// ND_STATS_ADD(nsk->stats.tx_bytes, copied);
-
 	release_sock(sk);
 	return copied;
 
@@ -999,7 +1002,7 @@ wait_for_memory:
 	if (eor) {
 		// if(!skb_queue_empty(&sk->sk_write_queue)) {
 			// printk("call nd push\n");
-			nd_push(sk, GFP_KERNEL);
+			err = nd_push(sk, GFP_KERNEL);
 		// }
 	}
 
@@ -1333,7 +1336,9 @@ void nd_destruct_sock(struct sock *sk)
 	// pr_info("8: %llu\n", bytes_recvd[8]);
 
 	// pr_info("max queue length:%d\n", max_queue_length);
-	// pr_info("dsk->receiver.copied_seq:%u\n", nsk->receiver.copied_seq);
+	// pr_info("dsk->receiver.copied_seq:%u\n", (u32)atomic_read(&dsk->receiver.copied_seq));
+	// pr_info("nsk->sender.snd_nxt:%u\n", (u32)(nsk->sender.snd_nxt));
+	// pr_info("nsk->sender.snd_una:%u\n", (u32)(nsk->sender.snd_una));
 	// pr_info("atomic_read(&sk->sk_rmem_alloc):%d\n", atomic_read(&sk->sk_rmem_alloc));
 	// pr_info("total_send_ack:%llu\n", total_send_ack);
 	// pr_info("total_send_grant:%llu\n", total_send_grant);
@@ -2605,7 +2610,6 @@ void nd_destroy_sock(struct sock *sk)
 	// pr_info("up->sender.write_seq:%u\n", up->sender.write_seq);
 	// pr_info("up->receiver.grant_nxt:%u\n", up->receiver.grant_nxt);
 	// pr_info("up->receiver.free_skb_num:%llu\n", up->receiver.free_skb_num);
-	// pr_info("sk->sk_wmem_queued:%u\n", sk->sk_wmem_queued);
 	nd_set_state(sk, TCP_CLOSE);
 	// nd_flush_pendfing_frames(sk);
 	if(up->sender.pending_req) {
