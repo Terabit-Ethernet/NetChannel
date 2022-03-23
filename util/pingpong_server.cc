@@ -47,6 +47,8 @@
 // #include "homa.h"
 #include "test_utils.h"
 #include <sys/resource.h>
+#include <mutex>          // std::mutex
+#include <condition_variable> // std::condition_variable
 //#include "../uapi_linux_nd.h"
 /* Log events to standard output. */
 bool verbose = false;
@@ -61,6 +63,7 @@ int port = 4000;
  */
 bool validate = false;
 
+void nd_pingpong_async(int fd, struct sockaddr_in source);
 
 struct Agg_Stats {
 	std::atomic<unsigned long> total_bytes;
@@ -78,6 +81,7 @@ void init_agg_stats(struct Agg_Stats* stats, int interval_sec) {
 }
 
 void aggre_thread(struct Agg_Stats *stats) {
+	int time = 0;
 	init_agg_stats(stats, 1);
 	while(1) {
 		uint64_t start_cycle = rdtsc();
@@ -87,12 +91,11 @@ void aggre_thread(struct Agg_Stats *stats) {
     	std::this_thread::sleep_for (std::chrono::seconds(stats->interval_sec));
     	end_cycle = rdtsc();
     	bytes = atomic_load(&stats->interval_bytes);
-    	rate = (bytes)/ to_seconds(
-			end_cycle - start_cycle);
-		printf("Throughput: "
-		"%.2f Gbps, bytes: %f, time: %f\n", rate * 1e-09 * 8, (double) bytes, to_seconds(
+    	rate = (bytes)/ to_seconds(end_cycle - start_cycle);
+	printf("[%d] Throughput: " "%.2f Gbps  bytes: %f time: %f\n", time, rate * 1e-09 * 8, (double) bytes, to_seconds(
 		end_cycle - start_cycle));
     	atomic_store(&stats->interval_bytes, (unsigned long)0);
+	time += 1;
 	}
 }
 
@@ -105,7 +108,7 @@ void aggre_thread(struct Agg_Stats *stats) {
 void nd_pingpong(int fd, struct sockaddr_in source)
 {
 	// int flag = 1;
-	int optval = 6;
+	int optval = 7;
 	unsigned optlen = 0;
 	char *buffer = (char*)malloc(2359104);
 	// int times = 10000;
@@ -119,7 +122,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	int which = PRIO_PROCESS;
 	id_t pid;
 	int ret;
-
+	printf("reach here\n");
 	pid = getpid();
 	//ret = setpriority(which, pid, -20);
 	//std::cout << "ret "<< ret << std::endl;
@@ -438,7 +441,7 @@ void tcp_server(int port)
 				strerror(errno));
 			exit(1);
 		}
-		std::thread thread(nd_pingpong, stream, client_addr);
+		std::thread thread(nd_pingpong,stream, client_addr);
 		thread.detach();
 	}
 }
@@ -636,6 +639,61 @@ void udp_server(int port)
 
 }
 
+std::mutex mtx;           // mutex for critical section
+std::condition_variable cv;
+unsigned long pending_req = 0;
+bool req_available() {return pending_req >= 64;}
+
+void nd_pingpong_read(int fd) {
+	char *buffer = (char*)malloc(2359104);
+	while(1) {
+		int result = read(fd, buffer, 2359104);
+		if (result <= 0) {
+				goto close;
+		}
+		std::unique_lock<std::mutex> lck(mtx);
+		pending_req += result;
+		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
+		cv.notify_one();
+	}
+close:
+	free(buffer);
+}
+
+void nd_pingpong_write(int fd) {
+	char *buffer = (char*)malloc(2359104);
+	while(1) {
+		std::unique_lock<std::mutex> lck(mtx);
+		cv.wait(lck, req_available);
+		int result = write(fd, buffer, 64);
+		if (result <= 0) {
+			goto close;
+		}
+		pending_req -= result;
+	}
+close:
+	free(buffer);
+	close(fd);
+}
+
+void nd_pingpong_async(int fd, struct sockaddr_in source) {
+	// int flag = 1;
+	int optval = 6;
+	unsigned optlen = 0;
+	// int times = 10000;
+	// int cur_length = 0;
+	// bool streaming = false;
+	// uint64_t start_cycle = 0, end_cycle = 0;
+	// struct sockaddr_in sin;
+	// int *int_buffer = reinterpret_cast<int*>(buffer);
+	// start_cycle = rdtsc();
+	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
+	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+	std::thread thread(nd_pingpong_read, fd);
+	thread.detach();
+	std::thread thread2(nd_pingpong_write, fd);
+	thread2.detach();
+}
 /**
  * nd_server()
  *
@@ -655,7 +713,6 @@ void nd_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
@@ -692,12 +749,12 @@ void nd_server(int port)
 			exit(1);
 		}
 		std::thread thread(nd_pingpong, stream, client_addr);
-
+		//std::thread thread(nd_pingpong_async, stream, client_addr);
 		// std::thread thread(nd_connection, stream, client_addr);
-		cpu_set_t cpuset;
-		CPU_ZERO(&cpuset);
-		CPU_SET((i) % 2 * 4, &cpuset);
-		pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
+		// cpu_set_t cpuset;
+		// CPU_ZERO(&cpuset);
+		// CPU_SET((i) % 2 * 4, &cpuset);
+		// pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
 		thread.detach();
 		i += 1;	
 	}
@@ -797,7 +854,7 @@ int main(int argc, char** argv) {
 	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
 	workers.push_back(std::thread(nd_server, port));
-	// workers.push_back(std::thread(aggre_thread, &agg_stats));
+	//workers.push_back(std::thread(aggre_thread, &agg_stats));
 	for(int i = 0; i < num_ports; i++) {
 		workers[i].join();
 	}

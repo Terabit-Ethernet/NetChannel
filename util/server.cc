@@ -319,6 +319,8 @@ void nd_outputfile(int fd, struct sockaddr_in source)
 		}
 		while(write_total_len < result) {
 			write_len = fwrite(buffer + write_total_len, 1, result - write_total_len, file);
+			if(write_len < 0)
+				break;
 			write_total_len += write_len;
 		}
 		total_length += result;
@@ -393,9 +395,9 @@ void tcp_server(int port)
 				strerror(errno));
 			exit(1);
 		}
-		// std::thread thread(nd_connection, stream, client_addr);
+		std::thread thread(nd_connection, stream, client_addr);
 
-		std::thread thread(nd_outputfile, stream, client_addr);
+		// std::thread thread(nd_outputfile, stream, client_addr);
 		thread.detach();
 	}
 }
@@ -735,6 +737,7 @@ void nd_server(int port)
 			exit(1);
 		}
 		std::thread thread(nd_connection, stream, client_addr);
+		// std::thread thread(nd_outputfile, stream, client_addr);
 
 		// std::thread thread(nd_connection, stream, client_addr);
 		thread.detach();
