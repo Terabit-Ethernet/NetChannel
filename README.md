@@ -36,3 +36,32 @@ Assuming we have two servers,
  sudo sysctl /net/nd/nd_num_queue=1
  sudo sysctl /net/nd/nd_num_dc_thread=1
  ```
+ 
+ 8. Run parallel data copy processing exp,
+ Server:
+ ```
+ sudo ./run_single_flow_set_up.sh 
+ cd util/
+ ./run_single_server.sh 1
+
+```
+ Client:
+ ```
+ sudo ./run_single_flow_set_up.sh 
+ cd util/
+ ./run_client.sh 1
+```
+ 9. Run parallel network processing exp,
+ Server:
+ ```
+ sudo ./run_np.sh 
+ cd util/
+ ./run_np_server.sh 1
+
+```
+ Client:
+ ```
+ sudo ./run_np.sh 
+ cd util/
+ ./run_pingpong_setup3.sh 1 nd
+```
