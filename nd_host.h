@@ -94,13 +94,14 @@ struct nd_conn_request {
 };
 
 struct nd_conn_ctrl {
-	/* read only in the hot path */
 	struct nd_conn_queue	*queues;
     uint32_t queue_count;
 	// struct blk_mq_tag_set	tag_set;
 
 	/* other member variables */
-	struct list_head	list;
+	struct hlist_node hlist;
+
+	// struct list_head	list;
 	// /* socket wait list */
 	// spinlock_t sock_wait_lock;
 	// struct list_head sock_wait_list;
@@ -108,6 +109,7 @@ struct nd_conn_ctrl {
 
 	// struct blk_mq_tag_set	admin_tag_set;
 	struct sockaddr_storage addr;
+	uint32_t dst_addr;
 	struct sockaddr_storage src_addr;
 	// struct nvme_ctrl	ctrl;
     struct nd_conn_ctrl_options *opts;
@@ -116,7 +118,7 @@ struct nd_conn_ctrl {
 	// struct work_struct	err_work;
 	// struct delayed_work	connect_work;
 	// struct nd_conn_request async_req;
-	u32			io_queues[32];
+	// u32			io_queues[32];
 	// struct page_frag_cache	pf_cache;
 
 };
@@ -170,7 +172,6 @@ struct nd_conn_queue {
 	void (*write_space)(struct sock *);
 };
 
-
 struct nd_conn_pdu {
 	struct ndhdr hdr;
 };
@@ -190,10 +191,10 @@ void nd_conn_free_queue(struct nd_conn_ctrl *ctrl, int qid);
 void nd_conn_free_io_queues(struct nd_conn_ctrl *ctrl);
 void nd_conn_stop_io_queues(struct nd_conn_ctrl *ctrl);
 int nd_conn_start_queue(struct nd_conn_ctrl *ctrl, int idx);
-int nd_conn_configure_admin_queue(struct nd_conn_ctrl *ctrl, bool new);
-int nd_conn_alloc_admin_queue(struct nd_conn_ctrl *ctrl);
-void nd_conn_free_admin_queue(struct nd_conn_ctrl *ctrl);
-void nd_conn_destroy_admin_queue(struct nd_conn_ctrl *ctrl, bool remove);
+// int nd_conn_configure_admin_queue(struct nd_conn_ctrl *ctrl, bool new);
+// int nd_conn_alloc_admin_queue(struct nd_conn_ctrl *ctrl);
+// void nd_conn_free_admin_queue(struct nd_conn_ctrl *ctrl);
+// void nd_conn_destroy_admin_queue(struct nd_conn_ctrl *ctrl, bool remove);
 void nd_conn_io_work(struct work_struct *w);
 void nd_conn_data_ready(struct sock *sk);
 void nd_conn_write_space(struct sock *sk);
@@ -203,11 +204,13 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 		int qid);
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		bool sync, bool avoid_check, bool last);
+void* nd_conn_find_nd_ctrl(__be32 dst_addr);
+
 // void nd_conn_error_recovery_work(struct work_struct *work);
 void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown);
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl);
-void nd_conn_teardown_admin_queue(struct nd_conn_ctrl *ctrl,
-		bool remove);
+// void nd_conn_teardown_admin_queue(struct nd_conn_ctrl *ctrl,
+// 		bool remove);
 void nd_conn_teardown_io_queues(struct nd_conn_ctrl *ctrl,
 		bool remove);
 unsigned int nd_conn_nr_io_queues(struct nd_conn_ctrl *ctrl);

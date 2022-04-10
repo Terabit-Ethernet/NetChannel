@@ -27,7 +27,6 @@
 #include "nd_impl.h"
 #include "nd_hashtables.h"
 
-
 static void set_max_grant_batch(struct dst_entry *dst, struct nd_sock* dsk) {
 	int bufs_per_gso, mtu, max_pkt_data, gso_size, max_gso_data;
 	int num_gso_per_bdp;
@@ -511,9 +510,10 @@ int nd_wait_for_connect(struct sock *sk, long *timeo_p)
 // 	sk->sk_write_pending -= writebias;
 // 	return timeo;
 // }
-
 /* This will initiate an outgoing connection. */
 int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+
+
 {
 	// struct nd_sock *dsk = nd_sk(sk);
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -648,6 +648,8 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// send notification pkt
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
+	/*find the nd ctrl */
+	nsk->nd_ctrl = nd_conn_find_nd_ctrl(inet->inet_daddr);
 	/* send sync request */
     nd_conn_queue_request(construct_sync_req(sk), nsk, true, true, true);
 	nd_set_state(sk, ND_SYNC_SENT);
@@ -1105,7 +1107,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 {
 	struct inet_request_sock *ireq;
 	struct inet_sock *newinet;
-	struct nd_sock *newdp;
+	// struct nd_sock *newdp;
 	struct sock *newsk;
 	struct nd_sock *dsk;
 	struct ip_options_rcu *inet_opt;
@@ -1128,7 +1130,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->sk_gso_type = SKB_GSO_TCPV4;
 	inet_sk_rx_dst_set(newsk, skb);
 
-	newdp		      = nd_sk(newsk);
+	// newdp		      = nd_sk(newsk);
 	newinet		      = inet_sk(newsk);
 	ireq		      = inet_rsk(req);
 	sk_daddr_set(newsk, ireq->ir_rmt_addr);
@@ -1146,7 +1148,9 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	set_max_grant_batch(dst, dsk);
 	/* set up max gso segment */
 	sk_setup_caps(newsk, dst);
-
+	/* set up nd_ctrl for rx socket */
+	dsk->nd_ctrl = nd_conn_find_nd_ctrl(newinet->inet_daddr);
+	printk("inet daddr dest:%d\n", newinet->inet_daddr);
 	/* add new socket to binding table */
 	if (__nd_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;

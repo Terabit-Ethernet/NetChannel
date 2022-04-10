@@ -1084,7 +1084,7 @@ int nd_handle_ack_pkt(struct sk_buff *skb) {
 				/* might need to remove this logic */
 				else if(err == -EDQUOT){
 					/* push back since there is no space */
-					nd_conn_add_sleep_sock(nd_ctrl, dsk);
+					nd_conn_add_sleep_sock(dsk->nd_ctrl, dsk);
 				}
 			}
 
@@ -1739,7 +1739,7 @@ int nd_v4_do_rcv(struct sock *sk, struct sk_buff *skb) {
 		else if(err == -EDQUOT){
 			/* push back since there is no space */
 			// pr_info("add sleep sock in backlog\n");
-			nd_conn_add_sleep_sock(nd_ctrl, dsk);
+			nd_conn_add_sleep_sock(dsk->nd_ctrl, dsk);
 		}
 	} else if (dh->type == SYNC_ACK) {
 		sk->sk_state = ND_ESTABLISH;

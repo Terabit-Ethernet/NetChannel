@@ -619,7 +619,7 @@ void send_file(std::string filename, int socket_fd,  struct sockaddr *dest) {
 	while ((nread = fread(buf, 1, buffer_size, file)) > 0) {
 		int write_len = 0;
 		while(write_len < nread) {
-	    	int result = write(socket_fd, buf + write_len, buffer_size - write_len);	
+	    	int result = write(socket_fd, buf + write_len, nread - write_len);	
 			if( result < 0 ) {
 				if(errno == EMSGSIZE) {
 					// printf("Socket write failed: %s %d\n", strerror(errno), result);
@@ -633,6 +633,7 @@ void send_file(std::string filename, int socket_fd,  struct sockaddr *dest) {
 	if(feof(file)) {
 		std::cout << "finish sending" << std::endl;
 	}
+	sleep(5);
 	fclose(file);
 	return;
 }
@@ -870,9 +871,8 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
-	buffer_size = 256;
 	// uint64_t flow_size = 10000000000000;
-	int times = 180;
+	int times = 60;
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
@@ -932,7 +932,7 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 {
 	// int flag = 1;
-	int times = 90;
+	int times = 30;
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
@@ -1352,7 +1352,7 @@ int main(int argc, char** argv)
 				printf("optval:%d\n", optval);
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "sendfile") == 0) {
-				fd = socket(AF_INET, SOCK_STREAM, 0);
+				// fd = socket(AF_INET, SOCK_STREAM, 0);
 				send_file("debug", fd, dest);
 			}
 			 else {

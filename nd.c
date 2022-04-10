@@ -457,7 +457,6 @@ bool nd_snd_q_ready(struct sock *sk) {
 	}
 	return false;
 }
-extern struct nd_conn_ctrl* nd_ctrl; 
 
 int nd_push(struct sock *sk, gfp_t flag) {
 	struct inet_sock *inet = inet_sk(sk);
@@ -585,7 +584,7 @@ void nd_tx_work(struct work_struct *w)
 		} 
 		if(err == -EDQUOT){
 			/* push back since there is no space */
-			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 		}
 	} 	
 out:
@@ -601,8 +600,6 @@ static inline bool nd_stream_memory_free(const struct sock *sk, int pending)
 	return true;
 }
 /* copy from kcm sendmsg */
-extern struct nd_conn_ctrl* nd_ctrl;
-
 static int nd_sender_local_dcopy(struct sock* sk, struct msghdr *msg, 
 	int req_len, u32 seq, long timeo) {
 	struct sk_buff *skb = NULL;
@@ -684,7 +681,7 @@ wait_for_memory:
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
-			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 		} 
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
@@ -848,7 +845,7 @@ wait_for_memory:
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
-			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 		} 
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
@@ -863,7 +860,7 @@ wait_for_memory:
 			err = nd_push(sk, GFP_KERNEL);
 			if(err == -EDQUOT){
 				// pr_info("add to sleep sock send msg\n");
-				nd_conn_add_sleep_sock(nd_ctrl, nsk);
+				nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 			} 
 		// }
 	}
@@ -989,7 +986,7 @@ wait_for_memory:
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
-			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 		} 
 		err = sk_stream_wait_memory(sk, &timeo);
 		// pr_info("end wait \n");
@@ -1136,7 +1133,7 @@ wait_for_memory:
 		/* hard code nd_ctrl for now */
 		if(err == -EDQUOT){
 			// pr_info("add to sleep sock send msg\n");
-			nd_conn_add_sleep_sock(nd_ctrl, nsk);
+			nd_conn_add_sleep_sock(nsk->nd_ctrl, nsk);
 		} 
 		// else {
 		// 	pr_info("nsk->sender.sd_grant_nxt:%u\n", nsk->sender.sd_grant_nxt);
@@ -1412,6 +1409,7 @@ int nd_init_sock(struct sock *sk)
 	sk->tcp_rtx_queue = RB_ROOT;
 	dsk->out_of_order_queue = RB_ROOT;
 	// printk("flow wait at init:%d\n", dsk->receiver.flow_wait);
+	dsk->nd_ctrl = NULL;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(nd_init_sock);

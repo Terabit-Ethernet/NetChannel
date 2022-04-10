@@ -130,7 +130,9 @@ struct nd_params {
 	int nd_num_dc_thread;
 
 	char* local_ip;
-	char* remote_ip;
+	/* hardcode for 32 end hosts now; TO DO: change the number of end hosts dynamically */
+	char* remote_ips[32];
+	int num_remote_hosts;
 	int data_cpy_core;
 	int total_channels;
 	/* for performance isolation */
@@ -608,7 +610,8 @@ struct nd_sock {
 
     } receiver;
 
-
+	/* nd ctrl */
+	void* nd_ctrl;
 	// atomic64_t next_outgoing_id;
 
 	int unsolved;
