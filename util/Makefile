@@ -13,9 +13,6 @@ LIB_OBJS := $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(LIB_SRCS)))
 
 all: $(BINS)
 	
-cp_node: cp_node.o dist.o $(LIB_OBJS)
-	g++ $(CFLAGS) $^ -lpthread -o $@
-
 iouring_bench: iouring_bench.o $(LIB_OBJS)
 	g++ $(CFLAGS) $^ -L$(liburing-path)/src/ -lpthread -luring -o $@
 

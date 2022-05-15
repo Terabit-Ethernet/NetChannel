@@ -278,7 +278,7 @@ void nd_params_init(struct nd_params* params) {
     params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
-    params->local_ip = "192.168.10.116";
+    params->local_ip = "192.168.10.117";
  
     /* set the number of remote hosts */
     params->num_remote_hosts = 2; 
@@ -325,19 +325,7 @@ int nd_dointvec(struct ctl_table *table, int write,
         int result;
         result = proc_dointvec(table, write, buffer, lenp, ppos);
         if (write) {
-                /* Don't worry which particular value changed; update
-                 * all info that is dependent on any sysctl value.
-                 */
                 nd_sysctl_changed(&nd_params);
-
-                // /* For this value, only call the method when this
-                //  * particular value was written (don't want to increment
-                //  * cutoff_version otherwise).
-                //  */
-                // if ((table->data == &homa_data.unsched_cutoffs)
-                //                 || (table->data == &homa_data.num_priorities)) {
-                //         homa_prios_changed(homa);
-                // }
         }
         return result;
 }
@@ -350,15 +338,6 @@ int nd_dointvec(struct ctl_table *table, int write,
 void nd_sysctl_changed(struct nd_params *params)
 {
         // __u64 tmp;
-
-        // /* Code below is written carefully to avoid integer underflow or
-        //  * overflow under expected usage patterns. Be careful when changing!
-        //  */
-        // homa->cycles_per_kbyte = (8*(__u64) cpu_khz)/homa->link_mbps;
-        // homa->cycles_per_kbyte = (105*homa->cycles_per_kbyte)/100;
-        // tmp = homa->max_nic_queue_ns;
-        // tmp = (tmp*cpu_khz)/1000000;
-        // homa->max_nic_queue_cycles = tmp;
     if(params->nd_add_host == 1 && params->nd_host_added == 0) {
         // sock_release(nd_match_table.sock);
         // nd_match_table.sock = NULL;
@@ -418,27 +397,6 @@ static int __init nd_load(void) {
                     status);
                 goto out_inet;
         }
-        // nd_epoch_init(&nd_epoch);
-        /* initialize rcv_core table and xmit_core table */
-        // status = rcv_core_table_init(&rcv_core_tab);
-        // if(status != 0) {
-        //     goto out_cleanup;
-        // }
-        // status = xmit_core_table_init(&xmit_core_tab);
-        // if(status != 0) {
-        //     goto out_cleanup;
-        // }
-        // if (status)
-        //         goto out_cleanup;
-        // ndlite4_register();
-        // metrics_dir_entry = proc_create("homa_metrics", S_IRUGO,
-        //                 init_net.proc_net, &homa_metrics_fops);
-        // if (!metrics_dir_entry) {
-        //         printk(KERN_ERR "couldn't create /proc/net/homa_metrics\n");
-        //         status = -ENOMEM;
-        //         goto out_cleanup;
-        // }
-
         nd_ctl_header = register_net_sysctl(&init_net, "net/nd",
                         nd_ctl_table);
         if (!nd_ctl_header) {
@@ -447,21 +405,6 @@ static int __init nd_load(void) {
                 goto out_nd_ctl_header;
         }
         
-        // status = ndv4_offload_init();
-        // printk("init the offload\n");
-        // if (status != 0) {
-        //         printk(KERN_ERR "ND couldn't init offloads\n");
-        //         goto out_cleanup;
-        // }
-        // tasklet_init(&timer_tasklet, homa_tasklet_handler, 0);
-        // hrtimer_init(&hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-        // hrtimer.function = &homa_hrtimer;
-        // ts.tv_nsec = 1000000;                   /* 1 ms */
-        // ts.tv_sec = 0;
-        // tick_interval = timespec_to_ktime(ts);
-        // hrtimer_start(&hrtimer, tick_interval, HRTIMER_MODE_REL);
-        
-        // tt_init("timetrace");
         /* load the nd connection target side */
         status = ndt_conn_init();
         if (status != 0) {
@@ -483,7 +426,6 @@ static int __init nd_load(void) {
         return 0;
 
 out_cleanup:
-        // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
 
         // if (ndv4_offload_end() != 0)
@@ -530,9 +472,6 @@ static void __exit nd_unload(void) {
         // hrtimer_cancel(&hrtimer);
         // tasklet_kill(&timer_tasklet);
         // hrtimer_cancel(&hrtimer);
-        // if (homa_offload_end() != 0)
-        //         printk(KERN_ERR "Homa couldn't stop offloads\n");
-        // unregister_net_sysctl_table(homa_ctl_header);
         // proc_remove(metrics_dir_entry);
         
         /* clean up data copy */

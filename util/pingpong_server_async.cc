@@ -1,28 +1,3 @@
-/* Copyright (c) 2019, Stanford University
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
-
-/* This is a test program that acts as a server for testing either
- * Homa or TCP; it simply accepts request packets of arbitrary length
- * and responds with packets whose length is determined by the request.
- * The program runs forever; use control-C to kill it.
- *
- * Usage:
- * server [options]
- * 
- * Type "server --help" for documenation on the options.
- */
  #include <arpa/inet.h>
 #include <atomic>
 #include <chrono>         // std::chrono::seconds
@@ -44,7 +19,6 @@
 #include <inttypes.h>
 #include <thread>
 #include <vector>
-// #include "homa.h"
 #include "test_utils.h"
 #include <sys/resource.h>
 #include <mutex>          // std::mutex
@@ -195,91 +169,6 @@ close:
 	close(fd);
 	free(buffer);
 }
-/**
- * homa_server() - Opens a Homa socket and handles all requests arriving on
- * that socket.
- * @port:   Port number to use for the Homa socket.
- */
-// void homa_server(std::string ip, int port)
-// {
-// 	int fd;
-// 	struct sockaddr_in addr_in;
-// 	int message[1000000];
-// 	struct sockaddr_in source;
-// 	int length;
-// 	uint64_t total_length = 0, count = 0;
-// 	uint64_t start_cycle = 0, end_cycle = 0;
-// 	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_HOMA);
-// 	if (fd < 0) {
-// 		printf("Couldn't open Homa socket: %s\n", strerror(errno));
-// 		return;
-// 	}
-	
-// 	mem(&addr_in, 0, sizeof(addr_in));
-// 	addr_in.sin_family = AF_INET;
-// 	addr_in.sin_port = htons(port);
-// 	inet_pton(AF_INET, ip.c_str(), &addr_in.sin_addr);
-// 	// inet_aton("10.0.0.10", &addr_in.sin_addr);
-// 	// addr_in.sin_addr.s_addr = INADDR_ANY;
-
-// 	if (bind(fd, (struct sockaddr *) &addr_in, sizeof(addr_in)) != 0) {
-// 		printf("Couldn't bind socket to Homa port %d: %s\n", port,
-// 				strerror(errno));
-// 		return;
-// 	}
-// 	if (verbose)
-// 		printf("Successfully bound to Homa port %d\n", port);
-// 	while (1) {
-// 		uint64_t id = 0;
-// 		int seed;
-// 		// int result;
-// 		length = homa_recv(fd, message, sizeof(message),
-// 			HOMA_RECV_REQUEST, &id, (struct sockaddr *) &source,
-// 			sizeof(source));
-// 		if (length < 0) {
-// 			printf("homa_recv failed: %s\n", strerror(errno));
-// 			continue;
-// 		}
-// 		if (validate) {
-// 			seed = check_buffer(&message[2],
-// 				length - 2*sizeof32(int));
-// 			if (verbose)
-// 				printf("Received message from %s with %d bytes, "
-// 					"id %lu, seed %d, response length %d\n",
-// 					print_address(&source), length, id,
-// 					seed, message[1]);
-// 		} else
-// 			if (verbose)
-// 				printf("Received message from %s with "
-// 					"%d bytes, id %lu, response length %d\n",
-// 					print_address(&source), length, id,
-// 					message[1]);
-// 		if(count % 1000 == 0) {
-// 			end_cycle = rdtsc();
-			
-// 			double rate = ((double) total_length)/ to_seconds(
-// 				end_cycle - start_cycle);
-// 			total_length = 0;
-
-// 			start_cycle = rdtsc();
-// 			if(count != 0) {
-// 				printf("Homa throughput: "
-// 				"%.2f Gbps\n", rate * 1e-09 * 8);
-// 			}
-// 		}
-// 		total_length += length;
-// 		count += 1;
-// 		/* Second word of the message indicates how large a
-// 		 * response to send.
-// 		 */
-// 		// result = homa_reply(fd, message, 1,
-// 		// 	(struct sockaddr *) &source, sizeof(source), id);
-// 		// if (result < 0) {
-// 		// 	printf("Homa_reply failed: %s\n", strerror(errno));
-// 		// }
-// 	}
-// 	printf("end\n");
-// }
 
 /**
  * print_help() - Print out usage information for this program.
@@ -847,10 +736,6 @@ int main(int argc, char** argv) {
 	}
  	std::vector<std::thread> workers;
 
-	// for (int i = 0; i < num_ports; i++) {
-	// 	printf("port number:%i\n", port + i);
-	// 	workers.push_back(std::thread (homa_server, ip, port+i));
-	// }
 	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
 	workers.push_back(std::thread(nd_server, port));

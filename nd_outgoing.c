@@ -537,59 +537,8 @@ void nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 	// nd_unlink_write_queue(oskb, sk);
 	nd_rbtree_insert(&sk->tcp_rtx_queue, oskb);
 	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(oskb)->end_seq);
-	// sk_wmem_queued_add(sk, -skb->truesize);
-
-	// if (!skb_queue_empty(&sk->sk_write_queue)) {
-	// 	struct sk_buff *skb = nd_send_head(sk);
-	// 	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(skb)->end_seq);
-	// 	__nd_xmit_data(skb, dsk);
-	// }
-	// while (msg->next_packet) {
-	// 	// int priority = TOS_1;
-	// 	struct sk_buff *skb = msg->next_packet;
-	// 	// struct nd_sock* dsk = msg->dsk;
-	// 	// int offset = homa_data_offset(skb);
-		
-	// 	// if (homa == NULL) {
-	// 	// 	printk(KERN_NOTICE "NULL homa pointer in homa_xmit_"
-	// 	// 		"data, state %d, shutdown %d, id %llu, socket %d",
-	// 	// 		rpc->state, rpc->hsk->shutdown, rpc->id,
-	// 	// 		rpc->hsk->client_port);
-	// 	// 	BUG();
-	// 	// }
-		
-	// 	// if (offset >= rpc->msgout.granted)
-	// 	// 	break;
-		
-	// 	// if ((rpc->msgout.length - offset) >= homa->throttle_min_bytes) {
-	// 	// 	if (!homa_check_nic_queue(homa, skb, force)) {
-	// 	// 		homa_add_to_throttled(rpc);
-	// 	// 		break;
-	// 	// 	}
-	// 	// }
-		
-	// 	// if (offset < rpc->msgout.unscheduled) {
-	// 	// 	priority = homa_unsched_priority(homa, rpc->peer,
-	// 	// 			rpc->msgout.length);
-	// 	// } else {
-	// 	// 	priority = rpc->msgout.sched_priority;
-	// 	// }
-	// 	msg->next_packet = *nd_next_skb(skb);
-		
-	// 	skb_get(skb);
-	// 	__nd_xmit_data(skb, dsk);
-	// 	force = false;
-	// }
 }
 
-/**
- * __homa_xmit_data() - Handles packet transmission stuff that is common
- * to homa_xmit_data and homa_resend_data.
- * @skb:      Packet to be sent. The packet will be freed after transmission
- *            (and also if errors prevented transmission).
- * @rpc:      Information about the RPC that the packet belongs to.
- * @priority: Priority level at which to transmit the packet.
- */
 void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 {
 	int err;
