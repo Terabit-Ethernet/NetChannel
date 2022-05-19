@@ -1,13 +1,21 @@
 #include "nd_host.h"
 #include "nd_impl.h"
-static LIST_HEAD(nd_conn_ctrl_list);
+// static LIST_HEAD(nd_conn_ctrl_list);
 static DEFINE_MUTEX(nd_conn_ctrl_mutex);
 static struct workqueue_struct *nd_conn_wq;
 static struct workqueue_struct *nd_conn_wq_lat;
+static struct workqueue_struct *sock_wait_wq;
 
-struct nd_conn_ctrl* nd_ctrl;
+// struct nd_conn_ctrl* nd_ctrl;
 // static struct blk_mq_ops nvme_tcp_mq_ops;
 // static struct blk_mq_ops nvme_tcp_admin_mq_ops;
+
+/*  conn_table is read-only for now so that we don't need lock in the hot path; 
+TO DO: add the lock once the dynamic adding/removing logic has been added.
+This also requires the change of ctrl->io_queue logic. 
+*/
+/* conn_table has 2^8 slots */
+DECLARE_HASHTABLE(nd_conn_table, 8);
 
 static inline bool nd_conn_has_inline_data(struct nd_conn_request *req) {
 	struct ndhdr* hdr = req->hdr;
@@ -127,87 +135,6 @@ void nd_conn_stop_io_queues(struct nd_conn_ctrl *ctrl)
 		nd_conn_stop_queue(ctrl, i);
 }
 
-int nd_conn_configure_admin_queue(struct nd_conn_ctrl *ctrl, bool new)
-{
-	int error;
-
-	error = nd_conn_alloc_admin_queue(ctrl);
-	if (error)
-		return error;
-
-	// if (new) {
-	// 	ctrl->admin_tagset = nvme_tcp_alloc_tagset(ctrl, true);
-	// 	if (IS_ERR(ctrl->admin_tagset)) {
-	// 		error = PTR_ERR(ctrl->admin_tagset);
-	// 		goto out_free_queue;
-	// 	}
-
-	// 	ctrl->fabrics_q = blk_mq_init_queue(ctrl->admin_tagset);
-	// 	if (IS_ERR(ctrl->fabrics_q)) {
-	// 		error = PTR_ERR(ctrl->fabrics_q);
-	// 		goto out_free_tagset;
-	// 	}
-
-	// 	ctrl->admin_q = blk_mq_init_queue(ctrl->admin_tagset);
-	// 	if (IS_ERR(ctrl->admin_q)) {
-	// 		error = PTR_ERR(ctrl->admin_q);
-	// 		goto out_cleanup_fabrics_q;
-	// 	}
-	// }
-
-	error = nd_conn_start_queue(ctrl, 0);
-	if (error)
-		goto out_cleanup_queue;
-
-	// error = nvme_enable_ctrl(ctrl);
-	// if (error)
-	// 	goto out_stop_queue;
-
-	// blk_mq_unquiesce_queue(ctrl->admin_q);
-
-	// error = nvme_init_identify(ctrl);
-	// if (error)
-	// 	goto out_stop_queue;
-
-	return 0;
-
-// out_stop_queue:
-// 	nd_conn_stop_queue(ctrl, 0);
-out_cleanup_queue:
-// 	if (new)
-// 		blk_cleanup_queue(ctrl->admin_q);
-// out_cleanup_fabrics_q:
-// 	if (new)
-// 		blk_cleanup_queue(ctrl->fabrics_q);
-// out_free_tagset:
-// 	if (new)
-// 		blk_mq_free_tag_set(ctrl->admin_tagset);
-// out_free_queue:
-	nd_conn_free_admin_queue(ctrl);
-	return error;
-}
-
-void nd_conn_free_admin_queue(struct nd_conn_ctrl *ctrl)
-{
-	// if (to_tcp_ctrl(ctrl)->async_req.pdu) {
-	// 	nvme_tcp_free_async_req(to_tcp_ctrl(ctrl));
-	// 	to_tcp_ctrl(ctrl)->async_req.pdu = NULL;
-	// }
-
-	nd_conn_free_queue(ctrl, 0);
-}
-
-void nd_conn_destroy_admin_queue(struct nd_conn_ctrl *ctrl, bool remove)
-{
-	nd_conn_stop_queue(ctrl, 0);
-	// if (remove) {
-	// 	blk_cleanup_queue(ctrl->admin_q);
-	// 	blk_cleanup_queue(ctrl->fabrics_q);
-	// 	blk_mq_free_tag_set(ctrl->admin_tagset);
-	// }
-	nd_conn_free_admin_queue(ctrl);
-}
-
 void nd_conn_data_ready(struct sock *sk)
 {
 	struct nd_conn_queue *queue;
@@ -272,10 +199,8 @@ done:
 	read_unlock(&sk->sk_callback_lock);
 }
 
-// u64 bytes_sent[8];
-// int max_queue_length;
 /* round-robin; will not select the previous one except if there is only one channel. */
-int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check) {
+int nd_conn_sche_rr(struct nd_conn_queue* queues, int last_q, int cur_count, int prio_class, bool avoid_check) {
 	struct nd_conn_queue *queue;
 	/* cur_count tracks how many skbs has been sent for the current queue before going to the next queue */
 	// static u32;
@@ -292,14 +217,14 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 	// if(nd_params.nd_num_queue == 1)
 	// 	i = 0;
 	/* advance to the next queue */
-	if(cur_count == nd_ctrl->queues[last_q].compact_low_thre) {
+	if(cur_count >= queues[last_q].compact_low_thre) {
 		last_q = (last_q + 1) % num_queue + lower_bound;
 		// cur_count = 0;
 	}
 	for (; i < num_queue; i++) {
 		/* select queue */
 		qid = (last_q + i) % num_queue + lower_bound;
-		queue =  &nd_ctrl->queues[qid];
+		queue =  &queues[qid];
 		// WARN_ON(cur_count >= queue->compact_low_thre);
 
 		if(atomic_read(&queue->cur_queue_size) 
@@ -316,7 +241,7 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 	}
 	if(avoid_check) {
 		qid = (1 + last_q) % num_queue + lower_bound;
-		queue =  &nd_ctrl->queues[qid];
+		queue =  &queues[qid];
 		// atomic_add(1, &queue->cur_queue_size);
 		last_q = qid;
 		return last_q;
@@ -328,6 +253,28 @@ int nd_conn_sche_rr(int last_q, int cur_count, int prio_class, bool avoid_check)
 int nd_conn_sche_low_lat(void) {
 	return  raw_smp_processor_id() / 4 + nd_params.lat_channel_idx;
 }
+
+/* round-robin; will not select the previous one except if there is only one channel. */
+int nd_conn_sche_src_port(struct nd_conn_queue *queues, int src_port, bool avoid_check, int pri_class) {
+        struct nd_conn_queue *queue;
+        int qid;
+        if(pri_class)
+                qid = src_port % nd_params.num_lat_channels + nd_params.lat_channel_idx;
+        else
+                qid = src_port % nd_params.num_thpt_channels + nd_params.thpt_channel_idx;
+        queue = &queues[qid];
+        if(atomic_read(&queue->cur_queue_size)
+                >= queue->queue_size && !avoid_check) {
+                /* update the count */
+                // cur_count = 0;
+                return -1;
+        } else {
+                return qid;
+                // cur_count++;
+        }
+        return -1;
+}
+
 /* stick on one queue if the queue size is below than threshold; */
 // int nd_conn_sche_compact(bool avoid_check) {
 // 	struct nd_conn_queue *queue;
@@ -373,37 +320,76 @@ int nd_conn_sche_low_lat(void) {
 // 	return -1;
 // }
 
+/* find nd_ctrl based on dest ip address */
+void* nd_conn_find_nd_ctrl(__be32 dst_addr) {
+	struct nd_conn_ctrl *nd_ctrl;
+	/*find the nd ctrl */
+	hash_for_each_possible(nd_conn_table, nd_ctrl, hlist, dst_addr) {
+		return nd_ctrl;
+		break;
+	} 
+	return NULL;
+}
+
 bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
-		bool sync, bool avoid_check)
+		bool sync, bool avoid_check, bool last)
 {
-	struct nd_conn_queue *queue = req->queue;
+    struct inet_sock *inet = inet_sk((struct sock*)nsk);
+	struct nd_conn_queue *queue = req->queue, *last_q;
+	struct nd_conn_ctrl *nd_ctrl = nsk->nd_ctrl;
 	// static u32 queue_id = 0;
 	bool empty;
+	// bool push = false;
 	int ret;
 	int qid = 0;
 	WARN_ON(nsk == NULL);
-	if(queue == NULL) {
+	if(queue == NULL) { 
 		/* hard code for now */
 		// queue_id = (smp_processor_id() - 16) / 4;
-		if(req->prio_class)
-			qid = nd_conn_sche_low_lat();
-		else
-			qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
-
-		if(qid < 0)
+		// if(req->prio_class)
+		// 	qid = nd_conn_sche_low_lat();
+		// else
+	//		qid = nd_conn_sche_rr(nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
+		if(nsk->sche_policy == SCHE_SRC_PORT)
+			qid = nd_conn_sche_src_port(nd_ctrl->queues, ntohs(inet->inet_sport), avoid_check, req->prio_class);
+		else if(nsk->sche_policy == SCHE_RR)
+			qid = nd_conn_sche_rr(nd_ctrl->queues, nsk->sender.con_queue_id, nsk->sender.con_accumu_count, req->prio_class, avoid_check);
+		if(qid < 0) {
+			/* wake up previous queue */
+			if(nsk->sender.con_queue_id != - 1) {
+				last_q =  &nd_ctrl->queues[nsk->sender.con_queue_id];
+				if(nd_conn_queue_is_lat(last_q)) {
+					queue_work_on(last_q->io_cpu, nd_conn_wq_lat, &last_q->io_work);
+				}else {
+					queue_work_on(last_q->io_cpu, nd_conn_wq, &last_q->io_work);
+				}					
+			}
 			return false;
+		}
 		req->queue = &nd_ctrl->queues[qid];
 		// req->queue =  &nd_ctrl->queues[6];
 		queue = req->queue;
 		atomic_add(1, &queue->cur_queue_size);
 		/* update nsk state */
-		if(qid == nsk->sender.con_queue_id)
-			nsk->sender.con_accumu_count += 1;
-		else {
-			/* reinitalize the sk state */
-			nsk->sender.con_accumu_count = 1;
-			nsk->sender.con_queue_id = qid;
+		if(nsk->sche_policy == SCHE_RR) {
+			if(qid == nsk->sender.con_queue_id)
+				nsk->sender.con_accumu_count += 1;
+			else {
+				/* wake up previous queue */
+				// printk("wake up previous channel:%d\n", nsk->sender.con_queue_id);
+				if(nsk->sender.con_queue_id != - 1) {
+					last_q =  &nd_ctrl->queues[nsk->sender.con_queue_id];
+					if(nd_conn_queue_is_lat(last_q)) {
+						queue_work_on(last_q->io_cpu, nd_conn_wq_lat, &last_q->io_work);
+					}else {
+						queue_work_on(last_q->io_cpu, nd_conn_wq, &last_q->io_work);
+					}					
+				}
+				/* reinitalize the sk state */
+				nsk->sender.con_accumu_count = 1;
+			}
 		}
+		nsk->sender.con_queue_id = qid;
 		// queue_id += 1;
 	} else {
 		atomic_add(1, &queue->cur_queue_size);
@@ -430,8 +416,9 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 		// if(ret == -EAGAIN)
 		// 	queue->more_requests = false;
 		mutex_unlock(&queue->send_mutex);
-	} else {
+	} else if(last){
 		/* data packets always go here */
+		// printk("wake up last channel:%d\n", nsk->sender.con_queue_id);
 		if(nd_conn_queue_is_lat(queue)) {
 			queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
 		}else {
@@ -441,116 +428,21 @@ bool nd_conn_queue_request(struct nd_conn_request *req, struct nd_sock *nsk,
 	return true;
 }
 
-// void nd_conn_error_recovery(struct nd_conn_ctrl *ctrl)
-// {
-// 	queue_work(nd_conn_reset_wq, &ctrl->err_work);
-// }
-
-// void nd_conn_error_recovery_work(struct work_struct *work)
-// {
-// 	struct nd_conn_ctrl *ctrl = container_of(work,
-// 				struct nc_conn_ctrl, err_work);
-// 	// struct nvme_ctrl *ctrl = &tcp_ctrl->ctrl;
-
-// 	// nvme_stop_keep_alive(ctrl);
-// 	nd_conn_teardown_io_queues(ctrl, false);
-// 	/* unquiesce to fail fast pending requests */
-// 	// nvme_start_queues(ctrl);
-// 	nd_conn_teardown_admin_queue(ctrl, false);
-// 	// blk_mq_unquiesce_queue(ctrl->admin_q);
-
-// 	// if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING)) {
-// 	// 	/* state change failure is ok if we started ctrl delete */
-// 	// 	WARN_ON_ONCE(ctrl->state != NVME_CTRL_DELETING &&
-// 	// 		     ctrl->state != NVME_CTRL_DELETING_NOIO);
-// 	// 	return;
-// 	// }
-
-// 	// nd_conn_delete_ctrl(ctrl);
-// }
-
 void nd_conn_teardown_ctrl(struct nd_conn_ctrl *ctrl, bool shutdown)
 {
-	// cancel_work_sync(&ctrl->err_work);
-	// cancel_delayed_work_sync(&ctrl->connect_work);
-
 	nd_conn_teardown_io_queues(ctrl, shutdown);
-	// blk_mq_quiesce_queue(ctrl->admin_q);
-	// if (shutdown)
-	// 	nvme_shutdown_ctrl(ctrl);
-	// else
-	// 	nvme_disable_ctrl(ctrl);
-	nd_conn_teardown_admin_queue(ctrl, shutdown);
 }
 
 void nd_conn_delete_ctrl(struct nd_conn_ctrl *ctrl)
 {
 	nd_conn_teardown_ctrl(ctrl, true);
-	flush_workqueue(ctrl->sock_wait_wq);
-	destroy_workqueue(ctrl->sock_wait_wq);
+	hash_del(&ctrl->hlist);
+	// flush_workqueue(ctrl->sock_wait_wq);
+	// destroy_workqueue(ctrl->sock_wait_wq);
     /* free option here */
 	kfree(ctrl->queues);
     kfree(ctrl->opts);
 	kfree(ctrl);
-}
-
-// static void nvme_reset_ctrl_work(struct work_struct *work)
-// {
-// 	struct nvme_ctrl *ctrl =
-// 		container_of(work, struct nvme_ctrl, reset_work);
-
-// 	nvme_stop_ctrl(ctrl);
-// 	nvme_tcp_teardown_ctrl(ctrl, false);
-
-// 	if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING)) {
-// 		/* state change failure is ok if we started ctrl delete */
-// 		WARN_ON_ONCE(ctrl->state != NVME_CTRL_DELETING &&
-// 			     ctrl->state != NVME_CTRL_DELETING_NOIO);
-// 		return;
-// 	}
-
-// 	if (nvme_tcp_setup_ctrl(ctrl, false))
-// 		goto out_fail;
-
-// 	return;
-
-// out_fail:
-// 	++ctrl->nr_reconnects;
-// 	nvme_tcp_reconnect_or_remove(ctrl);
-// }
-
-// static void nvme_tcp_free_ctrl(struct nvme_ctrl *nctrl)
-// {
-// 	struct nvme_tcp_ctrl *ctrl = to_tcp_ctrl(nctrl);
-
-// 	if (list_empty(&ctrl->list))
-// 		goto free_ctrl;
-
-// 	mutex_lock(&nvme_tcp_ctrl_mutex);
-// 	list_del(&ctrl->list);
-// 	mutex_unlock(&nvme_tcp_ctrl_mutex);
-
-// 	nvmf_free_options(nctrl->opts);
-// free_ctrl:
-// 	kfree(ctrl->queues);
-// 	kfree(ctrl);
-// }
-
-void nd_conn_teardown_admin_queue(struct nd_conn_ctrl *ctrl,
-		bool remove)
-{
-    mutex_lock(&ctrl->teardown_lock);
-	// blk_mq_quiesce_queue(ctrl->admin_q);
-	nd_conn_stop_queue(ctrl, 0);
-	// if (ctrl->admin_tagset) {
-	// 	blk_mq_tagset_busy_iter(ctrl->admin_tagset,
-	// 		nvme_cancel_request, ctrl);
-	// 	blk_mq_tagset_wait_completed_request(ctrl->admin_tagset);
-	// }
-	// if (remove)
-	// 	blk_mq_unquiesce_queue(ctrl->admin_q);
-	nd_conn_destroy_admin_queue(ctrl, remove);
-	mutex_unlock(&ctrl->teardown_lock);
 }
 
 void nd_conn_teardown_io_queues(struct nd_conn_ctrl *ctrl,
@@ -558,21 +450,10 @@ void nd_conn_teardown_io_queues(struct nd_conn_ctrl *ctrl,
 {
 	mutex_lock(&ctrl->teardown_lock);
     // might need to change later
-	if (ctrl->queue_count <= 1)
-		goto out;
-	// blk_mq_quiesce_queue(ctrl->admin_q);
-	// nvme_start_freeze(ctrl);
-	// nvme_stop_queues(ctrl);
+	// if (ctrl->queue_count <= 1)
+	// 	goto out;
 	nd_conn_stop_io_queues(ctrl);
-	// if (ctrl->tagset) {
-	// 	blk_mq_tagset_busy_iter(ctrl->tagset,
-	// 		nvme_cancel_request, ctrl);
-	// 	blk_mq_tagset_wait_completed_request(ctrl->tagset);
-	// }
-	// if (remove)
-	// 	nvme_start_queues(ctrl);
 	nd_conn_destroy_io_queues(ctrl, remove);
-out:
 	mutex_unlock(&ctrl->teardown_lock);
 }
 
@@ -591,23 +472,8 @@ int nd_conn_alloc_io_queues(struct nd_conn_ctrl *ctrl)
 {
 	unsigned int nr_io_queues;
 	// int ret;
-
 	nr_io_queues = nd_conn_nr_io_queues(ctrl);
-	// ret = nvme_set_queue_count(ctrl, &nr_io_queues);
-	// if (ret)
-	// 	return ret;
-
-	// ctrl->queue_count = nr_io_queues + 1;
 	ctrl->queue_count = nr_io_queues;
-
-	if (ctrl->queue_count < 1)
-		return 0;
-
-	// dev_info(ctrl->device,
-	// 	"creating %d I/O queues.\n", nr_io_queues);
-
-	// nvme_tcp_set_io_queues(ctrl, nr_io_queues);
-
 	return __nd_conn_alloc_io_queues(ctrl);
 }
 
@@ -633,10 +499,6 @@ out_free_queues:
 void nd_conn_destroy_io_queues(struct nd_conn_ctrl *ctrl, bool remove)
 {
 	nd_conn_stop_io_queues(ctrl);
-	// if (remove) {
-	// 	blk_cleanup_queue(ctrl->connect_q);
-	// 	blk_mq_free_tag_set(ctrl->tagset);
-	// }
 	nd_conn_free_io_queues(ctrl);
 }
 
@@ -647,39 +509,7 @@ int nd_conn_configure_io_queues(struct nd_conn_ctrl *ctrl, bool new)
 	ret = nd_conn_alloc_io_queues(ctrl);
 	if (ret)
 		return ret;
-
-	// if (new) {
-		// ctrl->tagset = nvme_tcp_alloc_tagset(ctrl, false);
-		// if (IS_ERR(ctrl->tagset)) {
-		// 	ret = PTR_ERR(ctrl->tagset);
-		// 	goto out_free_io_queues;
-		// }
-
-		// ctrl->connect_q = blk_mq_init_queue(ctrl->tagset);
-		// if (IS_ERR(ctrl->connect_q)) {
-		// 	ret = PTR_ERR(ctrl->connect_q);
-		// 	goto out_free_tag_set;
-		// }
-	// } else {
-	// 	blk_mq_update_nr_hw_queues(ctrl->tagset,
-	// 		ctrl->queue_count - 1);
-	// }
-
-	// ret = nvme_tcp_start_io_queues(ctrl);
-	// if (ret)
-	// 	goto out_cleanup_connect_q;
-
 	return 0;
-
-// out_cleanup_connect_q:
-	// if (new)
-	// 	blk_cleanup_queue(ctrl->connect_q);
-// out_free_tag_set:
-	// if (new)
-	// 	blk_mq_free_tag_set(ctrl->tagset);
-// out_free_io_queues:
-	// nd_conn_free_io_queues(ctrl);
-	return ret;
 }
 
 void nd_conn_process_req_list(struct nd_conn_queue *queue)
@@ -872,7 +702,6 @@ void nd_conn_io_work(struct work_struct *w)
 	struct nd_conn_queue *queue =
 		container_of(w, struct nd_conn_queue, io_work);
 	unsigned long deadline = jiffies + msecs_to_jiffies(1);
-	int ret;
 	bool pending;
 	// int bufsize;
 	// int optlen = sizeof(bufsize);
@@ -909,51 +738,93 @@ void nd_conn_io_work(struct work_struct *w)
 			queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 		}
 	}
-		// ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
-	nd_conn_wake_up_all_socks(queue->ctrl);
+	// ret = queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
+	/* To Do: only wake up all socks if there is available space */
+	if(atomic_read(&queue->cur_queue_size) < queue->queue_size)
+			nd_conn_wake_up_all_socks(queue);
 }
 
-
-void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
-	uint32_t i;
-	spin_lock_bh(&ctrl->sock_wait_lock);
-	// printk("add sleep sock\n");
-	if(nsk->wait_on_nd_conns)
+/* assume hold socket lock */
+void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
+	uint32_t qid = 0;
+	struct sock *sk = (struct sock*)(nsk);
+	struct inet_sock *inet = inet_sk(sk);
+	bool pri_class = sk->sk_priority == 0? 0 : 1;
+	struct nd_conn_queue *queue;
+	int src_port = ntohs(inet->inet_sport);
+	if(nsk->sche_policy == SCHE_SRC_PORT) {
+		if(pri_class)
+			qid = src_port % nd_params.num_lat_channels + nd_params.lat_channel_idx;
+		else
+			qid = src_port % nd_params.num_thpt_channels + nd_params.thpt_channel_idx;
+	} else if(nsk->sche_policy == SCHE_RR){
+		/* for now pick the current sending queue */
+		qid = nsk->sender.con_queue_id;
+	}
+	queue = &ctrl->queues[qid];
+	spin_lock_bh(&queue->sock_wait_lock);
+	if(nsk->sender.wait_on_nd_conns) {
+		spin_unlock_bh(&queue->sock_wait_lock);
 		goto queue_work;
-	nsk->wait_cpu = raw_smp_processor_id();
-	nsk->wait_on_nd_conns = true;
-	list_add_tail(&nsk->wait_list, &ctrl->sock_wait_list);
+	}
+	nsk->sender.wait_cpu = raw_smp_processor_id();
+	nsk->sender.wait_on_nd_conns = true;
+	/* might have to add ref count later */
+	nsk->sender.wait_queue = queue;
+	list_add_tail(&nsk->tx_wait_list, &queue->sock_wait_list);
+	spin_unlock_bh(&queue->sock_wait_lock);
+	/* wake up corresponding queue */
 queue_work:
-	spin_unlock_bh(&ctrl->sock_wait_lock);
-	for(i = 0; i < ctrl->queue_count; i++) {
-		if(nd_conn_queue_is_lat(&ctrl->queues[i])) {
-			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq_lat, &ctrl->queues[i].io_work);
-		}else {
-			queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
-		}
-		// queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+	if(nd_conn_queue_is_lat(queue)) {
+		queue_work_on(queue->io_cpu, nd_conn_wq_lat, &queue->io_work);
+	}else {
+		queue_work_on(queue->io_cpu, nd_conn_wq, &queue->io_work);
 	}
 }
 
-void nd_conn_remove_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock *nsk) {
-	spin_lock_bh(&ctrl->sock_wait_lock);
-	if(nsk->wait_on_nd_conns) {
-		list_del_init(&nsk->wait_list);
-		nsk->wait_on_nd_conns = false;
+// void nd_conn_add_sleep_sock(struct nd_conn_ctrl *ctrl, struct nd_sock* nsk) {
+// 	uint32_t i, index;
+// 	spin_lock_bh(&ctrl->sock_wait_lock);
+// 	// printk("add sleep sock\n");
+// 	if(nsk->sender.wait_on_nd_conns)
+// 		goto queue_work;
+// 	nsk->sender.wait_cpu = raw_smp_processor_id();
+// 	nsk->sender.wait_on_nd_conns = true;
+// 	list_add_tail(&nsk->tx_wait_list, &ctrl->sock_wait_list);
+// queue_work:
+// 	spin_unlock_bh(&ctrl->sock_wait_lock);
+// 	for(i = 0; i < nd_params.num_thpt_channels; i++) {
+// 		index = i + nd_params.thpt_channel_idx;
+// 		if(nd_conn_queue_is_lat(&ctrl->queues[index])) {
+// 			queue_work_on(ctrl->queues[index].io_cpu, nd_conn_wq_lat, &ctrl->queues[index].io_work);
+// 		}else {
+// 			queue_work_on(ctrl->queues[index].io_cpu, nd_conn_wq, &ctrl->queues[index].io_work);
+// 		}
+// 		// queue_work_on(ctrl->queues[i].io_cpu, nd_conn_wq, &ctrl->queues[i].io_work);
+// 	}
+// }
+
+void nd_conn_remove_sleep_sock(struct nd_conn_queue *queue, struct nd_sock *nsk) {
+	if(nsk->sender.wait_on_nd_conns) {
+		spin_lock_bh(&queue->sock_wait_lock);
+		list_del_init(&nsk->tx_wait_list);
+		nsk->sender.wait_on_nd_conns = false;
+		nsk->sender.wait_queue = NULL;
+		spin_unlock_bh(&queue->sock_wait_lock);
 	}
-	spin_unlock_bh(&ctrl->sock_wait_lock);
 }
 
-void nd_conn_wake_up_all_socks(struct nd_conn_ctrl *ctrl) {
+void nd_conn_wake_up_all_socks(struct nd_conn_queue *queue) {
 	struct nd_sock *nsk; 
-	spin_lock_bh(&ctrl->sock_wait_lock);
-	list_for_each_entry(nsk, &ctrl->sock_wait_list, wait_list) {
-		WARN_ON(!nsk->wait_on_nd_conns);
-		queue_work_on(nsk->wait_cpu, ctrl->sock_wait_wq, &nsk->tx_work);
-		nsk->wait_on_nd_conns = false;
+	spin_lock_bh(&queue->sock_wait_lock);
+	list_for_each_entry(nsk, &queue->sock_wait_list, tx_wait_list) {
+		WARN_ON(!nsk->sender.wait_on_nd_conns);
+		queue_work_on(nsk->sender.wait_cpu, sock_wait_wq, &nsk->tx_work);
+		nsk->sender.wait_on_nd_conns = false;
+		nsk->sender.wait_queue = NULL;
 	}
-	INIT_LIST_HEAD(&ctrl->sock_wait_list);
-	spin_unlock_bh(&ctrl->sock_wait_lock);
+	INIT_LIST_HEAD(&queue->sock_wait_list);
+	spin_unlock_bh(&queue->sock_wait_lock);
 }
 
 int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
@@ -968,6 +839,10 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	queue->ctrl = ctrl;
     init_llist_head(&queue->req_list);
 	INIT_LIST_HEAD(&queue->send_list);
+	/* init socket wait list */
+	INIT_LIST_HEAD(&queue->sock_wait_list);
+	spin_lock_init(&queue->sock_wait_lock);
+
 	// spin_lock_init(&queue->lock);
     mutex_init(&queue->send_mutex);
 	INIT_WORK(&queue->io_work, nd_conn_io_work);
@@ -1140,73 +1015,34 @@ err_sock:
 	return ret;
 }
 
-int nd_conn_alloc_admin_queue(struct nd_conn_ctrl *ctrl)
-{
-	int ret;
+// int nd_conn_alloc_admin_queue(struct nd_conn_ctrl *ctrl)
+// {
+// 	int ret;
 
-	ret = nd_conn_alloc_queue(ctrl, 0);
-	if (ret)
-		return ret;
+// 	ret = nd_conn_alloc_queue(ctrl, 0);
+// 	if (ret)
+// 		return ret;
 
-	// ret = nvme_tcp_alloc_async_req(to_tcp_ctrl(ctrl));
-	if (ret)
-		goto out_free_queue;
+// 	// ret = nvme_tcp_alloc_async_req(to_tcp_ctrl(ctrl));
+// 	if (ret)
+// 		goto out_free_queue;
 
-	return 0;
+// 	return 0;
 
-out_free_queue:
-	nd_conn_free_queue(ctrl, 0);
-	return ret;
-}
+// out_free_queue:
+// 	nd_conn_free_queue(ctrl, 0);
+// 	return ret;
+// }
 
 int nd_conn_setup_ctrl(struct nd_conn_ctrl *ctrl, bool new)
 {
-	// struct nd_conn_ctrl_options *opts = ctrl->opts;
 	int ret;
-
-	// ret = nd_conn_configure_admin_queue(ctrl, new);
-	// if (ret)
-	// 	return ret;
-
-	// if (ctrl->icdoff) {
-	// 	dev_err(ctrl->device, "icdoff is not supported!\n");
-	// 	goto destroy_admin;
-	// }
-
-	// if (opts->queue_size > ctrl->sqsize + 1)
-	// 	dev_warn(ctrl->device,
-	// 		"queue_size %zu > ctrl sqsize %u, clamping down\n",
-	// 		opts->queue_size, ctrl->sqsize + 1);
-
-	// if (ctrl->sqsize + 1 > ctrl->maxcmd) {
-	// 	dev_warn(ctrl->device,
-	// 		"sqsize %u > ctrl maxcmd %u, clamping down\n",
-	// 		ctrl->sqsize + 1, ctrl->maxcmd);
-	// 	ctrl->sqsize = ctrl->maxcmd - 1;
-	// }
-
-	if (ctrl->queue_count > 1) {
-		ret = nd_conn_configure_io_queues(ctrl, new);
-		if (ret)
-			goto destroy_admin;
-	}
-
-	// if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_LIVE)) {
-	// 	/* state change failure is ok if we're in DELETING state */
-	// 	WARN_ON_ONCE(ctrl->state != NVME_CTRL_DELETING);
-	// 	ret = -EINVAL;
-	// 	goto destroy_io;
-	// }
-
-	// nvme_start_ctrl(ctrl);
+	ret = nd_conn_configure_io_queues(ctrl, new);
+	if (ret)
+		goto destroy_admin;
 	return 0;
-
-// destroy_io:
-// 	if (ctrl->queue_count > 1)
-// 		nd_conn_destroy_io_queues(ctrl, new);
 destroy_admin:
 	nd_conn_stop_queue(ctrl, 0);
-	nd_conn_destroy_admin_queue(ctrl, new);
 	return ret;
 }
 
@@ -1214,14 +1050,16 @@ destroy_admin:
 struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 {
 	struct nd_conn_ctrl *ctrl;
+	struct sockaddr_in *target_addr;
 	int ret;
 
 	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
-	if (!ctrl)
+	if (!ctrl) {
+		kfree(opts);
 		return ERR_PTR(-ENOMEM);
+	}
 
-	INIT_LIST_HEAD(&ctrl->list);
-	INIT_LIST_HEAD(&ctrl->sock_wait_list);
+	// INIT_LIST_HEAD(&ctrl->list);
 	ctrl->opts = opts;
 	ctrl->queue_count = opts->nr_io_queues + opts->nr_write_queues +
 				opts->nr_poll_queues;
@@ -1233,9 +1071,6 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 	// INIT_WORK(&ctrl->err_work, nd_conn_error_recovery_work);
 	// INIT_WORK(&ctrl->ctrl.reset_work, nvme_reset_ctrl_work);
     mutex_init(&ctrl->teardown_lock);
-	spin_lock_init(&ctrl->sock_wait_lock);
-	ctrl->sock_wait_wq = alloc_workqueue("sock_wait_wq",
-			WQ_MEM_RECLAIM, 0);
 
 	// if (!(opts->mask & NVMF_OPT_TRSVCID)) {
 	// 	opts->trsvcid =
@@ -1254,50 +1089,28 @@ struct nd_conn_ctrl *nd_conn_create_ctrl(struct nd_conn_ctrl_options *opts)
 			opts->traddr, opts->trsvcid);
 		goto out_free_ctrl;
 	}
+	target_addr = (struct sockaddr_in *)(&ctrl->addr);
 
-	// if (opts->mask & ND_OPT_HOST_TRADDR) {
-		ret = inet_pton_with_scope(&init_net, AF_UNSPEC,
-			opts->host_traddr, NULL, &ctrl->src_addr);
-		if (ret) {
-			pr_err("malformed src address passed: %s\n",
-			       opts->host_traddr);
-			goto out_free_ctrl;
-		}
-	// }
-
-	// if (!opts->duplicate_connect && nvme_tcp_existing_controller(opts)) {
-	// 	ret = -EALREADY;
-	// 	goto out_free_ctrl;
-	// }
-
+	ret = inet_pton_with_scope(&init_net, AF_UNSPEC,
+		opts->host_traddr, NULL, &ctrl->src_addr);
+	if (ret) {
+		pr_err("malformed src address passed: %s\n",
+				opts->host_traddr);
+		goto out_free_ctrl;
+	}
 	ctrl->queues = kcalloc(ctrl->queue_count, sizeof(*ctrl->queues),
 				GFP_KERNEL);
 	if (!ctrl->queues) {
 		ret = -ENOMEM;
 		goto out_free_ctrl;
 	}
-
-	// ret = nvme_init_ctrl(&ctrl->ctrl, dev, &nvme_tcp_ctrl_ops, 0);
-	// if (ret)
-	// 	goto out_kfree_queues;
-
-	// if (!nvme_change_ctrl_state(&ctrl->ctrl, NVME_CTRL_CONNECTING)) {
-	// 	WARN_ON_ONCE(1);
-	// 	ret = -EINTR;
-	// 	goto out_uninit_ctrl;
-	// }
-
 	ret = nd_conn_setup_ctrl(ctrl, true);
 	if (ret)
 		goto out_uninit_ctrl;
-
-	// dev_info(ctrl->ctrl.device, "new ctrl: NQN \"%s\", addr %pISp\n",
-	// 	ctrl->ctrl.opts->subsysnqn, &ctrl->addr);
-
-	// nvme_get_ctrl(&ctrl->ctrl);
     pr_info("create ctrl sucessfully\n");
 	mutex_lock(&nd_conn_ctrl_mutex);
-	list_add_tail(&ctrl->list, &nd_conn_ctrl_list);
+	// list_add_tail(&ctrl->list, &nd_conn_ctrl_list);
+	hash_add(nd_conn_table, &ctrl->hlist, target_addr->sin_addr.s_addr);
 	mutex_unlock(&nd_conn_ctrl_mutex);
 
 	return ctrl;
@@ -1311,6 +1124,7 @@ out_uninit_ctrl:
 		ret = -EIO;
 	// return ERR_PTR(ret);
 // out_kfree_queues:
+	kfree(ctrl->opts);
 	kfree(ctrl->queues);
 out_free_ctrl:
 	kfree(ctrl);
@@ -1319,7 +1133,8 @@ out_free_ctrl:
 
 int nd_conn_init_module(void)
 {
-    struct nd_conn_ctrl_options* opts = kmalloc(sizeof(*opts), GFP_KERNEL);
+	struct nd_conn_ctrl_options* opts;
+	int i;
 	nd_conn_wq = alloc_workqueue("nd_conn_wq",
 			WQ_MEM_RECLAIM, 0);
 
@@ -1329,39 +1144,53 @@ int nd_conn_init_module(void)
 			WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
 	if(!nd_conn_wq_lat)
 		return -ENOMEM;
-    /* initialiize the option */
+	sock_wait_wq = alloc_workqueue("sock_wait_wq",
+			WQ_MEM_RECLAIM, 0);
+	if(!sock_wait_wq)
+		return -ENOMEM;		
     // pr_info("HCTX_MAX_TYPES: %d\n", HCTX_MAX_TYPES);
-    opts->nr_io_queues = nd_params.total_channels;
-    opts->nr_write_queues = 0;
-    opts->nr_poll_queues = 0;
-    /* target address */
-    opts->traddr = nd_params.remote_ip;
-    opts->trsvcid = "9000";
-    /* src address */
-    opts->host_traddr = nd_params.local_ip;
-    // opts->host_port = "10000";
+	/* hash table init */
+	hash_init(nd_conn_table);
+	
+	for (i = 0; i < nd_params.num_remote_hosts; i++) {
+	    /* initialiize the option */
+		opts = kmalloc(sizeof(*opts), GFP_KERNEL);
+		opts->nr_io_queues = nd_params.total_channels;
+		opts->nr_write_queues = 0;
+		opts->nr_poll_queues = 0;
+		/* target address */
+		opts->traddr = nd_params.remote_ips[i];
+		opts->trsvcid = "9000";
+		/* src address */
+		opts->host_traddr = nd_params.local_ip;
+		// opts->host_port = "10000";
 
-    opts->queue_size = 1024;
-	opts->compact_high_thre = 256;
-	opts->compact_low_thre = 2;
-    opts->tos = 0;
-    pr_info("create the ctrl \n");
-    nd_ctrl = nd_conn_create_ctrl(opts);
+		opts->queue_size = 32;
+		opts->compact_high_thre = 256;
+		opts->compact_low_thre = 6;
+		opts->tos = 0;
+		pr_info("create the ctrl \n");
+		nd_conn_create_ctrl(opts);
+	}
+
 	// nvmf_register_transport(&nvme_tcp_transport);
 	return 0;
 }
 
 void nd_conn_cleanup_module(void)
 {
-	struct nd_conn_ctrl *ctrl, *temp;
-
+	struct nd_conn_ctrl *ctrl;
+	struct hlist_node *tmp;
+	int i;
 	// nvmf_unregister_transport(&nvme_tcp_transport);
 
 	mutex_lock(&nd_conn_ctrl_mutex);
-	list_for_each_entry_safe(ctrl, temp, &nd_conn_ctrl_list, list)
+	hash_for_each_safe(nd_conn_table, i, tmp, ctrl, hlist)
 		nd_conn_delete_ctrl(ctrl);
 	mutex_unlock(&nd_conn_ctrl_mutex);
 	// flush_workqueue(nvme_delete_wq);
 
+	destroy_workqueue(sock_wait_wq);
 	destroy_workqueue(nd_conn_wq);
+	destroy_workqueue(nd_conn_wq_lat);
 }

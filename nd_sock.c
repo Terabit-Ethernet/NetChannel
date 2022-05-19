@@ -27,7 +27,6 @@
 #include "nd_impl.h"
 #include "nd_hashtables.h"
 
-
 static void set_max_grant_batch(struct dst_entry *dst, struct nd_sock* dsk) {
 	int bufs_per_gso, mtu, max_pkt_data, gso_size, max_gso_data;
 	int num_gso_per_bdp;
@@ -511,9 +510,10 @@ int nd_wait_for_connect(struct sock *sk, long *timeo_p)
 // 	sk->sk_write_pending -= writebias;
 // 	return timeo;
 // }
-
 /* This will initiate an outgoing connection. */
 int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+
+
 {
 	// struct nd_sock *dsk = nd_sk(sk);
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -531,14 +531,15 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	flow_len = (uint32_t)usin->sin_zero[0] << 24 |
       (uint32_t)usin->sin_zero[1] << 16 |
       (uint32_t)usin->sin_zero[2] << 8  |
-      (uint32_t)usin->sin_zero[3];	
-    WARN_ON(sk->sk_state != TCP_CLOSE);
+      (uint32_t)usin->sin_zero[3];
+    if(sk->sk_state == ND_ESTABLISH)
+	return 0;
+	//WARN_ON(sk->sk_state != TCP_CLOSE);
     if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
 	if (usin->sin_family != AF_INET)
 		return -EAFNOSUPPORT;
-
 	nexthop = daddr = usin->sin_addr.s_addr;
 	inet_opt = rcu_dereference_protected(inet->inet_opt,
 					     lockdep_sock_is_held(sk));
@@ -555,6 +556,7 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			      RT_CONN_FLAGS(sk), sk->sk_bound_dev_if,
 			      IPPROTO_VIRTUAL_SOCK,
 			      orig_sport, orig_dport, sk);
+
 	if (IS_ERR(rt)) {
 		err = PTR_ERR(rt);
 		if (err == -ENETUNREACH)
@@ -566,7 +568,6 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		ip_rt_put(rt);
 		return -ENETUNREACH;
 	}
-
 	if (!inet_opt || !inet_opt->opt.srr)
 		daddr = fl4->daddr;
 
@@ -647,8 +648,10 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	// send notification pkt
 	// if(!dsk->peer)
 	// 	dsk->peer = nd_peer_find(&nd_peers_table, daddr, inet);
+	/*find the nd ctrl */
+	nsk->nd_ctrl = nd_conn_find_nd_ctrl(inet->inet_daddr);
 	/* send sync request */
-    nd_conn_queue_request(construct_sync_req(sk), nsk, true, true);
+    nd_conn_queue_request(construct_sync_req(sk), nsk, true, true, true);
 	nd_set_state(sk, ND_SYNC_SENT);
 
 	// nd_xmit_control(construct_sync_pkt(sk, 0, flow_len, 0), sk, inet->inet_dport); 
@@ -901,6 +904,7 @@ struct request_sock *nd_reqsk_alloc(const struct request_sock_ops *ops,
 
 	if (req) {
 		struct inet_request_sock *ireq = inet_rsk(req);
+		ireq->ireq_opt = NULL;
 		atomic64_set(&ireq->ir_cookie, 0);
 		// ireq->ireq_state = TCP_NEW_SYN_RECV;
 		write_pnet(&ireq->ireq_net, sock_net(sk_listener));
@@ -1103,7 +1107,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 {
 	struct inet_request_sock *ireq;
 	struct inet_sock *newinet;
-	struct nd_sock *newdp;
+	// struct nd_sock *newdp;
 	struct sock *newsk;
 	struct nd_sock *dsk;
 	struct ip_options_rcu *inet_opt;
@@ -1126,7 +1130,7 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->sk_gso_type = SKB_GSO_TCPV4;
 	inet_sk_rx_dst_set(newsk, skb);
 
-	newdp		      = nd_sk(newsk);
+	// newdp		      = nd_sk(newsk);
 	newinet		      = inet_sk(newsk);
 	ireq		      = inet_rsk(req);
 	sk_daddr_set(newsk, ireq->ir_rmt_addr);
@@ -1144,7 +1148,9 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	set_max_grant_batch(dst, dsk);
 	/* set up max gso segment */
 	sk_setup_caps(newsk, dst);
-
+	/* set up nd_ctrl for rx socket */
+	dsk->nd_ctrl = nd_conn_find_nd_ctrl(newinet->inet_daddr);
+	printk("inet daddr dest:%d\n", newinet->inet_daddr);
 	/* add new socket to binding table */
 	if (__nd_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;

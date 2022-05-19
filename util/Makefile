@@ -1,8 +1,8 @@
 # Makefile to build various testing programs for Homa.
-
+liburing-path = /home/midhul/liburing
 CFLAGS := -Wall -Werror -g -fno-strict-aliasing -O3 -I..
 
-BINS := netdriver_test  pingpong_server server
+BINS := netdriver_test netdriver_test_multithread  pingpong_server pingpong_server_async server iouring_bench
 
 OBJS := $(patsubst %,%.o,$(BINS))
 	
@@ -13,8 +13,11 @@ LIB_OBJS := $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(LIB_SRCS)))
 
 all: $(BINS)
 	
-cp_node: cp_node.o dist.o $(LIB_OBJS)
-	g++ $(CFLAGS) $^ -lpthread -o $@
+iouring_bench: iouring_bench.o $(LIB_OBJS)
+	g++ $(CFLAGS) $^ -L$(liburing-path)/src/ -lpthread -luring -o $@
+
+iouring_bench.o: iouring_bench.c test_utils.h
+	cc -c $(CFLAGS) $< -o $@ -I$(liburing-path)/src/include/
 
 # This seems to be the only way to disable the built-in implicit rules
 # for %:%.c and %:%.cc.

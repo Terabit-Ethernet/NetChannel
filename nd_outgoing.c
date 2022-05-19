@@ -63,76 +63,6 @@
 #include "nd_impl.h"
 
 
-#define ND_DEFERRED_ALL (NDF_TSQ_DEFERRED |		\
-			  NDF_CLEAN_TIMER_DEFERRED |	\
-			  NDF_TOKEN_TIMER_DEFERRED |	\
-			  NDF_RMEM_CHECK_DEFERRED | \
-			  NDF_RTX_DEFERRED | \
-			  NDF_WAIT_DEFERRED)
-
-/**
- * nd_release_cb - nd release_sock() callback
- * @sk: socket
- *
- * called from release_sock() to perform protocol dependent
- * actions before socket release.
- */
-void nd_release_cb(struct sock *sk)
-{
-	unsigned long flags, nflags;
-
-	/* perform an atomic operation only if at least one flag is set */
-	do {
-		flags = sk->sk_tsq_flags;
-		if (!(flags & ND_DEFERRED_ALL))
-			return;
-		nflags = flags & ~ND_DEFERRED_ALL;
-	} while (cmpxchg(&sk->sk_tsq_flags, flags, nflags) != flags);
-
-	// if (flags & TCPF_TSQ_DEFERRED) {
-	// 	tcp_tsq_write(sk);
-	// 	__sock_put(sk);
-	// }
-	/* Here begins the tricky part :
-	 * We are called from release_sock() with :
-	 * 1) BH disabled
-	 * 2) sk_lock.slock spinlock held
-	 * 3) socket owned by us (sk->sk_lock.owned == 1)
-	 *
-	 * But following code is meant to be called from BH handlers,
-	 * so we should keep BH disabled, but early release socket ownership
-	 */
-	sock_release_ownership(sk);
-
-	/* First check read memory */
-	// if (flags & NDF_RMEM_CHECK_DEFERRED) {
-	// 	nd_rem_check_handler(sk);
-	// }
-
-	// if (flags & NDF_CLEAN_TIMER_DEFERRED) {
-	// 	nd_clean_rtx_queue(sk);
-	// 	// __sock_put(sk);
-	// }
-	// if (flags & NDF_TOKEN_TIMER_DEFERRED) {
-	// 	WARN_ON(true);
-	// 	nd_token_timer_defer_handler(sk);
-	// 	// __sock_put(sk);
-	// }
-	// if (flags & NDF_RTX_DEFERRED) {
-	// 	WARN_ON(true);
-	// 	nd_write_timer_handler(sk);
-	// }
-	// if (flags & NDF_WAIT_DEFERRED) {
-	// 	WARN_ON(true);
-	// 	nd_flow_wait_handler(sk);
-	// }
-	// if (flags & TCPF_MTU_REDUCED_DEFERRED) {
-	// 	inet_csk(sk)->icsk_af_ops->mtu_reduced(sk);
-	// 	__sock_put(sk);
-	// }
-}
-EXPORT_SYMBOL(nd_release_cb);
-
 int nd_init_request(struct sock* sk, struct nd_conn_request *req)
 {
 	// struct nd_conn_queue *queue = NULL;
@@ -333,70 +263,70 @@ struct nd_conn_request* construct_fin_req(struct sock* sk) {
 	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
 	return req;
 }
-struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,
-	 __u32 prev_grant_nxt, __u32 grant_nxt, bool handle_rtx) {
-	// int extra_bytes = 0;
-	struct nd_sock *dsk = nd_sk(sk);
-	struct sk_buff* skb = __construct_control_skb(sk, ND_HEADER_MAX_SIZE
-		 + dsk->num_sacks * sizeof(struct nd_sack_block_wire));
-	struct nd_token_hdr* fh;
-	struct ndhdr* dh;
-	struct nd_sack_block_wire *sack;
-	int i = 0;
-	bool manual_end_point = true;
-	if(unlikely(!skb)) {
-		return NULL;
-	}
-	fh = (struct nd_token_hdr *) skb_put(skb, sizeof(struct nd_token_hdr));
-	dh = (struct ndhdr*) (&fh->common);
-	dh->len = htons(sizeof(struct nd_token_hdr));
-	dh->type = TOKEN;
-	fh->priority = priority;
-	fh->rcv_nxt = dsk->receiver.rcv_nxt;
-	fh->grant_nxt = grant_nxt;
-	fh->num_sacks = 0;
-	// printk("TOKEN: new grant next:%u\n", fh->grant_nxt);
-	// printk("prev_grant_nxt:%u\n", prev_grant_nxt);
-	// printk("new rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
-	// printk("copied seq:%u\n", dsk->receiver.copied_seq);
-	if(handle_rtx && dsk->receiver.rcv_nxt < prev_grant_nxt) {
-		// printk("rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
-		while(i < dsk->num_sacks) {
-			__u32 start_seq = dsk->selective_acks[i].start_seq;
-			__u32 end_seq = dsk->selective_acks[i].end_seq;
+// struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority,
+// 	 __u32 prev_grant_nxt, __u32 grant_nxt, bool handle_rtx) {
+// 	// int extra_bytes = 0;
+// 	struct nd_sock *dsk = nd_sk(sk);
+// 	struct sk_buff* skb = __construct_control_skb(sk, ND_HEADER_MAX_SIZE
+// 		 + dsk->num_sacks * sizeof(struct nd_sack_block_wire));
+// 	struct nd_token_hdr* fh;
+// 	struct ndhdr* dh;
+// 	struct nd_sack_block_wire *sack;
+// 	int i = 0;
+// 	bool manual_end_point = true;
+// 	if(unlikely(!skb)) {
+// 		return NULL;
+// 	}
+// 	fh = (struct nd_token_hdr *) skb_put(skb, sizeof(struct nd_token_hdr));
+// 	dh = (struct ndhdr*) (&fh->common);
+// 	dh->len = htons(sizeof(struct nd_token_hdr));
+// 	dh->type = TOKEN;
+// 	fh->priority = priority;
+// 	fh->rcv_nxt = dsk->receiver.rcv_nxt;
+// 	fh->grant_nxt = grant_nxt;
+// 	fh->num_sacks = 0;
+// 	// printk("TOKEN: new grant next:%u\n", fh->grant_nxt);
+// 	// printk("prev_grant_nxt:%u\n", prev_grant_nxt);
+// 	// printk("new rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
+// 	// printk("copied seq:%u\n", dsk->receiver.copied_seq);
+// 	if(handle_rtx && dsk->receiver.rcv_nxt < prev_grant_nxt) {
+// 		// printk("rcv_nxt:%u\n", dsk->receiver.rcv_nxt);
+// 		while(i < dsk->num_sacks) {
+// 			__u32 start_seq = dsk->selective_acks[i].start_seq;
+// 			__u32 end_seq = dsk->selective_acks[i].end_seq;
 
-			if(start_seq > prev_grant_nxt)
-				goto next;
-			if(end_seq > prev_grant_nxt) {
-				end_seq = prev_grant_nxt;
-				manual_end_point = false;
-			}
+// 			if(start_seq > prev_grant_nxt)
+// 				goto next;
+// 			if(end_seq > prev_grant_nxt) {
+// 				end_seq = prev_grant_nxt;
+// 				manual_end_point = false;
+// 			}
 
-			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
-			sack->start_seq = htonl(start_seq);
-			printk("start seq:%u\n", start_seq);
-			printk("end seq:%u\n", end_seq);
+// 			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
+// 			sack->start_seq = htonl(start_seq);
+// 			printk("start seq:%u\n", start_seq);
+// 			printk("end seq:%u\n", end_seq);
 
-			sack->end_seq = htonl(end_seq);
-			fh->num_sacks++;
-		next:
-			i++;
-		}
-		if(manual_end_point) {
-			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
-			sack->start_seq = htonl(prev_grant_nxt);
-			sack->end_seq = htonl(prev_grant_nxt);
-			printk("sack start seq:%u\n", prev_grant_nxt);
-			fh->num_sacks++;
-		}
+// 			sack->end_seq = htonl(end_seq);
+// 			fh->num_sacks++;
+// 		next:
+// 			i++;
+// 		}
+// 		if(manual_end_point) {
+// 			sack = (struct nd_sack_block_wire*) skb_put(skb, sizeof(struct nd_sack_block_wire));
+// 			sack->start_seq = htonl(prev_grant_nxt);
+// 			sack->end_seq = htonl(prev_grant_nxt);
+// 			printk("sack start seq:%u\n", prev_grant_nxt);
+// 			fh->num_sacks++;
+// 		}
 
-	}
+// 	}
 
-	// extra_bytes = ND_HEADER_MAX_SIZE - length;
-	// if (extra_bytes > 0)
-	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
-	return skb;
-}
+// 	// extra_bytes = ND_HEADER_MAX_SIZE - length;
+// 	// if (extra_bytes > 0)
+// 	// 	memset(skb_put(skb, extra_bytes), 0, extra_bytes);
+// 	return skb;
+// }
 
 struct sk_buff* construct_ack_pkt(struct sock* sk, __be32 rcv_nxt) {
 	// int extra_bytes = 0;
@@ -607,59 +537,8 @@ void nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 	// nd_unlink_write_queue(oskb, sk);
 	nd_rbtree_insert(&sk->tcp_rtx_queue, oskb);
 	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(oskb)->end_seq);
-	// sk_wmem_queued_add(sk, -skb->truesize);
-
-	// if (!skb_queue_empty(&sk->sk_write_queue)) {
-	// 	struct sk_buff *skb = nd_send_head(sk);
-	// 	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(skb)->end_seq);
-	// 	__nd_xmit_data(skb, dsk);
-	// }
-	// while (msg->next_packet) {
-	// 	// int priority = TOS_1;
-	// 	struct sk_buff *skb = msg->next_packet;
-	// 	// struct nd_sock* dsk = msg->dsk;
-	// 	// int offset = homa_data_offset(skb);
-		
-	// 	// if (homa == NULL) {
-	// 	// 	printk(KERN_NOTICE "NULL homa pointer in homa_xmit_"
-	// 	// 		"data, state %d, shutdown %d, id %llu, socket %d",
-	// 	// 		rpc->state, rpc->hsk->shutdown, rpc->id,
-	// 	// 		rpc->hsk->client_port);
-	// 	// 	BUG();
-	// 	// }
-		
-	// 	// if (offset >= rpc->msgout.granted)
-	// 	// 	break;
-		
-	// 	// if ((rpc->msgout.length - offset) >= homa->throttle_min_bytes) {
-	// 	// 	if (!homa_check_nic_queue(homa, skb, force)) {
-	// 	// 		homa_add_to_throttled(rpc);
-	// 	// 		break;
-	// 	// 	}
-	// 	// }
-		
-	// 	// if (offset < rpc->msgout.unscheduled) {
-	// 	// 	priority = homa_unsched_priority(homa, rpc->peer,
-	// 	// 			rpc->msgout.length);
-	// 	// } else {
-	// 	// 	priority = rpc->msgout.sched_priority;
-	// 	// }
-	// 	msg->next_packet = *nd_next_skb(skb);
-		
-	// 	skb_get(skb);
-	// 	__nd_xmit_data(skb, dsk);
-	// 	force = false;
-	// }
 }
 
-/**
- * __homa_xmit_data() - Handles packet transmission stuff that is common
- * to homa_xmit_data and homa_resend_data.
- * @skb:      Packet to be sent. The packet will be freed after transmission
- *            (and also if errors prevented transmission).
- * @rpc:      Information about the RPC that the packet belongs to.
- * @priority: Priority level at which to transmit the packet.
- */
 void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
 {
 	int err;

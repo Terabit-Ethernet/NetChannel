@@ -1,4 +1,4 @@
-#include <arpa/inet.h>
+ #include <arpa/inet.h>
 #include <atomic>
 #include <chrono>         // std::chrono::seconds
 
@@ -20,6 +20,9 @@
 #include <thread>
 #include <vector>
 #include "test_utils.h"
+#include <sys/resource.h>
+#include <mutex>          // std::mutex
+#include <condition_variable> // std::condition_variable
 //#include "../uapi_linux_nd.h"
 /* Log events to standard output. */
 bool verbose = false;
@@ -34,6 +37,7 @@ int port = 4000;
  */
 bool validate = false;
 
+void nd_pingpong_async(int fd, struct sockaddr_in source);
 
 struct Agg_Stats {
 	std::atomic<unsigned long> total_bytes;
@@ -67,6 +71,103 @@ void aggre_thread(struct Agg_Stats *stats) {
     	atomic_store(&stats->interval_bytes, (unsigned long)0);
 	time += 1;
 	}
+}
+
+/**
+ * nd_pingpong() - Handles messages arriving on a given socket.
+ * @fd:           File descriptor for the socket over which messages
+ *                will arrive.
+ * @client_addr:  Information about the client (for messages).
+ */
+void nd_pingpong(int fd, struct sockaddr_in source)
+{
+	// int flag = 1;
+	int optval = 7;
+	unsigned optlen = 0;
+	char *buffer = (char*)malloc(2359104);
+	// int times = 10000;
+	// int cur_length = 0;
+	// bool streaming = false;
+	uint64_t count = 0;
+	uint64_t total_length = 0;
+	// uint64_t start_cycle = 0, end_cycle = 0;
+	struct sockaddr_in sin;
+	socklen_t len = sizeof(sin);
+	int which = PRIO_PROCESS;
+	id_t pid;
+	int ret;
+	printf("reach here\n");
+	pid = getpid();
+	//ret = setpriority(which, pid, -20);
+	//std::cout << "ret "<< ret << std::endl;
+	ret = getpriority(which, pid);
+	std::cout << "priority " << ret << std::endl;
+	// int *int_buffer = reinterpret_cast<int*>(buffer);
+	if (verbose)
+		printf("New ND socket from %s\n", print_address(&source));
+	// setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+	if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
+	    perror("getsockname");
+	else
+	    printf("port number %d\n", ntohs(sin.sin_port));
+	// start_cycle = rdtsc();
+	printf("start connection\n");
+	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
+	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+	printf("optval:%d\n", optval);
+
+	// printf("sizeof buffer:%ld\n", sizeof(buffer));
+	while (1) {
+		int copied = 0;
+		int rpc_length = 4096;
+		// times--;
+		while(1) {
+			int result = read(fd, buffer + copied,
+				rpc_length);
+			if (result <= 0) {
+					goto close;
+			}
+			rpc_length -= result;
+			copied += result;
+			// total_length += result;
+
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
+		copied = 0;
+		rpc_length = 4096;
+		// if(times == -1)
+		// 	break;
+		while(1) {
+			int result = write(fd, buffer + copied,
+				rpc_length);
+			if (result <= 0) {
+					goto close;
+			}
+			rpc_length -= result;
+			copied += result;
+			// total_length += result;
+			// printf("send rpc\n");
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
+	//	if (total_length <= 8000000)
+	//	 	printf("buffer:%s\n", buffer);
+		count++;
+		// if (result == 0)
+		// 	break;
+		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
+		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
+	}
+		printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!");
+	if (verbose)
+		printf("Closing TCP socket from %s\n", print_address(&source));
+close:
+	close(fd);
+	free(buffer);
 }
 
 /**
@@ -187,70 +288,19 @@ void tcp_connection(int fd, struct sockaddr_in source)
 }
 
 /**
- * nd_connection() - Handles messages arriving on a given socket.
- * @fd:           File descriptor for the socket over which messages
- *                will arrive.
- * @client_addr:  Information about the client (for messages).
- */
-void nd_outputfile(int fd, struct sockaddr_in source)
-{
-	FILE* file = fopen("debug_server", "w");
-	char *buffer = (char*)malloc(2359104);
-	uint64_t count = 0;
-	uint64_t total_length = 0;
-	while (1) {
-		int result = read(fd, buffer,
-				2359104);
-		int write_total_len = 0, write_len;
-		if (result < 0) {
-			// if (errno == ECONNRESET)
-				break;
-		}
-		while(write_total_len < result) {
-			write_len = fwrite(buffer + write_total_len, 1, result - write_total_len, file);
-			if(write_len < 0)
-				break;
-			write_total_len += write_len;
-		}
-		total_length += result;
-		count++;
-		if (result == 0)
-			break;
-		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
-		std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
-	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
-	if (verbose)
-		printf("Closing TCP socket from %s\n", print_address(&source));
-	close(fd);
-	free(buffer);
-	fclose(file);
-}
-
-void nd_connection(int fd, struct sockaddr_in source);
-/**
  * tcp_server() - Opens a TCP socket, accepts connections on that socket
  * (one thread per connection) and processes messages on those connections.
  * @port:  Port number on which to listen.
  */
 void tcp_server(int port)
 {
-	// char buffer[1000000];
-	// int result = 0;
-	// uint64_t start_cycle = 0, end_cycle = 0;
-	// uint64_t total_length = 0;
-	// int count = 0;
-	// int listen_fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 	int listen_fd = socket(PF_INET, SOCK_STREAM, 0);
-
 	if (listen_fd == -1) {
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
 	int option_value = 1;
-	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
+	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &option_value,
 			sizeof(option_value)) != 0) {
 		printf("Couldn't set SO_REUSEADDR on listen socket: %s",
 			strerror(errno));
@@ -265,10 +315,6 @@ void tcp_server(int port)
 		printf("Couldn't bind to port %d: %s\n", port, strerror(errno));
 		exit(1);
 	}
-	// struct timeval tv;
-	// tv.tv_usec = 100 * 1000;
-	// if (setsockopt(listen_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
-	// 	return;
 	while (1) {
 		struct sockaddr_in client_addr;
 		socklen_t addr_len = sizeof(client_addr);
@@ -280,17 +326,14 @@ void tcp_server(int port)
 				reinterpret_cast<sockaddr *>(&client_addr),
 				&addr_len);
 		if (stream < 0) {
-			printf("Couldn't accept incoming connection: %s\n",
+			printf("Couldn't accept incoming connection: %s",
 				strerror(errno));
 			exit(1);
 		}
-		std::thread thread(nd_connection, stream, client_addr);
-
-		// std::thread thread(nd_outputfile, stream, client_addr);
+		std::thread thread(nd_pingpong_async,stream, client_addr);
 		thread.detach();
 	}
 }
-
 
 /**
  * nd_connection() - Handles messages arriving on a given socket.
@@ -413,92 +456,6 @@ void nd_connection(int fd, struct sockaddr_in source)
 }
 
 /**
- * nd_pingping() - Handles messages arriving on a given socket.
- * @fd:           File descriptor for the socket over which messages
- *                will arrive.
- * @client_addr:  Information about the client (for messages).
- */
-void nd_pingpong(int fd, struct sockaddr_in source)
-{
-	// int flag = 1;
-	char *buffer = (char*)malloc(2359104);
-	int times = 100;
-	int optval;
-	//int cur_length = 0;
-	//bool streaming = false;
-	uint64_t count = 0;
-	uint64_t total_length = 0;
-	// uint64_t start_cycle = 0, end_cycle = 0;
-	struct sockaddr_in sin;
-	socklen_t len = sizeof(sin);
-	// int *int_buffer = reinterpret_cast<int*>(buffer);
-	if (verbose)
-		printf("New ND socket from %s\n", print_address(&source));
-	// setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-	if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
-	    perror("getsockname");
-	else
-	    printf("port number %d\n", ntohs(sin.sin_port));
-	// start_cycle = rdtsc();
-	printf("start connection\n");
-	optval = 0;
-	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
-	// printf("sizeof buffer:%ld\n", sizeof(buffer));
-	while (1) {
-		int copied = 0;
-		int rpc_length = 4000;
-		times--;
-		while(1) {
-			int result = read(fd, buffer + copied,
-				rpc_length);
-			if (result <= 0) {
-					goto close;
-			}
-			rpc_length -= result;
-			copied += result;
-			// total_length += result;
-
-			if(rpc_length == 0)
-				break;
-			// return;
-		}
-		copied = 0;
-		rpc_length = 4000;
-		printf("times:%d\n", times);
-		if(times == -1)
-			break;
-		while(1) {
-			int result = write(fd, buffer + copied,
-				rpc_length);
-			if (result <= 0) {
-					goto close;
-			}
-			rpc_length -= result;
-			copied += result;
-			// total_length += result;
-			// printf("send rpc\n");
-			if(rpc_length == 0)
-				break;
-			// return;
-		}
-	//	if (total_length <= 8000000)
-	//	 	printf("buffer:%s\n", buffer);
-		count++;
-		// if (result == 0)
-		// 	break;
-		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
-		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
-	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
-	if (verbose)
-		printf("Closing TCP socket from %s\n", print_address(&source));
-close:
-	close(fd);
-	free(buffer);
-}
-
-/**
  * udp_server()
  *
  */
@@ -571,6 +528,61 @@ void udp_server(int port)
 
 }
 
+std::mutex mtx;           // mutex for critical section
+std::condition_variable cv;
+unsigned long pending_req = 0;
+bool req_available() {return pending_req >= 1024;}
+
+void nd_pingpong_read(int fd) {
+	char *buffer = (char*)malloc(2359104);
+	while(1) {
+		int result = read(fd, buffer, 2359104);
+		if (result <= 0) {
+				goto close;
+		}
+		std::unique_lock<std::mutex> lck(mtx);
+		pending_req += result;
+		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
+		// cv.notify_one();
+	}
+close:
+	free(buffer);
+}
+
+void nd_pingpong_write(int fd) {
+	char *buffer = (char*)malloc(2359104);
+	while(1) {
+		std::unique_lock<std::mutex> lck(mtx);
+		cv.wait(lck, req_available);
+		int result = write(fd, buffer, 1024);
+		if (result <= 0) {
+			goto close;
+		}
+		pending_req -= result;
+	}
+close:
+	free(buffer);
+	close(fd);
+}
+
+void nd_pingpong_async(int fd, struct sockaddr_in source) {
+	// int flag = 1;
+	int optval = 0;
+	unsigned optlen = 0;
+	// int times = 10000;
+	// int cur_length = 0;
+	// bool streaming = false;
+	// uint64_t start_cycle = 0, end_cycle = 0;
+	// struct sockaddr_in sin;
+	// int *int_buffer = reinterpret_cast<int*>(buffer);
+	// start_cycle = rdtsc();
+	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
+	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+	std::thread thread(nd_pingpong_read, fd);
+	thread.detach();
+	// std::thread thread2(nd_pingpong_write, fd);
+	// thread2.detach();
+}
 /**
  * nd_server()
  *
@@ -582,6 +594,7 @@ void nd_server(int port)
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	// uint64_t total_length = 0;
 	// int count = 0;
+	int i = 0;
 	int listen_fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 	// int listen_fd = socket(PF_INET, SOCK_STREAM, 0);
 
@@ -589,7 +602,6 @@ void nd_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
@@ -625,11 +637,15 @@ void nd_server(int port)
 				strerror(errno));
 			exit(1);
 		}
-		std::thread thread(nd_connection, stream, client_addr);
-		// std::thread thread(nd_outputfile, stream, client_addr);
-
+		// std::thread thread(nd_pingpong, stream, client_addr);
+		std::thread thread(nd_pingpong_async, stream, client_addr);
 		// std::thread thread(nd_connection, stream, client_addr);
+		// cpu_set_t cpuset;
+		// CPU_ZERO(&cpuset);
+		// CPU_SET((i) % 2 * 4, &cpuset);
+		// pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
 		thread.detach();
+		i += 1;	
 	}
 	// while (1) {
 	// 	struct sockaddr_in client_addr;

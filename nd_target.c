@@ -1,11 +1,12 @@
 #include "nd_target.h"
 #include "nd_impl.h"
+#include "net_nd.h"
 static DEFINE_IDA(ndt_conn_queue_ida);
 static LIST_HEAD(ndt_conn_queue_list);
 static DEFINE_MUTEX(ndt_conn_queue_mutex);
 
-static struct workqueue_struct *ndt_conn_wq;
-static struct workqueue_struct *ndt_conn_wq_lat;
+struct workqueue_struct *ndt_conn_wq;
+struct workqueue_struct *ndt_conn_wq_lat;
 
 static struct ndt_conn_port * ndt_port;
 
@@ -13,12 +14,104 @@ static struct ndt_conn_port * ndt_port;
 #define NDT_CONN_SEND_BUDGET		8
 #define NDT_CONN_IO_WORK_BUDGET	128
 
+
 static int cur_io_cpu = 0;
-static inline int queue_cpu(struct ndt_conn_queue *queue)
+
+inline int queue_cpu(struct ndt_conn_queue *queue)
 {
 	return queue->io_cpu;
 	// return 0;
 	// return queue->sock->sk->sk_incoming_cpu;
+}
+
+static inline void ndt_sk_eat_skb(struct sock *sk, struct sk_buff *skb)
+{
+	__skb_unlink(skb, &sk->sk_receive_queue);
+	if(skb->destructor) 
+		skb->destructor(skb);
+	/* get from skb_clone */
+	skb->next = skb->prev = NULL;
+	skb->sk = NULL;
+	skb->destructor = NULL;
+}
+
+/* copied from tcp_read_sock; the only change is adding pass_to_vs_layer before sending tcp ack. */
+int ndt_tcp_read_sock(struct ndt_conn_queue* queue, read_descriptor_t *desc,
+		  sk_read_actor_t recv_actor)
+{
+	struct sock *sk = queue->sock->sk;
+	struct sk_buff *skb;
+	struct tcp_sock *tp = tcp_sk(sk);
+	u32 seq = tp->copied_seq;
+	u32 offset;
+	int copied = 0;
+	// int hol_len = tp->rcvq_space.hol_len, hol_len_diff;
+	if (sk->sk_state == TCP_LISTEN)
+		return -ENOTCONN;
+	while ((skb = tcp_recv_skb(sk, seq, &offset)) != NULL) {
+		if (offset < skb->len) {
+			int used;
+			size_t len;
+
+			len = skb->len - offset;
+			/* Stop reading if we hit a patch of urgent data */
+			if (tp->urg_data) {
+				WARN_ON(true);
+				u32 urg_offset = tp->urg_seq - seq;
+				if (urg_offset < len)
+					len = urg_offset;
+				if (!len)
+					break;
+			}
+			used = recv_actor(desc, skb, offset, len);
+			if (used <= 0) {
+				if (!copied)
+					copied = used;
+				break;
+			} else if (used <= len) {
+				seq += used;
+				copied += used;
+				offset += used;
+			}
+		}
+		// if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN) {
+		// 	ndt_sk_eat_skb(sk, skb);
+		// 	++seq;
+		// 	break;
+		// }
+		// ndt_sk_eat_skb(sk, skb);
+		if (!desc->count)
+			break;
+		WRITE_ONCE(tp->copied_seq, seq);
+	}
+	WRITE_ONCE(tp->copied_seq, seq);
+	/* parsing packet; not sure if it should includes in while loop when accounting budget */
+	pass_to_vs_layer(queue, &queue->receive_queue);
+	/* get hol alloc diff */
+	// hol_len_diff = atomic_read(&tp->hol_len) - hol_len;
+
+	tcp_rcv_space_adjust(sk);
+	// tp->rcvq_space.hol_len += hol_len_diff;
+	// copied -= hol_len_diff;
+	/* Clean up data we have read: This will do ACK frames. */
+	if (copied > 0) {
+		tcp_recv_skb(sk, seq, &offset);
+		// if(raw_smp_processor_id() == 8)
+		// 	printk("may send ack");
+		if(atomic_read(&tp->hol_alloc) == 0) {
+			tcp_cleanup_rbuf(sk, copied);
+			if(hrtimer_active(&queue->hol_timer)) {
+				hrtimer_cancel(&queue->hol_timer);
+			}
+		} else {
+			/* setup a hrtimer */
+			if(!hrtimer_active(&queue->hol_timer)) {
+				hrtimer_start(&queue->hol_timer, ns_to_ktime(queue->hol_timeout_us *
+					NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+			}
+		}
+	}
+	return 0;
 }
 
 void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
@@ -31,12 +124,10 @@ void ndt_conn_schedule_release_queue(struct ndt_conn_queue *queue)
 	spin_unlock(&queue->state_lock);
 }
 
-static inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue)
+inline bool ndt_conn_is_latency(struct ndt_conn_queue *queue)
 {
 	return queue->prio_class == 1;
 }
-
-
 void ndt_conn_accept_work(struct work_struct *w)
 {
 	struct ndt_conn_port *port =
@@ -370,112 +461,17 @@ static int ndt_recv_skbs(read_descriptor_t *desc, struct sk_buff *orig_skb,
 {
 	struct ndt_conn_queue  *queue = (struct ndt_conn_queue *)desc->arg.data;
 	struct sk_buff *skb;
-	// bool state;
-	// skb_dump(KERN_WARNING, orig_skb, false);
-	// pr_info("orignal skb address:%p\n", orig_skb);
-	// pr_info("origianl skb has fraglist:%d\n", skb_has_frag_list(orig_skb));
-	// pr_info("origianl skb fraglist:%p\n", skb_shinfo(orig_skb)->frag_list);
-	// if(max_pkts == 0) {
-	// if(manual_create && orig_len > 10000 && orig_offset == 0) {
-	// 	struct sk_buff* cloned = skb_copy(orig_skb, GFP_KERNEL);
-	// 	WARN_ON(!cloned);
-	// 	manual_create = false;
-	// 	int split_len = orig_len / 2;
-	// 	orig_offset = split_len;
-	// 	pskb_trim(cloned, split_len);
 
-	// 	__skb_queue_tail(&queue->receive_queue, cloned);
-	// 	ND_SKB_CB(cloned)->orig_offset = 0;
-	// }
-	// if(orig_offset > 0) {
-	// 	// pr_info("orig_offset:%d\n", orig_offset);
-	// 	// ND_SKB_CB(skb)->orig_offset = orig_offset;
-	// 	// skb = pskb_extract(orig_skb, orig_offset, orig_len, GFP_KERNEL);
-	// 	// WARN_ON(!skb);
-	// 	// state = pskb_may_pull(orig_skb, orig_offset);
-	// 	// pr_info("pskb may pull:%d\n", state);
-	// 	// __skb_pull(orig_skb, orig_offset);
-	// } else  {
-		
-	// 	// pr_info("offset:%d\n", orig_offset);
-	// 	// pr_info("len:%lmd\n", orig_len);
-
-	// 	// skb = pskb_extract(orig_skb, orig_offset, orig_len, GFP_KERNEL);
-	// 	// WARN_ON(!skb);
-
-	// 	// skb = skb_clone(orig_skb, GFP_KERNEL);
-	// }
-	// WARN_ON(skb_dst(orig_skb) == NULL);
-	skb = skb_clone(orig_skb, GFP_KERNEL);
+	// skb = skb_clone(orig_skb, GFP_KERNEL);
+	ndt_sk_eat_skb(queue->sock->sk, orig_skb);
+	skb = orig_skb;
 	__skb_queue_tail(&queue->receive_queue, skb);
-
 	ND_SKB_CB(skb)->orig_offset = orig_offset;
-
-	// pr_info("skb has fraglist:%d\n", skb_has_frag_list(skb));
-	// pr_info("skb fraglist:%p\n", skb_shinfo(skb)->frag_list);
-	// max_pkts += orig_len;
-	// pr_info("max pkts:%u\n", max_pkts);
-	// skb_dump(KERN_WARNING, skb, true);
-		// pr_info("tcp skb cb seq:%u\n", TCP_SKB_CB(skb)->seq);
-		// if(skb_has_frag_list(orig_skb)) {
-		// 	list_skb = skb_shinfo(orig_skb)->frag_list;
-		// 	pr_info("origin list skb ref count:%d\n", refcount_read(&list_skb->users));
-		// 	pr_info("list_skb == list_skb:%d\n", list_skb == skb_shinfo(skb)->frag_list);
-		// 	kfree_skb_list(skb_shinfo(orig_skb)->frag_list);
-		// 	skb_shinfo(orig_skb)->frag_list = NULL;
-		// }
-		if(skb_has_frag_list(skb)) {
-			// list_skb = skb_shinfo(skb)->frag_list;
-			// skb_shinfo(skb)->frag_list = NULL;
-			// pr_info("origin skb ref count:%d\n", refcount_read(&orig_skb->users));
-			// pr_info("len diff:%d %d\n", skb->len, orig_skb->len);
-			// pr_info("true size diff :%d %d\n", skb->truesize, orig_skb->truesize);
-			// pr_info("data len diff:%d %d\n", skb->data_len, orig_skb->data_len );
-		 	// skb_dump(KERN_WARNING, skb, false);
-			// pr_info("new ip header src:%u, old ip header src:%u\n", ip_hdr(skb)->saddr, ip_hdr(orig_skb)->saddr);
-		 	// pr_info("skb_end_offset:%u , %u\n", skb_end_offset(skb), skb_end_offset(orig_skb));
-			// pr_info("headlen:%u, %u\n", skb_headlen(skb), skb_headlen(orig_skb));
-			 // skb_dump(KERN_WARNING, orig_skb, false);
-
-			ND_SKB_CB(skb)->has_old_frag_list = 1;
-			// pr_info("skb seq at frag :%u\n", ND_SKB_CB(skb)->seq);
-			/* clone each skb */
-			// while(list_skb) {
-			// 	// pr_info("clone skb\n");
-			// 	/* fraglist don't have to clone */
-			// 	// list_skb_clone = skb_clone(list_skb, GFP_KERNEL);
-			// 	// skb_dump(KERN_WARNING, list_skb, true);
-			// 	pr_info("list skb ref count:%d\n", refcount_read(&list_skb->users));
-			// 	list_skb_next = list_skb->next;
-			// 	skb->truesize -= list_skb->truesize;
-			// 	skb->data_len -= list_skb->len;
-			// 	skb->len -= list_skb->len;
-			// 	__skb_queue_tail(&queue->receive_queue, list_skb);
-			// 	list_skb = list_skb_next;
-			// }
-			// pr_info("original skb data len:%d\n", skb->data_len);
-			// int calc_size = skb_headlen(skb), i;
-			// int calc_size = 0, i;
-			// for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-			// 	calc_size +=  skb_frag_size(&skb_shinfo(skb)->frags[i]);
-			// }
-			// pr_info("real skb len:%d\n", calc_size);
-
-		} else {
-			ND_SKB_CB(skb)->has_old_frag_list = 0;
-		}
-	// 	max_pkts += 1;
-	// } else {
-	// 	skb = skb_clone(orig_skb, GFP_KERNEL);
-	// 	pr_info("new skb address:%p\n", skb);
-
-	// 	pr_info("new skb has fraglist:%p\n", skb_shinfo(skb)->frag_list);
-	// 	if(skb_has_frag_list(skb)) {
-	// 		skb_walk_frags(skb, list_skb)
-	// 			pr_info("skb cloned(listskb):%d\n", skb_cloned(list_skb));
-	// 	}
-	// 	kfree_skb(skb);
-	// }
+	if(skb_has_frag_list(skb)) {
+		ND_SKB_CB(skb)->has_old_frag_list = 1;
+	} else {
+		ND_SKB_CB(skb)->has_old_frag_list = 0;
+	}
 	desc->count -= 1;
 	return orig_len;
 }
@@ -487,17 +483,16 @@ int ndt_conn_try_recv(struct ndt_conn_queue *queue,
 	int ret = 0;
 	struct socket *sock = queue->sock;
 	read_descriptor_t desc;
-
+	WARN_ON(!sock);
 	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
 		return -EBUSY;
-
 	desc.arg.data = queue;
 	desc.error = 0;
 	desc.count = budget; /* give more than one skb per call */
 // recv:
 	lock_sock(sock->sk);
 	/* sk should be locked here, so okay to do read_sock */
-	ret = sock->ops->read_sock(sock->sk, &desc, ndt_recv_skbs);
+	ret = ndt_tcp_read_sock(queue, &desc, ndt_recv_skbs);
 	release_sock(sock->sk);
 
 	(*recvs) += budget - desc.count;
@@ -616,13 +611,36 @@ void ndt_conn_io_work(struct work_struct *w)
 {
 	struct ndt_conn_queue *queue =
 		container_of(w, struct ndt_conn_queue, io_work);
-	bool pending;
+	bool pending, hol = false;
 	int ret, ops = 0;
-	// int optlen, bufsize;
+
+	int optlen, bufsize;
 	sock_rps_record_flow(queue->sock->sk);
+	/* To Do: check if pending skbs are in the queue; reinsert first, if fails, sleep and register hrtimer */
+	// spin_lock_bh(&queue->hol_lock);
+	// if(queue->hol_skb) {
+	// 	WARN_ON(!hrtimer_active(&queue->hol_timer));
+	// 	// local_bh_disable();
+	// 	ret = nd_rcv(queue->hol_skb);
+	// 	if(ret != -1) {
+	// 		/* cancel hrtimer */
+	// 		hrtimer_cancel(&queue->hol_timer);
+	// 		queue->hol_skb = NULL;
+	// 	} else {
+	// 		hol = true;
+	// 	}
+	// 	// local_bh_enable();
+	// }
+	// spin_unlock_bh(&queue->hol_lock);
+	if(hol) {
+		// ret = kernel_getsockopt(queue->sock, SOL_SOCKET, SO_RCVBUF,
+		// (char *)&bufsize, &optlen);
+		// pr_info("buffer size receiver:%d\n", bufsize);
+		// printk("hol return :%d \n", raw_smp_processor_id());
+		return;
+	}
 	do {
 		pending = false;
-
 		ret = ndt_conn_try_recv(queue, NDT_CONN_IO_WORK_BUDGET - ops, &ops);
 		if (ret > 0) {
 			pending = true;
@@ -632,7 +650,9 @@ void ndt_conn_io_work(struct work_struct *w)
 			return;
 		}
 		/* parsing packet; not sure if it should includes in while loop when accounting budget */
-		pass_to_vs_layer(queue, &queue->receive_queue);
+		// ret = pass_to_vs_layer(queue, &queue->receive_queue);
+		// if(ret < 0)
+		// 	return;
 		// pr_info("ops:%d\n", ops);
 		// ret = ndt_conn_try_send(queue, NDT_CON_SEND_BUDGET, &ops);
 		// if (ret > 0)
@@ -658,6 +678,54 @@ void ndt_conn_io_work(struct work_struct *w)
 	}
 }
 
+void ndt_delay_ack_work(struct work_struct *w) {
+	struct ndt_conn_queue *queue =
+		container_of(w, struct ndt_conn_queue, delay_ack_work);
+	struct socket *sock = queue->sock;
+	WARN_ON(!sock);
+	if (unlikely(!sock))
+		return;
+	/* try to send delay*/
+	lock_sock(sock->sk);
+
+	// if(raw_smp_processor_id() == 8)
+//	pr_info("send delay ack; hol alloc:%d\n", atomic_read(&tcp_sk(sock->sk)->hol_alloc));
+	__tcp_send_ack(sock->sk, tcp_sk(sock->sk)->rcv_nxt);
+	release_sock(sock->sk);
+	if(atomic_read(&tcp_sk(sock->sk)->hol_alloc) != 0) {
+		// if(!hrtimer_active(&queue->hol_timer))
+			hrtimer_start(&queue->hol_timer, ns_to_ktime(queue->hol_timeout_us *
+					NSEC_PER_USEC), HRTIMER_MODE_REL_PINNED_SOFT);
+		return;
+	}
+}
+
+enum hrtimer_restart ndt_hol_timer_handler(struct hrtimer *timer)
+{
+	struct ndt_conn_queue *queue =
+		container_of(timer, struct ndt_conn_queue,
+			hol_timer);
+// 	struct ndt_channel_entry* entry;
+// 	int ret = 0;
+// 	spin_lock_bh(&queue->hol_lock);
+//     WARN_ON(!queue->hol_skb);
+// 	nd_handle_hol_data_pkt(queue->hol_skb);
+// 	/* clean hol_skb state */
+// 	queue->hol_skb = NULL;
+// 	spin_unlock_bh(&queue->hol_lock);
+// 	// printk("timer handler: set hol skb to be null:%d\n", raw_smp_processor_id());
+// resume_channel:
+
+ 	/* send the delay ack */
+	if(ndt_conn_is_latency(queue)) {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->delay_ack_work);
+	} else {
+		queue_work_on(queue_cpu(queue), ndt_conn_wq, &queue->delay_ack_work);
+	}
+	return HRTIMER_NORESTART;
+}
+
+
 int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		struct socket *newsock)
 {
@@ -671,10 +739,20 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 	INIT_WORK(&queue->release_work, ndt_conn_release_queue_work);
 	INIT_WORK(&queue->io_work, ndt_conn_io_work);
 	queue->sock = newsock;
+	/* initialize the recvspace */
+	tcp_sk(queue->sock->sk)->rcvq_space.hol_len = 0;
 	queue->port = port;
 	queue->snd_request = NULL;
+	/* initialize the hrtimer for HOL */
+	hrtimer_init(&queue->hol_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_SOFT);
+	queue->hol_timer.function = &ndt_hol_timer_handler;
+	queue->hol_skb = NULL;
+	queue->hol_timeout_us = 1000;
+	INIT_WORK(&queue->delay_ack_work, ndt_delay_ack_work);
+	// INIT_LIST_HEAD(&queue->hol_list);
 	// queue->nr_cmds = 0;
 	spin_lock_init(&queue->state_lock);
+	spin_lock_init(&queue->hol_lock);
 	queue->state = NDT_CONN_Q_CONNECTING;
 	INIT_LIST_HEAD(&queue->free_list);
 	init_llist_head(&queue->resp_list);

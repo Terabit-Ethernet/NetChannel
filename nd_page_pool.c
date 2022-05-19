@@ -130,7 +130,6 @@ void nd_page_pool_recycle_pages(struct sk_buff *skb) {
     }
 	if (skb->cloned && atomic_read(&skb_shinfo(skb)->dataref) > 1) {
         // WARN_ON_ONCE(true);
-        printk("dataref:%d\n", atomic_read(&skb_shinfo(skb)->dataref) );
 		return;
     }
     /* free pages of the head skb */

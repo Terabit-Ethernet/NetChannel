@@ -109,11 +109,11 @@ int nd_pq_size(struct nd_pq* pq);
 // 	struct inet_sock *inet);
 
 /*ND incoming function*/
-void pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue);
+int pass_to_vs_layer(struct ndt_conn_queue *ndt_queue, struct sk_buff_head* queue);
 // bool nd_try_send_token(struct sock *sk);
 // void nd_get_sack_info(struct sock *sk, struct sk_buff *skb);
 // enum hrtimer_restart nd_new_epoch(struct hrtimer *timer);
-
+int nd_handle_hol_data_pkt(struct sk_buff *skb);
 int nd_handle_data_pkt(struct sk_buff *skb);
 // int nd_handle_flow_sync_pkt(struct sk_buff *skb);
 int nd_handle_sync_pkt(struct sk_buff *skb);
@@ -144,8 +144,8 @@ struct nd_conn_request* construct_ack_req(struct sock* sk, gfp_t flag);
 
 // struct sk_buff* construct_flow_sync_pkt(struct sock* sk, __u64 message_id, 
 // 	uint32_t message_size, __u64 start_time);
-struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority, __u32 prev_grant_nxt,
-	 __u32 grant_nxt, bool handle_rtx);
+// struct sk_buff* construct_token_pkt(struct sock* sk, unsigned short priority, __u32 prev_grant_nxt,
+// 	 __u32 grant_nxt, bool handle_rtx);
 struct sk_buff* construct_fin_pkt(struct sock* sk);
 struct sk_buff* construct_ack_pkt(struct sock* sk, __be32 rcv_nxt);
 struct sk_buff* construct_rts_pkt(struct sock* sk, unsigned short iter, int epoch, int remaining_sz);

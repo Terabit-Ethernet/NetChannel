@@ -1,7 +1,9 @@
+#include <cassert>
 #include <ctime>
 #include<chrono>
 #include <errno.h>
 #include <iostream>
+#include <fstream>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
@@ -19,7 +21,10 @@
 #include <sys/types.h>
 #include <inttypes.h>
 #include <vector>
+#include <queue>
 #include <thread>
+#include <mutex>          // std::mutex
+#include <condition_variable> // std::condition_variable
 
 //#include "../uapi_linux_nd.h"
 #include "test_utils.h"
@@ -55,6 +60,21 @@ void close_fd(int fd)
 	}
 }
 
+// /**
+//  * shutdown_fd() - Helper method for "close" test: sleeps a while, then shuts
+//  * down an fd
+//  * @fd:   Open file descriptor to shut down.
+//  */
+// void shutdown_fd(int fd)
+// {
+// 	sleep(1);
+// 	if (shutdown(fd, 0) >= 0) {
+// 		printf("Shutdown fd %d\n", fd);
+// 	} else {
+// 		printf("Shutdown failed on fd %d: %s\n", fd, strerror(errno));
+// 	}
+// }
+
 /**
  * print_help() - Print out usage information for this program.
  * @name:   Name of the program (argv[0])
@@ -70,39 +90,6 @@ void print_help(const char *name)
 		"--sp       src port of connection \n"
 		"--seed       Used to compute message contents (default: 12345)\n",
 		name);
-}
-
-/* test correctness */
-void send_file(std::string filename, int socket_fd,  struct sockaddr *dest) {
-	int buffer_size = 10000000, nread;
-	char *buf = (char*)malloc(buffer_size);
-	FILE *file = fopen(filename.c_str(), "r");
-
-	if (connect(socket_fd, dest, sizeof(struct sockaddr_in)) == -1) {
-		printf("Couldn't connect to dest %s\n", strerror(errno));
-		exit(1);
-	}
-	
-	while ((nread = fread(buf, 1, buffer_size, file)) > 0) {
-		int write_len = 0;
-		while(write_len < nread) {
-	    	int result = write(socket_fd, buf + write_len, nread - write_len);	
-			if( result < 0 ) {
-				if(errno == EMSGSIZE) {
-					// printf("Socket write failed: %s %d\n", strerror(errno), result);
-					break;
-				}
-			} else {
-				write_len += result;
-			}
-		}
-	}
-	if(feof(file)) {
-		std::cout << "finish sending" << std::endl;
-	}
-	sleep(5);
-	fclose(file);
-	return;
 }
 
 /**
@@ -157,7 +144,7 @@ void test_tcpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count; i++) {
@@ -233,7 +220,7 @@ void test_udpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 	    for (int i = 0; i < count * 100; i++) {
 	    	int result = sendto(fd, buffer, 64000, MSG_CONFIRM, dest, sizeof(struct sockaddr_in));			
@@ -307,7 +294,7 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count * 100; i++) {
@@ -334,12 +321,16 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 	}
 }
 
-void test_ndping(int fd, struct sockaddr *dest, char* buffer)
+void test_ndping(int fd, struct sockaddr *dest)
 {
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
+	char *buffer = (char*)malloc(10000000);
 	// uint64_t flow_size = 10000000000000;
-	int times = 120;
+	int times = 180;
+	int i;
+	for (i = 0; i < 8000000; i++)
+		buffer[i] = (rand()) % 26 + 'a';
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
@@ -349,7 +340,6 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	printf("connect done\n");
 	    // for (int i = 0; i < count * 100; i++) {
 		while(1) {
-
 	    	int result = write(fd, buffer, buffer_size);	
 			uint64_t end = rdtsc();
 
@@ -390,16 +380,124 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	// }
 }
 
+std::queue<uint64_t> time_q;
+std::mutex mtx;           // mutex for critical section
+std::condition_variable cv;
+int limit = 1024;
+bool queue_available() {return time_q.size() < (long unsigned int)limit;}
+
+
+void test_ndping_send(int fd, struct sockaddr *dest)
+{
+	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
+	// uint32_t buffer_size = 10000000;
+	char *buffer = (char*)malloc(1000000);
+	// uint64_t flow_size = 10000000000000;
+	int times = 60;
+	int flag = 0;
+	// int i;
+	// for (i = 0; i < 8000000; i++)
+	// 	buffer[i] = (rand()) % 26 + 'a';
+	uint64_t write_len = 0;
+	uint64_t start_time = rdtsc();
+	int q_depth = 64, count = 0;
+	    // for (int i = 0; i < count * 100; i++) {
+		while(1) {
+
+	    	int total = 0;
+			std::unique_lock<std::mutex> lck(mtx);
+			cv.wait(lck, queue_available);
+			uint64_t end = rdtsc();
+			// flag = (q_depth == count + 1)? MSG_EOR : MSG_EOR;
+			count = (count + 1) % q_depth;
+			// flag = (limit - time_q.size() == 1)? MSG_EOR: MSG_EOR;
+			flag = MSG_EOR;
+			while(total < 4096) {
+				int result = send(fd, buffer, 4096 - total, flag);	
+				if( result < 0 ) {
+					if(errno == EMSGSIZE) {
+						printf("Socket write failed: %s %d\n", strerror(errno), result);
+						break;
+					}
+				} else {
+					write_len += result;
+					total += result;
+				}
+			}
+			// time_q.push(end);
+			if(to_seconds(end-start_time) > times)
+				break;
+		
+		}
+		printf("%" PRIu64 "\n", write_len);
+}
+
+void test_ndping_recv(int fd, struct sockaddr *dest, int id)
+{
+	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
+	uint32_t buffer_size = 1000000;
+	char *buffer = (char*)malloc(1000000);
+	std::vector<double> latency;
+	std::ofstream file;
+	// printf("call recv\n");
+	file.open("result_tcp_pingpongasync_" + std::to_string(id));
+	// printf("finish initilize file\n");
+	// uint64_t flow_size = 10000000000000;
+	int times = 70;
+	// int i;
+	// for (i = 0; i < 8000000; i++)
+	// 	buffer[i] = (rand()) % 26 + 'a';
+	uint64_t write_len = 0;
+	uint64_t start_time = rdtsc();
+	    // for (int i = 0; i < count * 100; i++) {
+	uint64_t remain = 0;
+	while(1) {
+		int result = read(fd, buffer, buffer_size);
+		if( result < 0 ) {
+			if(errno == EMSGSIZE) {
+				// printf("Socket write failed: %s %d\n", strerror(errno), result);
+				break;
+			}
+		} else {
+			write_len += result;
+			remain += result;
+		}
+		while(remain >= 1024) {
+			std::unique_lock<std::mutex> lck(mtx);
+			uint64_t end = rdtsc();
+			uint64_t start = time_q.front();
+			if(time_q.empty())
+				assert(false);	
+			latency.push_back(to_seconds(end - start));
+			time_q.pop();
+			remain -= 1024;
+			cv.notify_one();
+		}
+		uint64_t end = rdtsc();
+		if(to_seconds(end-start_time) > times)
+			break;
+	}
+	printf("finish\n");
+	for(uint32_t i = 0; i < latency.size(); i++) {
+		file << "finish time: " << latency[i] << "\n"; 
+		// std::cout << "finish time: " << latency[i] << "\n"; 
+	}
+	file.close();
+
+}
 /**
- * nd_pingping() - Handles messages arriving on a given socket.
+ * tcp_pingping() - Handles messages arriving on a given socket.
  * @fd:           File descriptor for the socket over which messages
  *                will arrive.
  * @client_addr:  Information about the client (for messages).
  */
-void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
+void test_tcppingpong(int fd, struct sockaddr *dest, int id)
 {
 	// int flag = 1;
 	int times = 90;
+	char buffer[5000];
+	std::ofstream file;
+	file.open("result_tcp_pingpong_"+ std::to_string(id));
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
@@ -465,26 +563,96 @@ close:
 	sleep(10);
 
 	for(uint32_t i = 0; i < latency.size(); i++) {
-		std::cout << "finish time: " << latency[i] << "\n"; 
+		file << "finish time: " << latency[i] << "\n"; 
+		// std::cout << "finish time: " << latency[i] << "\n"; 
 	}
+	file.close();
+	close(fd);
 	return;
 }
 
 /**
- * test_whileloop() - do nothing but a while loop
+ * nd_pingping() - Handles messages arriving on a given socket.
+ * @fd:           File descriptor for the socket over which messages
+ *                will arrive.
+ * @client_addr:  Information about the client (for messages).
  */
-void test_whileloop()
+void test_ndpingpong(int fd, struct sockaddr *dest, int id)
 {
 	// int flag = 1;
-	int times = 1800;
-	uint64_t start_time = rdtsc();;
+	int times = 90;
+	// int cur_length = 0;
+	// bool streaming = false;
+	uint64_t count = 0;
+	// uint64_t total_length = 0;
+	char buffer[5000];
+	std::ofstream file;
+	file.open("result_nd_pingpong_"+ std::to_string(id));
+	uint64_t start_time;
+	std::vector<double> latency;
+	printf("reach here1\n");
+	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
+		printf("Couldn't connect to dest %s\n", strerror(errno));
+		exit(1);
+	}
+	start_time = rdtsc();
 	while (1) {
-		uint64_t  end;
+		int copied = 0;
+		int rpc_length = 4096;
+		// times--;
+		// if(times == 0)
+		// 	break;
+		uint64_t start = rdtsc(), end;
+		while(1) {
+			int result = write(fd, buffer + copied,
+				rpc_length);
+			if (result <= 0) {
+				printf("goto close\n");
+					goto close;
+			}
+			rpc_length -= result;
+			copied += result;
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
+		copied = 0;
+		rpc_length = 4096;
+		while(1) {
+			int result = read(fd, buffer + copied,
+				rpc_length);
+			if (result <= 0) {
+					printf("goto close2\n");
+					goto close;
+			}
+			// printf("result:%d\n",result);
+			// printf("receive rpc times:%d \n", times);
+			rpc_length -= result;
+			copied += result;
+			if(rpc_length == 0)
+				break;
+			// return;
+		}
 		end = rdtsc();
+		latency.push_back(to_seconds(end-start));
+		// printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
 		if(to_seconds(end-start_time) > times)
 			break;
-	}
+	//	if (total_length <= 8000000)
+	//	 	printf("buffer:%s\n", buffer);
+		count++;
 
+	}
+		// printf( "total len:%" PRIu64 "\n", total_length);
+		// printf("done!");
+close:
+	sleep(10);
+	for(uint32_t i = 0; i < latency.size(); i++) {
+		file << "finish time: " << latency[i] << "\n"; 
+		// std::cout << "finish time: " << latency[i] << "\n"; 
+	}
+	file.close();
+	close(fd);
 	return;
 }
 
@@ -651,6 +819,7 @@ int main(int argc, char** argv)
 	struct sockaddr *dest;
 	struct addrinfo hints;
 	char *host, *port_name;
+ 	std::vector<std::thread> workers;
 	// char buffer[8000000] = "abcdefgh\n";
 	char *buffer = (char*)malloc(10000000);
 	// buffer[63999] = 'H';
@@ -716,6 +885,15 @@ int main(int argc, char** argv)
 			nextArg++;
 			srcPort = get_int(argv[nextArg],
 				"Bad srcPort %s; must be positive integer\n");
+		} else if (strcmp(argv[nextArg], "--limit") == 0) {
+			if (nextArg == (argc-1)) {
+				printf("No value provided for %s option\n",
+					argv[nextArg]);
+				exit(1);
+			}
+			nextArg++;
+			limit = get_int(argv[nextArg],
+				"Bad limit %s; must be positive integer\n");
 		} else {
 			printf("Unknown option %s; type '%s --help' for help\n",
 				argv[nextArg], argv[0]);
@@ -765,27 +943,6 @@ int main(int argc, char** argv)
 		}
 
 		for ( ; nextArg < argc; nextArg++) {
-			// if (strcmp(argv[nextArg], "close") == 0) {
-			// 	test_close();
-			// } else if (strcmp(argv[nextArg], "fill_memory") == 0) {
-			// 	test_fill_memory(fd, dest, buffer);
-			// } else if (strcmp(argv[nextArg], "invoke") == 0) {
-			// 	test_invoke(fd, dest, buffer);
-			// } else if (strcmp(argv[nextArg], "ioctl") == 0) {
-			// 	test_ioctl(fd, count);
-			// } else if (strcmp(argv[nextArg], "poll") == 0) {
-			// 	test_poll(fd, buffer);
-			// } else if (strcmp(argv[nextArg], "send") == 0) {
-			// 	test_send(fd, dest, buffer);
-			// } else if (strcmp(argv[nextArg], "read") == 0) {
-			// 	test_read(fd, count);
-			// } else if (strcmp(argv[nextArg], "rtt") == 0) {
-			// 	test_rtt(fd, dest, buffer);
-			// } else if (strcmp(argv[nextArg], "shutdown") == 0) {
-			// 	test_shutdown(fd);
-			// } else if (strcmp(argv[nextArg], "stream") == 0) {
-			// 	test_stream(fd, dest, buffer);
-			// } else 
 			if (strcmp(argv[nextArg], "tcp") == 0) {
 				test_tcp(host, port);
 			} else if (strcmp(argv[nextArg], "tcpstream") == 0) {
@@ -798,37 +955,59 @@ int main(int argc, char** argv)
 				test_ndstream(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndping") == 0) {
 				printf("call ndping\n");
-				test_ndping(fd, dest, buffer);
+				workers.push_back(std::thread(test_ndping, fd, dest));
 			} else if (strcmp(argv[nextArg], "tcpping") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				printf("call tcpping\n");
-				test_ndping(fd, dest, buffer);
+				workers.push_back(std::thread(test_ndping, fd, dest));
+			} else if (strcmp(argv[nextArg], "tcpppasync") == 0) {
+				fd = socket(AF_INET, SOCK_STREAM, 0);
+				std::cout << "limit " <<limit << std::endl;
+
+				if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
+					printf("Couldn't connect to dest %s\n", strerror(errno));
+					exit(1);
+				}
+				printf("reach here tcp async\n");
+				workers.push_back(std::thread(test_ndping_send, fd, dest));
+				// workers.push_back(std::thread(test_ndping_recv, fd, dest, srcPort - 10000));
+			} else if (strcmp(argv[nextArg], "ndppasync") == 0) {
+				std::cout << "limit " <<limit << std::endl;
+
+				if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
+					printf("Couldn't connect to dest %s\n", strerror(errno));
+					exit(1);
+				}
+				printf("reach here\n");
+				workers.push_back(std::thread(test_ndping_send, fd, dest));
+				// workers.push_back(std::thread(test_ndping_recv, fd, dest, srcPort - 10000));
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
 				printf("call ndpingpong\n");
 				optval = 6;
-                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
-				test_ndpingpong(fd, dest, buffer);
-			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
-				printf("call whileloop\n");
-				test_whileloop();
-			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
+				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
+				// cpu_set_t cpuset;
+				// CPU_ZERO(&cpuset);
+				workers.push_back(std::thread(test_ndpingpong, fd, dest, i));
+				// CPU_SET(i % 2  * 4, &cpuset);
+				// pthread_setaffinity_np(workers[workers.size() - 1].native_handle(),
+				// 								sizeof(cpu_set_t), &cpuset);
+			} else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				optval = 7;
+				optval = 6;
 				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
 				printf("optval:%d\n", optval);
-				test_ndpingpong(fd, dest, buffer);
-			} else if (strcmp(argv[nextArg], "sendfile") == 0) {
-				// fd = socket(AF_INET, SOCK_STREAM, 0);
-				send_file("debug", fd, dest);
-			}
+				workers.push_back(std::thread(test_tcppingpong, fd, dest, i));
+			} 
 			 else {
 				printf("Unknown operation '%s'\n", argv[nextArg]);
 				exit(1);
 			}
 		}
-		close(fd);
-		printf("i:%d\n", i);
+	}
+       std::this_thread::sleep_for (std::chrono::seconds(100));
+
+	for(unsigned i = 0; i < workers.size(); i++) {
+		workers[i].join();
 	}
 	free(buffer);
 	exit(0);
