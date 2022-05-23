@@ -85,22 +85,84 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
 
 3. Figure 6d (performance isolation experiment),
 
- On the server side:
+    On the server side:
+
+    ```
+    sudo ./run_mix_flow.sh 
+    cd util/
+    sudo -s
+    ./run_pingpong.sh 1 -20
+    ./run_server.sh 8
+    ```
+
+    On the client side:
+
+    ```
+    sudo ./run_mix_flow.sh
+    cd util/
+    sudo -s
+    ./run_client_oto.sh 8 nd
+    ./run_pingpong_setup1.sh 1 nd -20
+    ```
+### io_uring bench setup
+
+ 1. Clone liburing and build
 
  ```
- sudo ./run_mix_flow.sh 
+ git clone https://github.com/axboe/liburing
+ cd liburing
+ make
+ cd ..
+ ```
+ For artifact evaluation, we have installed the liburing for you, you can jump into the step 3.
+
+ 2. Set liburing-path in Makefile in this directory
+ 
+ Example:
+
+ ```
+ liburing-path = /home/midhul/liburing
+ ```
+
+ 3. build iouring_bench
+ ```
+ make iouring_bench iouring_bench_nc
+ ```
+
+ 4. Figure 6a (data copy processing parallelism)
+
+ On the server side,
+ 
+ ```
+ sudo ./run_single_flow_set_up.sh 
  cd util/
- sudo -s
- ./run_pingpong.sh 1 -20
- ./run_server.sh 8
+ sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
  ```
  
- On the client side:
-
+ On the client side,
+ 
  ```
- sudo ./run_mix_flow.sh
+ sudo ./run_single_flow_set_up.sh 
+ sudo sysctl  net.nd.nd_num_dc_thread=0
  cd util/
- sudo -s
- ./run_client_oto.sh 8 nd
- ./run_pingpong_setup1.sh 1 nd -20
+ sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
  ```
+
+ 5. Figure 6b (network processing parallelism) 
+
+ On the server side,
+ 
+ ```
+ sudo ./run_np.sh 
+ cd util/
+ sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
+ ``` 
+ 
+ On the client side,
+ 
+ ```
+ sudo ./run_np.sh 
+ cd util/
+ sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 180
+ ```
+ 
