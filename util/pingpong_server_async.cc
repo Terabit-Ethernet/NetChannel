@@ -27,9 +27,6 @@
 /* Log events to standard output. */
 bool verbose = false;
 
-/* Port number on which to listen (both for Homa and TCP); if multiple
- * Homa ports are in use, they will be consecutive numbers starting with
- * this. */
 int port = 4000;
 
 /* True that a specific format is expected for incoming messages, and we
@@ -180,7 +177,7 @@ void print_help(const char *name)
 		"The following options are supported:\n\n"
 		"--help       Print this message and exit\n"
 		"--port       (First) port number to use (default: 4000)\n"
-		"--num_ports  Number of Homa ports to open (default: 1)\n"
+		"--num_ports  Number of ports to open (default: 1)\n"
 		"--validate   Validate contents of incoming messages (default: false\n"
 		"--verbose    Log events as they happen (default: false)\n",
 		name);

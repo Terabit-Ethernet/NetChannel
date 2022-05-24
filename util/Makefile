@@ -1,4 +1,3 @@
-# Makefile to build various testing programs for Homa.
 liburing-path = /home/midhul/liburing
 CFLAGS := -Wall -Werror -g -fno-strict-aliasing -O3 -I..
 
@@ -32,9 +31,6 @@ iouring_bench.o: iouring_bench.c test_utils.h
 %.o: %.c test_utils.h 
 	cc -c $(CFLAGS) $< -o $@
 	
-# homa_api.o: ../homa_api.c
-# 	cc -c $(CFLAGS) $< -o $@
-
 clean:
 	rm -f $(BINS) $(OBJS) $(LIB_OBJS)
 

@@ -103,11 +103,6 @@ struct ndhdr {
 	//  */
 	// __u16 gro_count;
 	
-	// /**
-	//  * @checksum: not used by Homa, but must occupy the same bytes as
-	//  * the checksum in a TCP header (TSO may modify this?).*/
-	// __be16 check;
-
 	__be16 len;
 	// *
 	//  * @priority: the priority at which the packet was set; used
