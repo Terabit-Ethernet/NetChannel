@@ -173,6 +173,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
  git clone https://github.com/qizhe/redis.git
  cd redis/
  make
+ sudo ~/NetChannel/run_np.sh
  ```
  
  2. On the server side,
