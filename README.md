@@ -1,20 +1,44 @@
-# net-driver_impl
+# NetChannel: Disaggregating the Host Network Stack
 
-Assuming we have two servers,
-1. Change the IP address inside the nd_plumbing.c file. data_cpy_core refers to the first core for doing the data copy. In this case, core 12 will be the first core  doing the data copy. num_nd_queues specifies the total number of ND conns.
+## 1. Overview
+
+### Repository overview
+
+### System overview
+
+### Getting Started Guide
+
+## 2. Build Kernel (with root)
+
+## 3. Build NetChannel Module
+
+1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
+
+    ```
+    params->local_ip = "192.168.10.117";
+
+    /* set the number of remote hosts */
+    params->num_remote_hosts = 2;
+    params->remote_ips[0] = "192.168.10.116";
+    params->remote_ips[1] = "192.168.10.117";
    ```
-    params->local_ip = "192.168.10.116";
-    params->remote_ip = "192.168.10.117";
-    params->data_cpy_core = 12;
-    params->num_nd_queues = 8;
-   ```
-2. Compile and Load net-driver kernel module:
+   
+   And in `run_module.sh`, change the  IP address,
+   
+2. Compile and load net-driver kernel module:
  
    ```
    make
    sudo insmod nd_module.ko
    ```
-3. Initiate the number of ND Conns and data copy cores for being used.
+   
+   Configure your NIC:
+   
+   ```
+   sudo ./network_setup.sh $IP $IFACE_NAME
+   ```
+   
+3. **After load kernel modeuls in all machines**, initiate connections:.
    ```
    sudo ./run_module.sh
    ```
@@ -22,21 +46,8 @@ Assuming we have two servers,
    ```
    cd util
    make
+   cd ../
    ```
-5. In the server side, 
-   ```
-   taskset -c $CORE ./server --ip 192.168.10.117 --port 4000
-   ```
-6. In the client side,
-  ```
-  sudo -s
-  taskset -c 28 ./netdriver_test 192.168.10.117:4000 --sp 1000 --count 10  ndping
-  ```
-7. You can tune the number of ND connections and the data copy cores:
- ```
- sudo sysctl /net/nd/nd_num_queue=1
- sudo sysctl /net/nd/nd_num_dc_thread=1
- ```
  
  ## SIGCOMM 2022 Artifact Evaluation
  
