@@ -4,7 +4,6 @@ obj-m += nd_module.o
 nd_module-y = 	 nd_host.o\
 				 nd_sock.o\
 				 nd_hashtables.o \
-				 nd_pq.o \
 				 nd_page_pool.o\
 				 nd_incoming.o\
 				 nd_outgoing.o \

@@ -522,93 +522,93 @@ int nd_xmit_control(struct sk_buff* skb, struct sock *sk, int dport)
 /**
  *
  */
-void nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
-{
-	struct sock* sk = (struct sock*)(dsk);
-	struct sk_buff* oskb;
-	oskb = skb;
-	if (unlikely(skb_cloned(oskb))) 
-		skb = pskb_copy(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
-	else
-		skb = skb_clone(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
-	__nd_xmit_data(skb, dsk, free_token);
-	/* change the state of queue and metadata*/
+// void nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
+// {
+// 	struct sock* sk = (struct sock*)(dsk);
+// 	struct sk_buff* oskb;
+// 	oskb = skb;
+// 	if (unlikely(skb_cloned(oskb))) 
+// 		skb = pskb_copy(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
+// 	else
+// 		skb = skb_clone(oskb,  sk_gfp_mask(sk, GFP_ATOMIC));
+// 	__nd_xmit_data(skb, dsk, free_token);
+// 	/* change the state of queue and metadata*/
 
-	// nd_unlink_write_queue(oskb, sk);
-	nd_rbtree_insert(&sk->tcp_rtx_queue, oskb);
-	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(oskb)->end_seq);
-}
+// 	// nd_unlink_write_queue(oskb, sk);
+// 	nd_rbtree_insert(&sk->tcp_rtx_queue, oskb);
+// 	WRITE_ONCE(dsk->sender.snd_nxt, ND_SKB_CB(oskb)->end_seq);
+// }
 
-void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
-{
-	int err;
-	__u8 tos;
-	// struct nd_data_hder *h = (struct nd_data_hder *)
-	// 		skb_transport_header(skb);
-	struct sock* sk = (struct sock*)dsk;
-	struct inet_sock *inet = inet_sk(sk);
-	struct nd_data_hdr *h;
-	// struct ndhdr* dh;
+// void __nd_xmit_data(struct sk_buff *skb, struct nd_sock* dsk, bool free_token)
+// {
+// 	int err;
+// 	__u8 tos;
+// 	// struct nd_data_hder *h = (struct nd_data_hder *)
+// 	// 		skb_transport_header(skb);
+// 	struct sock* sk = (struct sock*)dsk;
+// 	struct inet_sock *inet = inet_sk(sk);
+// 	struct nd_data_hdr *h;
+// 	// struct ndhdr* dh;
 
-	// dh = nd_hdr(skb);
+// 	// dh = nd_hdr(skb);
 
-	// dh->source = inet->inet_sport;
+// 	// dh->source = inet->inet_sport;
 
-	// dh->dest = dport;
+// 	// dh->dest = dport;
 
-	// inet->tos = TOS_1;
+// 	// inet->tos = TOS_1;
 
-	// set_priority(skb, rpc->hsk, priority);
+// 	// set_priority(skb, rpc->hsk, priority);
 
-	/* Update cutoff_version in case it has changed since the
-	 * message was initially created.
-	 */
-	if(free_token) 
-		tos = IPTOS_LOWDELAY | IPTOS_PREC_INTERNETCONTROL;
-	else 
-		tos = IPTOS_THROUGHPUT | IPTOS_PREC_IMMEDIATE;
-	skb_push(skb, sizeof(struct nd_data_hdr) - sizeof(struct data_segment));
-	skb_reset_transport_header(skb);
-	h = (struct nd_data_hdr *)
-				skb_transport_header(skb);
-	dst_hold(__sk_dst_get(sk));
-	// skb_dst_set(skb, peer->dst);
-	skb->sk = sk;
-	skb_dst_set(skb, __sk_dst_get(sk));
-	skb->ip_summed = CHECKSUM_PARTIAL;
-	skb->csum_start = skb_transport_header(skb) - skb->head;
-	// skb->csum_offset = offsetof(struct ndhdr, check);
-	h->common.source = inet->inet_sport;
-	h->common.dest = inet->inet_dport;
-	// h->common.len = htons(ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq);
-	// h->common.seq = htonl(ND_SKB_CB(skb)->seq);
-	h->common.type = DATA;
-	h->free_token = free_token;
-	nd_set_doff(h);
+// 	/* Update cutoff_version in case it has changed since the
+// 	 * message was initially created.
+// 	 */
+// 	if(free_token) 
+// 		tos = IPTOS_LOWDELAY | IPTOS_PREC_INTERNETCONTROL;
+// 	else 
+// 		tos = IPTOS_THROUGHPUT | IPTOS_PREC_IMMEDIATE;
+// 	skb_push(skb, sizeof(struct nd_data_hdr) - sizeof(struct data_segment));
+// 	skb_reset_transport_header(skb);
+// 	h = (struct nd_data_hdr *)
+// 				skb_transport_header(skb);
+// 	dst_hold(__sk_dst_get(sk));
+// 	// skb_dst_set(skb, peer->dst);
+// 	skb->sk = sk;
+// 	skb_dst_set(skb, __sk_dst_get(sk));
+// 	skb->ip_summed = CHECKSUM_PARTIAL;
+// 	skb->csum_start = skb_transport_header(skb) - skb->head;
+// 	// skb->csum_offset = offsetof(struct ndhdr, check);
+// 	h->common.source = inet->inet_sport;
+// 	h->common.dest = inet->inet_dport;
+// 	// h->common.len = htons(ND_SKB_CB(skb)->end_seq - ND_SKB_CB(skb)->seq);
+// 	// h->common.seq = htonl(ND_SKB_CB(skb)->seq);
+// 	h->common.type = DATA;
+// 	h->free_token = free_token;
+// 	nd_set_doff(h);
 	
-	skb_set_hash_from_sk(skb, sk);
+// 	skb_set_hash_from_sk(skb, sk);
 
-	// h->common.seq = htonl(200);
-	err = __ip_queue_xmit(sk, skb, &inet->cork.fl, tos);
-//	tt_record4("Finished queueing packet: rpc id %llu, offset %d, len %d, "
-//			"next_offset %d",
-//			h->common.id, ntohl(h->seg.offset), skb->len,
-//			rpc->msgout.next_offset);
-	if (err) {
-		// INC_METRIC(data_xmit_errors, 1);
+// 	// h->common.seq = htonl(200);
+// 	err = __ip_queue_xmit(sk, skb, &inet->cork.fl, tos);
+// //	tt_record4("Finished queueing packet: rpc id %llu, offset %d, len %d, "
+// //			"next_offset %d",
+// //			h->common.id, ntohl(h->seg.offset), skb->len,
+// //			rpc->msgout.next_offset);
+// 	if (err) {
+// 		// INC_METRIC(data_xmit_errors, 1);
 		
-		/* It appears that ip_queue_xmit frees skbuffs after
-		 * errors; the following code raises an alert if this
-		 * isn't actually the case.
-		 */
-		if (refcount_read(&skb->users) > 1) {
-			printk(KERN_NOTICE "ip_queue_xmit didn't free "
-					"ND data packet after error\n");
-			kfree_skb(skb);
-		}
-	}
-	// INC_METRIC(packets_sent[0], 1);
-}
+// 		/* It appears that ip_queue_xmit frees skbuffs after
+// 		 * errors; the following code raises an alert if this
+// 		 * isn't actually the case.
+// 		 */
+// 		if (refcount_read(&skb->users) > 1) {
+// 			printk(KERN_NOTICE "ip_queue_xmit didn't free "
+// 					"ND data packet after error\n");
+// 			kfree_skb(skb);
+// 		}
+// 	}
+// 	// INC_METRIC(packets_sent[0], 1);
+// }
 
 /* Called with bottom-half processing disabled.
    assuming hold the socket lock */

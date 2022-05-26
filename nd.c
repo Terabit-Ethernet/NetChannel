@@ -68,23 +68,14 @@
 #include "nd_host.h"
 #include "nd_data_copy.h"
 
-struct nd_peertab nd_peers_table;
-EXPORT_SYMBOL(nd_peers_table);
-
 long sysctl_nd_mem[3] __read_mostly;
 EXPORT_SYMBOL(sysctl_nd_mem);
 
 atomic_long_t nd_memory_allocated;
 EXPORT_SYMBOL(nd_memory_allocated);
 
-struct nd_match_tab nd_match_table;
-EXPORT_SYMBOL(nd_match_table);
-
 struct nd_params nd_params;
 EXPORT_SYMBOL(nd_params);
-
-struct nd_epoch nd_epoch;
-EXPORT_SYMBOL(nd_epoch);
 
 struct inet_hashinfo nd_hashinfo;
 EXPORT_SYMBOL(nd_hashinfo);
@@ -207,28 +198,28 @@ void nd_release_pages(struct bio_vec* bv_arr, bool mark_dirty, int max_segs)
 }
 
 // u64 total_send_ack = 0;
-void nd_try_send_ack(struct sock *sk, int copied) {
-	struct nd_sock *nsk = nd_sk(sk);
-	u32 new_grant_nxt;
-	// struct inet_sock *inet = inet_sk(sk);
-	if(copied > 0) {
-		new_grant_nxt = nd_window_size(nsk) + (u32)atomic_read(&nsk->receiver.rcv_nxt);
-		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt && 
-			new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
-			/* send ack pkt for new window */
-			// printk("nd window size:%u\n",  nd_window_size(nsk));
-			nsk->receiver.grant_nxt = new_grant_nxt;
-			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), nsk, false, true, true);
-			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
-			// total_send_ack++;
-		}
-		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
-		// int available_space = nd_space(sk);
-		// if(grant_len > available_space || grant_len < )
-		// 	return;
-		// printk("try to send ack \n");
-	}
-}
+// void nd_try_send_ack(struct sock *sk, int copied) {
+// 	struct nd_sock *nsk = nd_sk(sk);
+// 	u32 new_grant_nxt;
+// 	// struct inet_sock *inet = inet_sk(sk);
+// 	if(copied > 0) {
+// 		new_grant_nxt = nd_window_size(nsk) + (u32)atomic_read(&nsk->receiver.rcv_nxt);
+// 		if(new_grant_nxt - nsk->receiver.grant_nxt <= nsk->default_win && new_grant_nxt != nsk->receiver.grant_nxt && 
+// 			new_grant_nxt - nsk->receiver.grant_nxt >= nsk->default_win / 16) {
+// 			/* send ack pkt for new window */
+// 			// printk("nd window size:%u\n",  nd_window_size(nsk));
+// 			nsk->receiver.grant_nxt = new_grant_nxt;
+// 			nd_conn_queue_request(construct_ack_req(sk, GFP_KERNEL), nsk, false, true, true);
+// 			// pr_info("grant next update:%u\n", nsk->receiver.grant_nxt);
+// 			// total_send_ack++;
+// 		}
+// 		// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
+// 		// int available_space = nd_space(sk);
+// 		// if(grant_len > available_space || grant_len < )
+// 		// 	return;
+// 		// printk("try to send ack \n");
+// 	}
+// }
 
 void nd_clean_dcopy_pages(struct sock *sk) {
 	struct nd_sock *nsk = nd_sk(sk);
@@ -395,29 +386,6 @@ int nd_err(struct sk_buff *skb, u32 info)
 	return 0;
 	// return __nd4_lib_err(skb, info, &nd_table);
 }
-
-
-int sk_wait_ack(struct sock *sk, long *timeo)
-{
-	DEFINE_WAIT_FUNC(wait, woken_wake_function);
-	int rc = 0;
-	add_wait_queue(sk_sleep(sk), &wait);
-	while(1) {
-		if(sk->sk_state == TCP_CLOSE)
-			break;
-		if (signal_pending(current))
-			break;
-		sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		rc = sk_wait_event(sk, timeo, sk->sk_state == TCP_CLOSE, &wait);
-		sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-	}
-	remove_wait_queue(sk_sleep(sk), &wait);
-
-	return rc;
-}
-EXPORT_SYMBOL(sk_wait_ack);
-
-
 
 struct sk_buff* nd_dequeue_snd_q(struct sock *sk) {
 	struct sk_buff *skb = NULL;
@@ -1196,121 +1164,8 @@ int nd_sendpage(struct sock *sk, struct page *page, int offset,
 {
 	printk(KERN_WARNING "unimplemented sendpage invoked on nd socket\n");
 	return -ENOSYS;
-// 	struct inet_sock *inet = inet_sk(sk);
-// 	struct nd_sock *up = nd_sk(sk);
-// 	int ret;
-
-// 	if (flags & MSG_SENDPAGE_NOTLAST)
-// 		flags |= MSG_MORE;
-
-// 	if (!up->pending) {
-// 		struct msghdr msg = {	.msg_flags = flags|MSG_MORE };
-
-// 		/* Call nd_sendmsg to specify destination address which
-// 		 * sendpage interface can't pass.
-// 		 * This will succeed only when the socket is connected.
-// 		 */
-// 		ret = nd_sendmsg(sk, &msg, 0);
-// 		if (ret < 0)
-// 			return ret;
-// 	}
-
-// 	lock_sock(sk);
-
-// 	if (unlikely(!up->pending)) {
-// 		release_sock(sk);
-
-// 		net_dbg_ratelimited("cork failed\n");
-// 		return -EINVAL;
-// 	}
-
-// 	ret = ip_append_page(sk, &inet->cork.fl.u.ip4,
-// 			     page, offset, size, flags);
-// 	if (ret == -EOPNOTSUPP) {
-// 		release_sock(sk);
-// 		return sock_no_sendpage(sk->sk_socket, page, offset,
-// 					size, flags);
-// 	}
-// 	if (ret < 0) {
-// 		nd_flush_pending_frames(sk);
-// 		goto out;
-// 	}
-
-// 	up->len += size;
-// 	if (!(up->corkflag || (flags&MSG_MORE)))
-// 		ret = nd_push_pending_frames(sk);
-// 	if (!ret)
-// 		ret = size;
-// out:
-// 	release_sock(sk);
-// 	return ret;
-// }
-
-// #define ND_SKB_IS_STATELESS 0x80000000
-
-// /* all head states (dst, sk, nf conntrack) except skb extensions are
-//  * cleared by nd_rcv().
-//  *
-//  * We need to preserve secpath, if present, to eventually process
-//  * IP_CMSG_PASSSEC at recvmsg() time.
-//  *
-//  * Other extensions can be cleared.
-//  */
-// static bool nd_try_make_stateless(struct sk_buff *skb)
-// {
-// 	if (!skb_has_extensions(skb))
-// 		return true;
-
-// 	if (!secpath_exists(skb)) {
-// 		skb_ext_reset(skb);
-// 		return true;
-// 	}
-
-// 	return false;
 }
 
-/* fully reclaim rmem/fwd memory allocated for skb */
-// static void nd_rmem_release(struct sock *sk, int size, int partial,
-// 			     bool rx_queue_lock_held)
-// {
-// 	struct nd_sock *up = nd_sk(sk);
-// 	struct sk_buff_head *sk_queue;
-// 	int amt;
-
-// 	if (likely(partial)) {
-// 		up->forward_deficit += size;
-// 		size = up->forward_deficit;
-// 		if (size < (sk->sk_rcvbuf >> 2) &&
-// 		    !skb_queue_empty(&up->reader_queue))
-// 			return;
-// 	} else {
-// 		size += up->forward_deficit;
-// 	}
-// 	up->forward_deficit = 0;
-
-// 	/* acquire the sk_receive_queue for fwd allocated memory scheduling,
-// 	 * if the called don't held it already
-// 	 */
-// 	sk_queue = &sk->sk_receive_queue;
-// 	if (!rx_queue_lock_held)
-// 		spin_lock(&sk_queue->lock);
-
-
-// 	sk->sk_forward_alloc += size;
-// 	amt = (sk->sk_forward_alloc - partial) & ~(SK_MEM_QUANTUM - 1);
-// 	sk->sk_forward_alloc -= amt;
-
-// 	if (amt)
-// 		__sk_mem_reduce_allocated(sk, amt >> SK_MEM_QUANTUM_SHIFT);
-
-// 	atomic_sub(size, &sk->sk_rmem_alloc);
-
-// 	/* this can save us from acquiring the rx queue lock on next receive */
-// 	skb_queue_splice_tail_init(sk_queue, &up->reader_queue);
-
-// 	if (!rx_queue_lock_held)
-// 		spin_unlock(&sk_queue->lock);
-// }
 
 void nd_destruct_sock(struct sock *sk)
 {
@@ -1450,30 +1305,6 @@ int nd_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	return -ENOSYS;
 }
 EXPORT_SYMBOL(nd_ioctl);
-
-bool nd_try_send_token(struct sock *sk) {
-	// if(test_bit(ND_TOKEN_TIMER_DEFERRED, &sk->sk_tsq_flags)) {
-	// 	// struct nd_sock *dsk = nd_sk(sk);
-	// 	// int grant_len = min_t(int, len, dsk->receiver.max_gso_data);
-	// 	// int available_space = nd_space(sk);
-	// 	// if(grant_len > available_space || grant_len < )
-	// 	// 	return;
-	// 	// printk("try to send token \n");
-	// 	int grant_bytes = calc_grant_bytes(sk);
-
-	// 	// printk("grant bytes delay:%d\n", grant_bytes);
-	// 	if (grant_bytes > 0) {
-	// 		// spin_lock_bh(&sk->sk_lock.slock);
-	// 		xmit_batch_token(sk, grant_bytes, false);
-	// 		// spin_unlock_bh(&sk->sk_lock.slock);
-	// 		return true;
-	// 	}
-	// }
-	return false;
-
-}
-
-
 
 // int nd_recvmsg_new(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 // 		int flags, int *addr_len)
@@ -2481,49 +2312,7 @@ EXPORT_SYMBOL(nd_disconnect);
 
 int nd_v4_early_demux(struct sk_buff *skb)
 {
-	// struct net *net = dev_net(skb->dev);
-	// struct in_device *in_dev = NULL;
-	// const struct iphdr *iph;
-	// const struct ndhdr *uh;
-	// struct sock *sk = NULL;
-	// struct dst_entry *dst;
-	// int dif = skb->dev->ifindex;
-	// int sdif = inet_sdif(skb);
-	// int ours;
-
-	/* validate the packet */
-	// printk("early demux");
 	return 0; 
-	// if(skb->pkt_type != PACKET_HOST) {
-	// 	return 0;
-	// }
-	// if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct ndhdr)))
-	// 	return 0;
-
-	// iph = ip_hdr(skb);
-	// uh = nd_hdr(skb);
-
-    // // if (th->doff < sizeof(struct tcphdr) / 4)
-    // //             return 0;
-    // sk = __nd_lookup_established(dev_net(skb->dev), &nd_hashinfo,
-    //                                iph->saddr, uh->source,
-    //                                iph->daddr, ntohs(uh->dest),
-    //                                skb->skb_iif, sdif);
-
-    // if (sk) {
-    //         skb->sk = sk;
-    //         skb->destructor = sock_edemux;
-    //         if (sk_fullsock(sk)) {
-    //                 struct dst_entry *dst = READ_ONCE(sk->sk_rx_dst);
-
-    //                 if (dst)
-    //                         dst = dst_check(dst, 0);
-    //                 if (dst &&
-    //                     inet_sk(sk)->rx_dst_ifindex == skb->skb_iif)
-    //                         skb_dst_set_noref(skb, dst);
-    //         }
-    // }
-	// return 0;
 }
 
 /* oversize: -1, drop: -2, normal: 0 */
@@ -2559,17 +2348,6 @@ int nd_rcv(struct sk_buff *skb)
 	} else if (dh->type == SYNC_ACK) {
 		return nd_handle_sync_ack_pkt(skb);
 	}
-	//  else if (dh->type == SYNC_ACK) {
-	// 	return nd_handle_sync_ack_pkt(skb);
-	// }
-	// else if (dh->type == RTS) {
-	// 	return nd_handle_rts(skb, &nd_match_table, &nd_epoch);
-	// } else if (dh->type == GRANT) {
-	// 	return nd_handle_grant(skb, &nd_match_table, &nd_epoch);
-	// } else if (dh->type == ACCEPT) {
-	// 	return nd_handle_accept(skb, &nd_match_table, &nd_epoch);
-	// }
-
 
 drop:
 	printk("drop randomly:%d\n", raw_smp_processor_id());
@@ -2697,46 +2475,6 @@ int nd_lib_getsockopt(struct sock *sk, int level, int optname,
 	printk(KERN_WARNING "unimplemented getsockopt invoked on ND socket:"
 			" level %d, optname %d\n", level, optname);
 	return -EINVAL;
-	// struct nd_sock *up = nd_sk(sk);
-	// int val, len;
-
-	// if (get_user(len, optlen))
-	// 	return -EFAULT;
-
-	// len = min_t(unsigned int, len, sizeof(int));
-
-	// if (len < 0)
-	// 	return -EINVAL;
-
-	// switch (optname) {
-	// case ND_CORK:
-	// 	val = up->corkflag;
-	// 	break;
-
-	// case ND_ENCAP:
-	// 	val = up->encap_type;
-	// 	break;
-
-	// case ND_NO_CHECK6_TX:
-	// 	val = up->no_check6_tx;
-	// 	break;
-
-	// case ND_NO_CHECK6_RX:
-	// 	val = up->no_check6_rx;
-	// 	break;
-
-	// case ND_SEGMENT:
-	// 	val = up->gso_size;
-	// 	break;
-	// default:
-	// 	return -ENOPROTOOPT;
-	// }
-
-	// if (put_user(len, optlen))
-	// 	return -EFAULT;
-	// if (copy_to_user(optval, &val, len))
-	// 	return -EFAULT;
-	// return 0;
 }
 EXPORT_SYMBOL(nd_lib_getsockopt);
 
