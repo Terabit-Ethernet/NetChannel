@@ -22,9 +22,7 @@
     params->remote_ips[0] = "192.168.10.116";
     params->remote_ips[1] = "192.168.10.117";
    ```
-   
-   And in `run_module.sh`, change the  IP address,
-   
+      
 2. Compile and load net-driver kernel module:
  
    ```
@@ -37,6 +35,7 @@
    ```
    sudo ./network_setup.sh $IP $IFACE_NAME
    ```
+   eg. client: `sudo ./network_setup.sh 192.168.10.116 ens2f0` and the server `sudo ./network_setup.sh 192.168.10.117 ens2f0`.
    
 3. **After load kernel modeuls in all machines**, initiate connections:.
    ```
