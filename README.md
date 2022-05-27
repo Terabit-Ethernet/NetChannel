@@ -123,8 +123,27 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    ```
 
  
- ## SIGCOMM 2022 Artifact Evaluation
-  1. Figure 6a, 6b (data copy processing parallelism experiment),
+## SIGCOMM 2022 Artifact Evaluation
+### Hardware/Software Configuration
+We have used the follwing hardware and software configurations for running the experiments shown in the paper.
+
+* CPU: 4-Socket Intel Xeon Gold 6234 3.3 GHz with 8 cores per socket (with hyperthreading disabled)
+* RAM: 384 GB
+* NIC: Mellanox ConnectX-5 Ex VPI (100 Gbps)
+* OS: Ubuntu 20.04 with Linux 5.6 (patched)
+
+#### Caveats of Our Work
+Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
+
+### Running Experiments
+All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively.
+
+```
+sudo -s
+cd ~/NetChannel/sigcomm22_artifact/
+```
+
+1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
 
