@@ -6,11 +6,11 @@ NetChannel is a new disaggregated network stack architecture that enables resour
 
 ## 1. Overview
 ### Repository overview
-- *kernel_patch/* includes NetChannel kernel modules.
-- *module/* includes NetChannel kernel modules.
-- *util/* includes sample applications.
-- *sigcomm22_artifact/* includes scripts for SIGCOMM 2022 artifact evaluation.
-- *scripts/* includes scripts for getting started instructions.
+- `kernel_patch/` includes NetChannel kernel modules.
+- `module/` includes NetChannel kernel modules.
+- `util/` includes sample applications.
+- `sigcomm22_artifact/` includes scripts for SIGCOMM 2022 artifact evaluation.
+- `scripts/` includes scripts for getting started instructions.
 
 ### System overview
 For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks. 
@@ -19,12 +19,12 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 ### Getting Started Guide
 Through the following two sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 3 reboot-mins):**  
+   - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch. 
    - **Build NetChannel Kernel Modules (10 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
 
-The detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper is provided in the "[sigcomm21_artifact](#SIGCOMM-2022-Artifact-Evaluation)" section.
+The detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper is provided in the "[sigcomm22_artifact](#SIGCOMM-2022-Artifact-Evaluation)" section.
 
 
 ## 2. Build NetChannel Kernel (with root)
