@@ -1,7 +1,7 @@
 # NetChannel: Disaggregating the Host Network Stack
 NetChannel is a new disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. Evaluation of an end-to-end realization of NetChannel within the Linux network stack demonstrates that NetChannel enables new operating points that were previously unachievable:
-- Independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth
-- Independent scaling of network connections allows short flows to increase throughput almost linearly with cores; and
+- Independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth.
+- Independent scaling of network connections allows short flows to increase throughput almost linearly with cores.
 - Dynamic scheduling of packets between application threads and network connections at fine-grained timescales allows latency-sensitive applications to achieve µs-scale tail latency, even when competing with bandwidth-intensive applications operating at near-line rate.
 
 ## 1. Overview
