@@ -17,17 +17,17 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 
 
 ### Getting Started Guide
-Through the following two sections, we provide getting started instructions to install NetChannel and to run experiments.
+Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+   - **[Build NetChannel Kernel](#2.-Build-NetChannel-Kernel) (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch. 
-   - **Build NetChannel Kernel Modules (10 human-mins):**  
+   - **[Build NetChannel Kernel Modules](#3.-Build-NetChannel-Kernel-Modules) (10 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
+   - **[SIGCOMM 2022 Artifact Evaluation](#SIGCOMM-2022-Artifact-Evaluation) (xxx compute-mins):**  
+This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
-The detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper is provided in the "[sigcomm22_artifact](#SIGCOMM-2022-Artifact-Evaluation)" section.
 
-
-## 2. Build NetChannel Kernel (with root)
+## 2. Build NetChannel Kernel
 NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel should be done on both Client and Server machines.
 
 1. Download Linux kernel source tree:
