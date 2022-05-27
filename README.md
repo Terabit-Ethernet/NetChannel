@@ -6,10 +6,10 @@ NetChannel is a new disaggregated network stack architecture that enables resour
 
 ## 1. Overview
 ### Repository overview
-- *kernel_patch/* includes netChannel kernel modules.
-- *module/* includes netChannel kernel modules.
+- *kernel_patch/* includes NetChannel kernel modules.
+- *module/* includes NetChannel kernel modules.
 - *util/* includes sample applications.
-- *sigcomm22_artifact/* includes scripts for SIGCOMM22 artifact evaluation.
+- *sigcomm22_artifact/* includes scripts for SIGCOMM 2022 artifact evaluation.
 - *scripts/* includes scripts for getting started instructions.
 
 ### System overview
