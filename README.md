@@ -1,28 +1,89 @@
 # NetChannel: Disaggregating the Host Network Stack
-NetChannel is a disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. 
+NetChannel is a new disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. Evaluation of an end-to-end realization of NetChannel within the Linux network stack demonstrates that NetChannel enables new operating points that were previously unachievable:
+- independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth
+- independent scaling of network connections allows short flows to increase throughput almost linearly with cores; and
+- dynamic scheduling of packets between application threads and network connections at fine-grained timescales allows latency-sensitive applications to achieve µs-scale tail latency, even when competing with bandwidth-intensive applications operating at near-line rate.
 
 ## 1. Overview
-
 ### Repository overview
+- *kernel_patch/* includes netChannel kernel modules.
 - *module/* includes netChannel kernel modules.
-- *util/* includes sample applications
+- *util/* includes sample applications.
 - *sigcomm22_artifact/* includes scripts for SIGCOMM22 artifact evaluation.
 - *scripts/* includes scripts for getting started instructions.
+
 ### System overview
 For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks. 
 
 
 ### Getting Started Guide
-Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
-   - **Build Kernel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
-NetChannel is currently implemented as the kernel module on top of kernel 5.6.
-   - **Build NetChannel Module (5 human-mins):**  
-This section covers how to build NetChannel module.
+Through the following three sections, we provide getting started instructions to install blk-switch and to run experiments.
 
-## 2. Build Kernel (with root)
+   - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 3 reboot-mins):**  
+NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch. 
+   - **Build NetChannel Kernel Modules (10 human-mins):**  
+This section covers how to build the NetChannel kernel modules.
 
+The detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper is provided in the "[sigcomm21_artifact](#SIGCOMM-2022-Artifact-Evaluation)" section.
 
-## 3. Build NetChannel Module
+## 2. Build NetChannel Kernel (with root)
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel should be done on both Client and Server machines.
+
+1. Download Linux kernel source tree:
+   ```
+   sudo -s
+   cd ~
+   wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
+   tar xzvf linux-5.6.tar.gz
+   ```
+
+2. Download and apply the NetChannel kernel patch to the kernel source:
+
+   ```
+   git clone https://github.com/Terabit-Ethernet/NetChannel.git
+   cd ~/linux-5.6/
+   git apply ../NetChannel/kernel_patch/netchannel.patch
+   ```
+
+3. Update kernel configuration:
+
+   ```
+   cp /boot/config-x.x.x .config
+   make olddefconfig
+   ```
+   `x.x.x` is a kernel version. It can be your current kernel version or latest version your system has. Type `uname -r` to see your current kernel version.
+
+4. Compile and install:
+
+   ```
+   make -j24 bzImage
+   make -j24 modules
+   make modules_install
+   make install
+   ```
+   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type "lscpu | grep 'CPU(s)'" to see the total number of cores:
+   
+   ```
+   CPU(s):                24
+   On-line CPU(s) list:   0-23
+   ```
+
+5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
+
+   ```
+   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6-netchannel"
+   ```
+
+6. Update the grub configuration and reboot into the new kernel.
+
+   ```
+   update-grub && reboot
+   ```
+   
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
+   
+
+## 3. Build NetChannel Kernel Modules
 
 1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
 
@@ -50,7 +111,7 @@ This section covers how to build NetChannel module.
    sudo ./network_setup.sh $IP $IFACE_NAME
    ```
    
-3. **After load kernel modeuls in all machines**, initiate connections:.
+3. **After loading the NetChannel kernel modeuls in both machines**, initiate connections:.
    ```
    sudo ./run_module.sh
    ```
