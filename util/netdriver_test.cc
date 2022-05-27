@@ -157,7 +157,7 @@ void test_tcpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count; i++) {
@@ -233,7 +233,7 @@ void test_udpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 	    for (int i = 0; i < count * 100; i++) {
 	    	int result = sendto(fd, buffer, 64000, MSG_CONFIRM, dest, sizeof(struct sockaddr_in));			
@@ -307,7 +307,7 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count * 100; i++) {
@@ -339,7 +339,7 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
 	// uint64_t flow_size = 10000000000000;
-	int times = 120;
+	int times = 60;
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
