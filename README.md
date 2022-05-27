@@ -1,14 +1,26 @@
 # NetChannel: Disaggregating the Host Network Stack
+NetChannel is a disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. 
 
 ## 1. Overview
 
 ### Repository overview
-
+- *module/* includes netChannel kernel modules.
+- *util/* includes sample applications
+- *sigcomm22_artifact/* includes scripts for SIGCOMM22 artifact evaluation.
+- *scripts/* includes scripts for getting started instructions.
 ### System overview
+For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks. 
+
 
 ### Getting Started Guide
+Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
+   - **Build Kernel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+NetChannel is currently implemented as the kernel module on top of kernel 5.6.
+   - **Build NetChannel Module (5 human-mins):**  
+This section covers how to build NetChannel module.
 
 ## 2. Build Kernel (with root)
+
 
 ## 3. Build NetChannel Module
 
