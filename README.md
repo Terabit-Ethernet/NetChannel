@@ -1,8 +1,8 @@
 # NetChannel: Disaggregating the Host Network Stack
 NetChannel is a new disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. Evaluation of an end-to-end realization of NetChannel within the Linux network stack demonstrates that NetChannel enables new operating points that were previously unachievable:
-- independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth
-- independent scaling of network connections allows short flows to increase throughput almost linearly with cores; and
-- dynamic scheduling of packets between application threads and network connections at fine-grained timescales allows latency-sensitive applications to achieve µs-scale tail latency, even when competing with bandwidth-intensive applications operating at near-line rate.
+- Independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth
+- Independent scaling of network connections allows short flows to increase throughput almost linearly with cores; and
+- Dynamic scheduling of packets between application threads and network connections at fine-grained timescales allows latency-sensitive applications to achieve µs-scale tail latency, even when competing with bandwidth-intensive applications operating at near-line rate.
 
 ## 1. Overview
 ### Repository overview
@@ -17,7 +17,7 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 
 
 ### Getting Started Guide
-Through the following three sections, we provide getting started instructions to install blk-switch and to run experiments.
+Through the following two sections, we provide getting started instructions to install NetChannel and to run experiments.
 
    - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 3 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch. 
@@ -25,6 +25,7 @@ NetChannel requires some modifications in the Linux kernel, so it requires kerne
 This section covers how to build the NetChannel kernel modules.
 
 The detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper is provided in the "[sigcomm21_artifact](#SIGCOMM-2022-Artifact-Evaluation)" section.
+
 
 ## 2. Build NetChannel Kernel (with root)
 NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel should be done on both Client and Server machines.
@@ -84,7 +85,6 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    
 
 ## 3. Build NetChannel Kernel Modules
-
 1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
 
     ```
@@ -121,10 +121,10 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    make
    cd ../
    ```
+
  
  ## SIGCOMM 2022 Artifact Evaluation
- 
- 1. Figure 6a, 6b (data copy processing parallelism experiment),
+  1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
 
