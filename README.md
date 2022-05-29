@@ -19,20 +19,20 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 ### Getting Started Guide
 Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel Kernel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
-NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch. 
-   - **Build NetChannel Kernel Modules (10 human-mins):**  
-This section covers how to build the NetChannel kernel modules.
+   - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
+   - **Run Toy-experiments (5-10 compute-mins):**
+This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
    - **[SIGCOMM 2022 Artifact Evaluation](#SIGCOMM-2022-Artifact-Evaluation) (xxx compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
-## 2. Build NetChannel Kernel
-NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel should be done on both Client and Server machines.
+## 2. Build NetChannel
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
 
+### NetChannel Kernel
 1. Download Linux kernel source tree:
    ```
-   sudo -s
    cd ~
    wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
    tar xzvf linux-5.6.tar.gz
@@ -49,6 +49,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 3. Update kernel configuration:
 
    ```
+   sudo -s
    cp /boot/config-`uname -r` ./.config
    make olddefconfig
    ```
@@ -82,10 +83,8 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    
 7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
    
-
-## 3. Build NetChannel Kernel Modules
-1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
-
+### NetChannel Kernel Modules
+1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
     ```
     params->local_ip = "192.168.10.117";
 
@@ -94,33 +93,43 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
     params->remote_ips[0] = "192.168.10.116";
     params->remote_ips[1] = "192.168.10.117";
    ```
-   
-   And in `run_module.sh`, change the  IP address,
-   
-2. Compile and load net-driver kernel module:
- 
-   ```
+  
+2. Compile and load the NetChannel kernel module:
+    ```
+   cd ~/NetChannel/module/
    make
    sudo insmod nd_module.ko
    ```
-   
-   Configure your NIC:
-   
+
+### NetChannel Applications
+1. Change the host IP adddress inside the `NetChannel/util/netdriver_test.cc` (line 758):
+    ```
+    addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
+    ```
+
+2. Compile the test apps; 
    ```
-   sudo ./network_setup.sh $IP $IFACE_NAME
-   ```
-   
-3. **After loading the NetChannel kernel modeuls in both machines**, initiate connections:.
-   ```
-   sudo ./run_module.sh
-   ```
-4. Compile sample apps from /util; Make sure you change the host IP adddress inside the netdriver_test.cc
-   ```
-   cd util
+   cd ~/NetChannel/util/
    make
-   cd ../
    ```
 
+## 3. Run a Toy Experiment
+**Please confirm that the NetChannel kernel modules are loaded in both machines.**
+
+### Setup NetChannel
+Configure the network interface and initiate the NetChannel connections:
+   ```
+   cd ~/NetChannel/scripts/
+   sudo ./network_setup.sh $IP $IFACE_NAME
+   sudo ./run_module.sh
+   ```
+
+### Run a test application
+Run a test application:
+   ```
+   cd ~/NetChannel/util/
+   ./xxxx
+   ```
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
@@ -207,7 +216,6 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 nd -20
     ```
 ### TCP setup
-    
  1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
