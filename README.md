@@ -27,8 +27,11 @@ This section covers how to build the NetChannel kernel modules.
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
-## 2. Build NetChannel Kernel
-NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel should be done on both Client and Server machines.
+## 2. Build NetChannel
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6.
+
+### NetChannel Kernel
+Building the NetChannel kernel should be done on both Client and Server machines.
 
 1. Download Linux kernel source tree:
    ```
@@ -82,8 +85,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    
 7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
    
-
-## 3. Build NetChannel Kernel Modules
+### NetChannel Kernel Modules
 1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
 
     ```
@@ -207,7 +209,6 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 nd -20
     ```
 ### TCP setup
-    
  1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
