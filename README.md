@@ -49,10 +49,9 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 3. Update kernel configuration:
 
    ```
-   cp /boot/config-x.x.x .config
+   cp /boot/config-`uname -r` ./.config
    make olddefconfig
    ```
-   `x.x.x` is a kernel version. It can be your current kernel version or latest version your system has. Type `uname -r` to see your current kernel version.
 
 4. Compile and install:
 
