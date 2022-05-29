@@ -278,12 +278,12 @@ void nd_params_init(struct nd_params* params) {
     params->bdp = 8000000;
     // params->gso_size = 1500;
     // matchiing parameters
-    params->local_ip = "192.168.10.116";
+    params->local_ip = "192.168.10.117";
  
     /* set the number of remote hosts */
     params->num_remote_hosts = 2; 
-    params->remote_ips[0] = "192.168.10.117";
-    params->remote_ips[1] = "192.168.10.116";
+    params->remote_ips[0] = "192.168.10.116";
+    params->remote_ips[1] = "192.168.10.117";
 
     params->data_cpy_core = 0;
     params->total_channels = 16;
