@@ -28,11 +28,9 @@ This section provides the detailed instructions to reproduce all individual resu
 
 
 ## 2. Build NetChannel
-NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6.
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
 
-### NetChannel Kernel
-Building the NetChannel kernel should be done on both Client and Server machines.
-
+### NetChannel Kernel (with root)
 1. Download Linux kernel source tree:
    ```
    sudo -s
@@ -86,7 +84,7 @@ Building the NetChannel kernel should be done on both Client and Server machines
 7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
    
 ### NetChannel Kernel Modules
-1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
+1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` file (line 281).
 
     ```
     params->local_ip = "192.168.10.117";
@@ -96,33 +94,35 @@ Building the NetChannel kernel should be done on both Client and Server machines
     params->remote_ips[0] = "192.168.10.116";
     params->remote_ips[1] = "192.168.10.117";
    ```
-   
-   And in `run_module.sh`, change the  IP address,
-   
-2. Compile and load net-driver kernel module:
+  
+2. Compile and load the NetChannel kernel module:
  
    ```
+   cd ~/NetChannel/module/
    make
    sudo insmod nd_module.ko
    ```
-   
-   Configure your NIC:
+
+## 3. Run a Toy Experiment
+### Setup NetChannel
+1. Configure the network interface:
    
    ```
+   cd ~/NetChannel/scripts/
    sudo ./network_setup.sh $IP $IFACE_NAME
    ```
    
-3. **After loading the NetChannel kernel modeuls in both machines**, initiate connections:.
+2. Initiate the NetChannel connections (**confirm that the NetChannel kernel modeuls are loaded in both machines**):
    ```
    sudo ./run_module.sh
    ```
-4. Compile sample apps from /util; Make sure you change the host IP adddress inside the netdriver_test.cc
-   ```
-   cd util
-   make
-   cd ../
-   ```
 
+### Build and run the NetChannel applications
+1. Compile sample apps from `/util`; Make sure you change the host IP adddress inside the `netdriver_test.cc`:
+   ```
+   cd ~/NetChannel/util/
+   make
+   ```
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
