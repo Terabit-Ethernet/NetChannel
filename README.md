@@ -30,10 +30,9 @@ This section provides the detailed instructions to reproduce all individual resu
 ## 2. Build NetChannel
 NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
 
-### NetChannel Kernel (with root)
+### NetChannel Kernel
 1. Download Linux kernel source tree:
    ```
-   sudo -s
    cd ~
    wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
    tar xzvf linux-5.6.tar.gz
@@ -50,6 +49,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 3. Update kernel configuration:
 
    ```
+   sudo -s
    cp /boot/config-`uname -r` ./.config
    make olddefconfig
    ```
