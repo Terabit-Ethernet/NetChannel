@@ -13,8 +13,9 @@ NetChannel is a new disaggregated network stack architecture that enables resour
 - `scripts/` includes scripts for getting started instructions.
 
 ### System overview
-For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks. 
-
+For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks using the following configuration:
+- Client: `192.168.10.116` (interface: **ens2f0**)
+- Server: `192.168.10.117` (interface: **ens2f0**)
 
 ### Getting Started Guide
 Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
@@ -32,9 +33,10 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 
 ### Install Prerequisites
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
-
-sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
+   ```
+   sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
                      libelf-dev libudev-dev libpci-dev libiberty-dev autoconf
+   ```
 
 ### NetChannel Kernel
 1. Download Linux kernel source tree:
@@ -52,7 +54,7 @@ sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwar
    git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
 
-3. Update kernel configuration:
+3. Update kernel configuration (with root):
 
    ```
    sudo -s
