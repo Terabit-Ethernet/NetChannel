@@ -430,6 +430,8 @@ void test_ndping_send(int fd, struct sockaddr *dest)
 		
 		}
 		printf("%" PRIu64 "\n", write_len);
+	close(fd);
+	return;
 }
 
 void test_ndping_recv(int fd, struct sockaddr *dest, int id)
@@ -1004,7 +1006,7 @@ int main(int argc, char** argv)
 			}
 		}
 	}
-       std::this_thread::sleep_for (std::chrono::seconds(100));
+//       std::this_thread::sleep_for (std::chrono::seconds(100));
 
 	for(unsigned i = 0; i < workers.size(); i++) {
 		workers[i].join();
