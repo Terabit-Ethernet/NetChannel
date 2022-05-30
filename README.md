@@ -30,6 +30,12 @@ This section provides the detailed instructions to reproduce all individual resu
 ## 2. Build NetChannel
 NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
 
+### Install Prerequisites
+We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
+
+sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
+                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf
+
 ### NetChannel Kernel
 1. Download Linux kernel source tree:
    ```
@@ -52,20 +58,21 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    sudo -s
    cp /boot/config-`uname -r` ./.config
    make olddefconfig
+   scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
    ```
 
 4. Compile and install:
 
    ```
-   make -j24 bzImage
-   make -j24 modules
+   make -j32 bzImage
+   make -j32 modules
    make modules_install
    make install
    ```
-   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type `lscpu | grep 'CPU(s)'` to see the total number of cores:
+   The number 32 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type `lscpu | grep 'CPU(s)'` to see the total number of cores:
    
    ```
-   CPU(s):                24
+   CPU(s):                32
    On-line CPU(s) list:   0-23
    ```
 
