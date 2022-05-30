@@ -22,7 +22,7 @@ Through the following three sections, we provide getting started instructions to
 
    - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
-   - **Run a Toy Experiment (5-10 compute-mins):**
+   - **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
    - **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
@@ -95,12 +95,12 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 ### NetChannel Kernel Modules
 1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
     ```
-    params->local_ip = "192.168.10.117";
+    params->local_ip = "192.168.10.116";
 
     /* set the number of remote hosts */
     params->num_remote_hosts = 2;
-    params->remote_ips[0] = "192.168.10.116";
-    params->remote_ips[1] = "192.168.10.117";
+    params->remote_ips[0] = "192.168.10.117";
+    params->remote_ips[1] = "192.168.10.116";
    ```
   
 2. Compile and load the NetChannel kernel module:
