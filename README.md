@@ -1,19 +1,90 @@
 # NetChannel: Disaggregating the Host Network Stack
+NetChannel is a new disaggregated network stack architecture that enables resources allocated to each layer in the packet processing pipeline to be scaled and scheduled independently. Evaluation of an end-to-end realization of NetChannel within the Linux network stack demonstrates that NetChannel enables new operating points that were previously unachievable:
+- Independent scaling of data copy processing allows a single application thread to saturate 100Gbps access link bandwidth.
+- Independent scaling of network connections allows short flows to increase throughput almost linearly with cores.
+- Dynamic scheduling of packets between application threads and network connections at fine-grained timescales allows latency-sensitive applications to achieve µs-scale tail latency, even when competing with bandwidth-intensive applications operating at near-line rate.
 
 ## 1. Overview
-
 ### Repository overview
+- `kernel_patch/` includes NetChannel kernel modules.
+- `module/` includes NetChannel kernel modules.
+- `util/` includes sample applications.
+- `sigcomm22_artifact/` includes scripts for SIGCOMM 2022 artifact evaluation.
+- `scripts/` includes scripts for getting started instructions.
 
 ### System overview
+For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks. 
+
 
 ### Getting Started Guide
+Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-## 2. Build Kernel (with root)
+   - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
+   - **Run Toy-experiments (5-10 compute-mins):**
+This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
+   - **[SIGCOMM 2022 Artifact Evaluation](#SIGCOMM-2022-Artifact-Evaluation) (xxx compute-mins):**  
+This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
-## 3. Build NetChannel Module
 
-1. Change the local IP, remote IP address and the number of remote hosts inside the nd_plumbing.c file (line 281).
+## 2. Build NetChannel
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
 
+### NetChannel Kernel
+1. Download Linux kernel source tree:
+   ```
+   cd ~
+   wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
+   tar xzvf linux-5.6.tar.gz
+   ```
+
+2. Download and apply the NetChannel kernel patch to the kernel source:
+
+   ```
+   git clone https://github.com/Terabit-Ethernet/NetChannel.git
+   cd ~/linux-5.6/
+   git apply ../NetChannel/kernel_patch/netchannel.patch
+   ```
+
+3. Update kernel configuration:
+
+   ```
+   sudo -s
+   cp /boot/config-`uname -r` ./.config
+   make olddefconfig
+   ```
+
+4. Compile and install:
+
+   ```
+   make -j24 bzImage
+   make -j24 modules
+   make modules_install
+   make install
+   ```
+   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type "lscpu | grep 'CPU(s)'" to see the total number of cores:
+   
+   ```
+   CPU(s):                24
+   On-line CPU(s) list:   0-23
+   ```
+
+5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
+
+   ```
+   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6-netchannel"
+   ```
+
+6. Update the grub configuration and reboot into the new kernel.
+
+   ```
+   update-grub && reboot
+   ```
+   
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
+   
+### NetChannel Kernel Modules
+1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
     ```
     params->local_ip = "192.168.10.117";
 
@@ -22,36 +93,65 @@
     params->remote_ips[0] = "192.168.10.116";
     params->remote_ips[1] = "192.168.10.117";
    ```
-   
-   And in `run_module.sh`, change the  IP address,
-   
-2. Compile and load net-driver kernel module:
- 
-   ```
+  
+2. Compile and load the NetChannel kernel module:
+    ```
+   cd ~/NetChannel/module/
    make
    sudo insmod nd_module.ko
    ```
-   
-   Configure your NIC:
-   
+
+### NetChannel Applications
+1. Change the host IP adddress inside the `NetChannel/util/netdriver_test.cc` (line 758):
+    ```
+    addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
+    ```
+
+2. Compile the test apps; 
    ```
+   cd ~/NetChannel/util/
+   make
+   ```
+
+## 3. Run a Toy Experiment
+**Please confirm that the NetChannel kernel modules are loaded in both machines.**
+
+### Setup NetChannel
+Configure the network interface and initiate the NetChannel connections:
+   ```
+   cd ~/NetChannel/scripts/
    sudo ./network_setup.sh $IP $IFACE_NAME
-   ```
-   
-3. **After load kernel modeuls in all machines**, initiate connections:.
-   ```
    sudo ./run_module.sh
    ```
-4. Compile sample apps from /util; Make sure you change the host IP adddress inside the netdriver_test.cc
+
+### Run a test application
+Run a test application:
    ```
-   cd util
-   make
-   cd ../
+   cd ~/NetChannel/util/
+   ./xxxx
    ```
  
- ## SIGCOMM 2022 Artifact Evaluation
- 
- 1. Figure 6a, 6b (data copy processing parallelism experiment),
+## SIGCOMM 2022 Artifact Evaluation
+### Hardware/Software Configuration
+We have used the follwing hardware and software configurations for running the experiments shown in the paper.
+
+* CPU: 4-Socket Intel Xeon Gold 6234 3.3 GHz with 8 cores per socket (with hyperthreading disabled)
+* RAM: 384 GB
+* NIC: Mellanox ConnectX-5 Ex VPI (100 Gbps)
+* OS: Ubuntu 20.04 with Linux 5.6 (patched)
+
+#### Caveats of Our Work
+Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
+
+### Running Experiments
+All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively.
+
+```
+sudo -s
+cd ~/NetChannel/sigcomm22_artifact/
+```
+
+1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
 
@@ -68,7 +168,7 @@
     ```
     sudo ./run_single_flow_set_up.sh 
     cd util/
-    ./run_client.sh 1
+    ./run_client.sh 1 nd
     ```
     The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
  
@@ -115,6 +215,72 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_client_oto.sh 8 nd
     ./run_pingpong_setup1.sh 1 nd -20
     ```
+### TCP setup
+ 1. Figure 6a, 6b (data copy processing parallelism experiment),
+ 
+    For the normal read/write syscall experiment,
+
+    On the server side:
+
+    ```
+    sudo ./run_single_flow_set_up_tcp.sh 
+    cd util/
+    ./run_single_server.sh 1
+    ```
+
+    On the client side:
+
+    ```
+    sudo ./run_single_flow_set_up_tcp.sh 
+    cd util/
+    ./run_client.sh 1 tcp
+    ```
+    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
+ 
+ 2. Figure 6c (network processing parallelism experiment),
+ 
+    For the normal read/write syscall experiment,
+
+    On the server side:
+
+    ```
+    sudo ./run_np_tcp.sh 
+    cd util/
+    ./run_np_server.sh 1
+    ```
+
+    On the client side:
+
+    ```
+    sudo ./run_np_tcp.sh 
+    cd util/
+    ./run_pingpong_setup3.sh 1 tcp
+    ```
+    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
+The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
+
+3. Figure 6d (performance isolation experiment),
+
+    On the server side:
+
+    ```
+    sudo ./run_mix_flow_tcp.sh 
+    cd util/
+    sudo -s
+    ./run_pingpong.sh 1 -20
+    ./run_server.sh 8
+    ```
+
+    On the client side:
+
+    ```
+    sudo ./run_mix_flow_tcp.sh
+    cd util/
+    sudo -s
+    ./run_client_oto.sh 8 tcp
+    ./run_pingpong_setup1.sh 1 tcp -20
+    ```
+    
 ### io_uring bench setup
 
  1. Clone liburing and build
