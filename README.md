@@ -6,11 +6,11 @@ NetChannel is a new disaggregated network stack architecture that enables resour
 
 ## 1. Overview
 ### Repository overview
-- `kernel_patch/` includes NetChannel kernel modules.
+- `kernel_patch/` includes some modifications in the kernel code.
 - `module/` includes NetChannel kernel modules.
-- `util/` includes sample applications.
-- `sigcomm22_artifact/` includes scripts for SIGCOMM 2022 artifact evaluation.
 - `scripts/` includes scripts for getting started instructions.
+- `sigcomm22_artifact/` includes scripts for SIGCOMM 2022 artifact evaluation.
+- `util/` includes sample applications.
 
 ### System overview
 For simplicity, we assume that users have two physical servers (Client and Server) connected with each other over networks using the following configuration:
@@ -22,9 +22,9 @@ Through the following three sections, we provide getting started instructions to
 
    - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
-   - **Run Toy-experiments (5-10 compute-mins):**
+   - **Run a Toy Experiment (5-10 compute-mins):**
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-   - **[SIGCOMM 2022 Artifact Evaluation](#SIGCOMM-2022-Artifact-Evaluation) (xxx compute-mins):**  
+   - **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
@@ -75,13 +75,13 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    
    ```
    CPU(s):                32
-   On-line CPU(s) list:   0-23
+   On-line CPU(s) list:   0-31
    ```
 
 5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
 
    ```
-   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6-netchannel"
+   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6.0-netchannel"
    ```
 
 6. Update the grub configuration and reboot into the new kernel.
@@ -90,7 +90,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    update-grub && reboot
    ```
    
-7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.
    
 ### NetChannel Kernel Modules
 1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
