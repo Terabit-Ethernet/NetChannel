@@ -75,13 +75,13 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    
    ```
    CPU(s):                32
-   On-line CPU(s) list:   0-23
+   On-line CPU(s) list:   0-31
    ```
 
 5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
 
    ```
-   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6-netchannel"
+   GRUB_DEFAULT="1>Ubuntu, with Linux 5.6.0-netchannel"
    ```
 
 6. Update the grub configuration and reboot into the new kernel.
@@ -90,7 +90,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    update-grub && reboot
    ```
    
-7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6-netchannel`.
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.
    
 ### NetChannel Kernel Modules
 1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
