@@ -41,9 +41,9 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 2. Download and apply the NetChannel kernel patch to the kernel source:
 
    ```
-   git clone https://github.com/Terabit-Ethernet/NetChannel.git
+   git clone -b new_flow_control https://github.com/Terabit-Ethernet/NetChannel.git
    cd ~/linux-5.6/
-   git apply ../NetChannel/kernel_patch/netchannel.patch
+   git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
 
 3. Update kernel configuration:
@@ -62,7 +62,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    make modules_install
    make install
    ```
-   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type "lscpu | grep 'CPU(s)'" to see the total number of cores:
+   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type `lscpu | grep 'CPU(s)'` to see the total number of cores:
    
    ```
    CPU(s):                24
