@@ -43,7 +43,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    ```
    git clone https://github.com/Terabit-Ethernet/NetChannel.git
    cd ~/linux-5.6/
-   git apply ../NetChannel/kernel_patch/netchannel.patch
+   git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
 
 3. Update kernel configuration:
