@@ -62,7 +62,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
    make modules_install
    make install
    ```
-   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type "lscpu | grep 'CPU(s)'" to see the total number of cores:
+   The number 24 means the number of threads created for compilation. Set it to be the total number of cores of your system to reduce the compilation time. Type `lscpu | grep 'CPU(s)'` to see the total number of cores:
    
    ```
    CPU(s):                24
