@@ -146,6 +146,27 @@ index dc77c303e6f7..bccd439bb772 100644
  
  /*
   * This routine provides an alternative to tcp_recvmsg() for routines
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 6b6b57000dad..09ba9dec7100 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -80,6 +80,7 @@
+ #include <linux/jump_label_ratelimit.h>
+ #include <net/busy_poll.h>
+ #include <net/mptcp.h>
++#include <linux/inet.h>
+ 
+ int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
+ 
+@@ -663,6 +664,8 @@ void tcp_rcv_space_adjust(struct sock *sk)
+ 	tp->rcvq_space.seq = tp->copied_seq;
+ 	tp->rcvq_space.time = tp->tcp_mstamp;
+ }
++/* NetChannel: add export_symbol */
++EXPORT_SYMBOL(tcp_rcv_space_adjust);
+ 
+ /* There is something which you must keep in mind when you analyze the
+  * behavior of the tp->ato delayed ack timeout interval.  When a
 -- 
 2.25.1
 
