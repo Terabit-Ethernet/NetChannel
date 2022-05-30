@@ -1,3 +1,16 @@
+diff --git a/Makefile b/Makefile
+index 4d0711f54047..78933f7dbde3 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@
+ VERSION = 5
+ PATCHLEVEL = 6
+ SUBLEVEL = 0
+-EXTRAVERSION =
++EXTRAVERSION ="-netchannel"
+ NAME = Kleptomaniac Octopus
+ 
+ # *DOCUMENTATION*
 diff --git a/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c b/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c
 index 312d4692425b..fec1a4b170eb 100644
 --- a/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c
