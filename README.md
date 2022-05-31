@@ -29,7 +29,7 @@ This section provides the detailed instructions to reproduce all individual resu
 
 
 ## 2. Build NetChannel
-NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on both Client and Server machines.
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on _both Client and Server machines_.
 
 ### Install Prerequisites
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
@@ -109,34 +109,46 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    make
    sudo insmod nd_module.ko
    ```
+   
+3. Activate the NetChannel kernel module:
+   ```
+   cd ~/NetChannel/scripts/
+   sudo ./run_module.sh
+   ```
 
-### NetChannel Applications
-1. Change the host IP adddress inside the `NetChannel/util/netdriver_test.cc` (line 758):
+### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
+We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+   ```
+    IPPROTO_UDP = 17,      /* User Datagram Protocol.  */
+#define IPPROTO_UDP             IPPROTO_UDP
+    IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
+#define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
+    IPPROTO_IDP = 22,      /* XNS IDP protocol.  */
+#define IPPROTO_IDP             IPPROTO_IDP
+    IPPROTO_TP = 29,       /* SO Transport Protocol Class 4.  */
+#define IPPROTO_TP              IPPROTO_TP
+    IPPROTO_DCCP = 33,     /* Datagram Congestion Control Protocol.  */
+   ```
+
+
+## 3. Run a Toy Experiment
+**Please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
+
+1. Configure the network interface:
+   ```
+   cd ~/NetChannel/scripts/
+   sudo ./network_setup.sh $IP $IFACE_NAME
+   ```
+
+2. Change the host IP adddress inside the `NetChannel/util/netdriver_test.cc` (line 758):
     ```
     addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
     ```
 
-2. Compile the test apps; 
+3. Compile and run a test application; 
    ```
    cd ~/NetChannel/util/
    make
-   ```
-
-## 3. Run a Toy Experiment
-**Please confirm that the NetChannel kernel modules are loaded in both machines.**
-
-### Setup NetChannel
-Configure the network interface and initiate the NetChannel connections:
-   ```
-   cd ~/NetChannel/scripts/
-   sudo ./network_setup.sh $IP $IFACE_NAME
-   sudo ./run_module.sh
-   ```
-
-### Run a test application
-Run a test application:
-   ```
-   cd ~/NetChannel/util/
    ./xxxx
    ```
  
