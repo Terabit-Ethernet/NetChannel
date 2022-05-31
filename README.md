@@ -149,8 +149,10 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
 4. Compile and run the application:
    ```
    make
-   sudo ~/NetChannel/scripts/network_setup.sh 192.168.10.116 ens2f0
-   sudo ./
+   cd ~/NetChannel/scripts/
+   sudo ./network_setup.sh 192.168.10.116 ens2f0
+   cd ~/NetChannel/util/
+   sudo ./xxx
    ```
 
  
