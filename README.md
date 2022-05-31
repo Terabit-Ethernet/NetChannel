@@ -120,15 +120,10 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 ### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
 We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
    ```
-    IPPROTO_UDP = 17,      /* User Datagram Protocol.  */
-#define IPPROTO_UDP             IPPROTO_UDP
+   ...
     IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
 #define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
-    IPPROTO_IDP = 22,      /* XNS IDP protocol.  */
-#define IPPROTO_IDP             IPPROTO_IDP
-    IPPROTO_TP = 29,       /* SO Transport Protocol Class 4.  */
-#define IPPROTO_TP              IPPROTO_TP
-    IPPROTO_DCCP = 33,     /* Datagram Congestion Control Protocol.  */
+   ...
    ```
 
 ## 3. Run a Toy Experiment
