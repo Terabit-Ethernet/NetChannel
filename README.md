@@ -127,7 +127,7 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
    ```
 
 ## 3. Run a Toy Experiment
- 1. Build liburing
+1. Build liburing
    ```
    cd ~
    git clone https://github.com/axboe/liburing
