@@ -168,7 +168,7 @@ We have used the follwing hardware and software configurations for running the e
 #### Caveats of Our Work
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
-### Running Experiments
+### Running Experiments with NetChannel
 All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively. And also, **please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
 
 ```
@@ -240,7 +240,8 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_client_oto.sh 8 nd
     ./run_pingpong_setup1.sh 1 nd -20
     ```
-### TCP setup
+
+### Linux TCP Experiments
  1. Figure 6a, 6b (data copy processing parallelism experiment),
  
     For the normal read/write syscall experiment,
@@ -306,32 +307,8 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 tcp -20
     ```
     
-### io_uring bench setup
-
- 1. Clone liburing and build
-
- ```
- git clone https://github.com/axboe/liburing
- cd liburing
- make
- cd ..
- ```
- For artifact evaluation, we have installed the liburing for you, you can jump into the step 3.
-
- 2. Set liburing-path in Makefile in this directory
- 
- Example:
-
- ```
- liburing-path = /home/midhul/liburing
- ```
-
- 3. build iouring_bench
- ```
- make iouring_bench iouring_bench_nc
- ```
-
- 4. Figure 6a (data copy processing parallelism)
+### Linux TCP Experiments with io_uring
+ 1. Figure 6a (data copy processing parallelism)
 
  On the server side,
  
@@ -350,7 +327,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
  sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
  ```
 
- 5. Figure 6b (network processing parallelism) 
+ 2. Figure 6b (network processing parallelism) 
 
  On the server side,
  
@@ -367,6 +344,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
  cd util/
  sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 180
  ```
+ 
 ### Redis Experiment
  
  1. Clone the repo of Redis and build Redis at both sides,
