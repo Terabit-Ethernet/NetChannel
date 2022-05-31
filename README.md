@@ -93,7 +93,12 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.
    
 ### NetChannel Kernel Modules
-1. Change the local IP, remote IP address and the number of remote hosts inside the `NetChannel/module/nd_plumbing.c` (line 281):
+1. Go to the kernel module directory:
+   ```
+   cd ~/NetChannel/module/
+   ```
+   
+2. Currently, IP addresses are hard-corded in the module. Modify `nd_plumbing.c` to change the local IP, remote IP address and the number of remote hosts (line 281):
     ```
     params->local_ip = "192.168.10.116";
 
@@ -102,18 +107,13 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
     params->remote_ips[0] = "192.168.10.117";
     params->remote_ips[1] = "192.168.10.116";
    ```
+   **[NOTE]** Use corresponding IP addresses on the Server-side.
   
-2. Compile and load the NetChannel kernel module:
+3. Compile, load, and activate the NetChannel kernel module:
     ```
-   cd ~/NetChannel/module/
    make
    sudo insmod nd_module.ko
-   ```
-   
-3. Activate the NetChannel kernel module:
-   ```
-   cd ~/NetChannel/scripts/
-   sudo ./run_module.sh
+   sudo sysctl /net/nd/nd_add_host=1
    ```
 
 ### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
@@ -130,27 +130,33 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
     IPPROTO_DCCP = 33,     /* Datagram Congestion Control Protocol.  */
    ```
 
-
 ## 3. Run a Toy Experiment
-**Please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
-
-1. Configure the network interface:
+ 1. Build liburing
    ```
-   cd ~/NetChannel/scripts/
-   sudo ./network_setup.sh $IP $IFACE_NAME
+   cd ~
+   git clone https://github.com/axboe/liburing
+   cd liburing
+   make
+   cd ~/NetChannel/util/
    ```
 
-2. Change the host IP adddress inside the `NetChannel/util/netdriver_test.cc` (line 758):
+2. Modify `Makefile` to set liburing-path (line 1):
+   ```
+   liburing-path = /home/sigcomm22/liburing
+   ```
+
+3. Modify `netdriver_test.cc` to change the host IP adddress (line 758):
     ```
     addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
     ```
 
-3. Compile and run a test application; 
+4. Compile and run the application:
    ```
-   cd ~/NetChannel/util/
    make
-   ./xxxx
+   sudo ~/NetChannel/scripts/network_setup.sh 192.168.10.116 ens2f0
+   sudo ./
    ```
+
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
@@ -165,7 +171,7 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments
-All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively.
+All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively. And also, **please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
 
 ```
 sudo -s
