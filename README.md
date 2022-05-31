@@ -98,7 +98,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    cd ~/NetChannel/module/
    ```
    
-2. Currently, IP addresses are hard-corded in the module. Modify `nd_plumbing.c` to change the local IP, remote IP address and the number of remote hosts (line 281):
+2. Currently, IP addresses are hard-corded in the module. Modify `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:
     ```
     params->local_ip = "192.168.10.116";
 
@@ -107,7 +107,8 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
     params->remote_ips[0] = "192.168.10.117";
     params->remote_ips[1] = "192.168.10.116";
    ```
-   **[NOTE]** Use corresponding IP addresses on the Server-side.
+   **[NOTE]** Use corresponding IP addresses on the Server-side.  
+   
   
 3. Compile, load, and activate the NetChannel kernel module:
     ```
