@@ -98,7 +98,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    cd ~/NetChannel/module/
    ```
    
-2. Currently, IP addresses are hard-corded in the module. Modify `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:
+2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:
     ```
     params->local_ip = "192.168.10.116";
 
@@ -136,12 +136,12 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
    cd ~/NetChannel/util/
    ```
 
-2. Modify `Makefile` to set liburing-path (line 1):
+2. Edit `Makefile` to set the liburing-path (line 1):
    ```
    liburing-path = /home/sigcomm22/liburing
    ```
 
-3. Modify `netdriver_test.cc` to change the host IP adddress (line 758):
+3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):
     ```
     addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
     ```
