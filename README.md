@@ -114,7 +114,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
     ```
    make
    sudo insmod nd_module.ko
-   sudo sysctl /net/nd/nd_add_host=1
+   sudo ~/NetChannel/scripts/run_module.sh
    ```
 
 ### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
@@ -138,7 +138,7 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
 
 2. Edit `Makefile` to set the liburing-path (line 1):
    ```
-   liburing-path = /home/sigcomm22/liburing
+   liburing-path = /home/(account name)/liburing
    ```
 
 3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):
@@ -149,9 +149,8 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
 4. Compile and run the application:
    ```
    make
-   cd ~/NetChannel/scripts/
-   sudo ./network_setup.sh 192.168.10.116 ens2f0
-   cd ~/NetChannel/util/
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
    sudo ./xxx
    ```
 
@@ -169,10 +168,12 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments with NetChannel
-All experiments must be run as `sudo`. Run the scripts corresponding to each experiment on the sender and receiver respectively. And also, **please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
-
+Run the scripts corresponding to each experiment on the sender and receiver respectively. And also, **please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
 ```
-sudo -s
+sudo insmod ~/NetChannel/module/nd_module.ko
+sudo ~/NetChannel/scripts/run_module.sh
+sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
 cd ~/NetChannel/sigcomm22_artifact/
 ```
 
