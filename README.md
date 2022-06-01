@@ -326,7 +326,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
  sudo ./run_single_flow_set_up.sh 
  sudo sysctl  net.nd.nd_num_dc_thread=0
  cd util/
- sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
+ sudo taskset -c 28 ./iouring_bench_nc client 192.168.10.117 9095 60
  ```
 
  2. Figure 6b (network processing parallelism) 
@@ -344,7 +344,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
  ```
  sudo ./run_np.sh 
  cd util/
- sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 180
+ sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
  ```
  
 ### Redis Experiment
