@@ -169,9 +169,16 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments with NetChannel
-Run the scripts corresponding to each experiment on the sender and receiver respectively. And also, **please confirm that the NetChannel kernel modules are loaded and activated in both machines.**  
+
+First, **load NetChannel kernel modules in both machines**
+
 ```
 sudo insmod ~/NetChannel/module/nd_module.ko
+```
+
+Run the scripts corresponding to each experiment on the sender and receiver respectively.
+
+```
 sudo ~/NetChannel/scripts/run_module.sh
 sudo ~/NetChannel/scripts/network_setup.sh ens2f0
 sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
