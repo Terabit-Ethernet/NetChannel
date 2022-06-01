@@ -104,10 +104,10 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
     /* set the number of remote hosts */
     params->num_remote_hosts = 2;
-    params->remote_ips[0] = "192.168.10.117";
-    params->remote_ips[1] = "192.168.10.116";
+    params->remote_ips[0] = "192.168.10.116";
+    params->remote_ips[1] = "192.168.10.117";
    ```
-   **[NOTE]** Use corresponding IP addresses on the Server-side.  
+   **[NOTE]** Use `params->local_ip = "192.168.10.117` on the Server-side.  
    
   
 3. Compile, load, and activate the NetChannel kernel module:
@@ -145,6 +145,7 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
     ```
     addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
     ```
+    **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
 
 4. Compile and run the application:
    ```
