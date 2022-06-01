@@ -46,7 +46,8 @@ int send_longflow(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    // sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -134,7 +135,9 @@ int send_shortflow(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    // sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -223,7 +226,9 @@ int send_shortflow_qd(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+ //   sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -331,7 +336,9 @@ int send_shortflow_sqpoll(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+//    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -435,7 +442,9 @@ int send_shortflow_fullpoll(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+//    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -548,7 +557,9 @@ int send_shortflow_legacy(const char *host, int port, int duration) {
 	saddr.sin_port = htons(port);
 	inet_pton(AF_INET, host, &saddr.sin_addr);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+//    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
 	if (sockfd < 0) {
 		perror("socket");
 		return 1;
@@ -599,7 +610,9 @@ int accept_connection(const char *host, int port, int *sock) {
 	addr.sin_addr.s_addr = INADDR_ANY;
 
     
-    listen_fd = socket(PF_INET, SOCK_STREAM, 0);
+    // listen_fd = socket(PF_INET, SOCK_STREAM, 0);
+    listen_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
+
     if(listen_fd == -1) {
         perror("listen socket create failed");
         return -1;
