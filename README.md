@@ -20,15 +20,16 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 ### Getting Started Guide
 Through the following sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+* **Build NetChannel**
+   * **Build NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
-   - **Build NetChannel Kernel Module: (5 human-mins):**  
+   * **Build NetChannel Kernel Module: (5 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
-   - **Build NetChannel Applications: (10 human-mins):**  
+   * **Build NetChannel Applications: (10 human-mins):**  
 This section covers how to build the NetChannel test applications.
-   - **Run a Toy Experiment (5-10 compute-mins):**  
+* **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-   - **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
+* **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
