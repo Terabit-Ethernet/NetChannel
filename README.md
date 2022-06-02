@@ -297,14 +297,16 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
  - For io_uring:
  
-    On the server side,
+    On the Server side:
+    
     ```
     sudo ./run_np.sh 
     cd util/
     sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
     ``` 
  
-    On the client side,
+    On the Client side:
+    
     ```
     sudo ./run_np.sh 
     cd util/
