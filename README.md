@@ -229,13 +229,26 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    cd ~/NetChannel/sigcomm22_artifact/
    ```
    
-3. Configure parameters:
-
-   Edit `param.sh` to change the IP addresses and interface name:
+3. Edit `param.sh` to change the IP addresses and interface name:
    ```
    client_ip=192.168.10.116
    server_ip=192.168.10.117
    iface=ens2f0
+   ```
+   
+4. Configure `sysstat` and `ssh`:
+
+   We use `sar/sysstat` and `ssh` to measure CPU utilization on both sides. Please refer to [Installing sar/sysstat](https://www.digitalocean.com/community/questions/how-to-install-and-configure-sar-sysstat-on-ubuntu) and [SSH login without password](https://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/). The following command should work on the Client-side:
+   ```
+   ssh 192.168.10.117 'sar -u 5 1'
+   ```
+   Here is an example of output:
+   ```
+   Linux 5.6.0-netchannel (xxxx)         xx/xx/2022      _x86_64_        (32 CPU)
+
+   10:48:53 AM     CPU     %user     %nice   %system   %iowait    %steal     %idle
+   10:48:58 AM     all      0.01      0.00      0.03      0.00      0.00     99.96
+   Average:        all      0.01      0.00      0.03      0.00      0.00     99.96
    ```
 
 ### NetChannel Experiments
