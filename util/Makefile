@@ -1,4 +1,4 @@
-liburing-path = /home/midhul/liburing
+liburing-path = /home/sigcomm22/liburing
 CFLAGS := -Wall -Werror -g -fno-strict-aliasing -O3 -I..
 
 BINS := netdriver_test netdriver_test_multithread  pingpong_server pingpong_server_async server iouring_bench iouring_bench_nc

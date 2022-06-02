@@ -1,6 +1,6 @@
 #!/bin/sh
 
-intf=$1
+intf=${1:-ens2f0}
 
 ethtool -K $intf ntuple on
 
