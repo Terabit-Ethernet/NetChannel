@@ -214,40 +214,50 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments with NetChannel
-First, load the NetChannel kernel module in both Server and Client machines. And then activate the module and run the network configuration scripts:
 
-Step 1 for both Server and Client:  
+Step 1 (load NetChannel module):  
    ```
    sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
    ```
 
-**[NOTE] Confirm that Step 1 is done before Step 2.**
+**[NOTE] Confirm that Step 1 is done in both sides before Step 2.**
 
-Step 2 for both Server and Client:  
+Step 2 (activate NetChannel module):  
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/sigcomm22_artifact/
    ```
+   
+Step 3 (configure parameters):
 
-1. Figure 6a, 6b (data copy processing parallelism experiment),
+   Edit `param.sh` to change the IP addresses and interface name:
+   ```
+   client_ip=192.168.10.116
+   server_ip=192.168.10.117
+   iface=ens2f0
+   ```
+
+
+1. Figure 6a, 6b (data copy processing parallelism):
  
     For the normal read/write syscall experiment,
 
-    On the server side:
+    On the Server side:
 
     ```
-    ./fig6a6b-nc-server.sh 192.168.10.117 ens2f0
+    ./fig6a6b-nc-server.sh
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
-    ./fig6a6b-nc-client.sh 192.168.10.117 ens2f0
+    ./fig6a6b-nc-client.sh
     ```
     
-    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
+On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+
  
  2. Figure 6c (network processing parallelism experiment),
  
