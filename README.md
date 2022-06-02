@@ -182,7 +182,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 2. On the Server side:  
 
-   Activate the NetChannel kernel module and run a test server application with the Server IP address (192.168.10.117):
+   Activate the NetChannel kernel module and run a test server application with the Server IP address (e.g., 192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
@@ -191,7 +191,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 3. On the Client side:  
 
-   Activate the NetChannel kernel module and run a test client application with the Server IP address (192.168.10.117):
+   Activate the NetChannel kernel module and run a test client application with the Server IP address (e.g., 192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
@@ -240,7 +240,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 ### NetChannel Experiments
 
-1. **Figure 6a, 6b** (data copy processing parallelism):
+1. **Figure 6a, 6b** (Data copy processing parallelism):
 
 - For read/write syscalls:
 
@@ -272,7 +272,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    ./fig6a6b-nc-uring-client.sh
    ```
  
- 2. **Figure 6c** (network processing parallelism):
+ 2. **Figure 6c** (Network processing parallelism):
  
  - For read/write syscalls:
  
@@ -314,7 +314,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
     ```
     
 
-3. **Figure 6d** (performance isolation):
+3. **Figure 6d** (Performance isolation):
 
     On the Server side:
 
