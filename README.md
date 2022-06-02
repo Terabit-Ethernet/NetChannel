@@ -40,7 +40,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
    ```
    sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
-                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf
+                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat
    ```
 
 ### NetChannel Kernel
@@ -182,7 +182,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 2. On the Server side:  
 
-   Activate the NetChannel kernel module and run a test server application with the Server IP address (192.168.10.117):
+   Activate the NetChannel kernel module and run a test server application with the Server IP address (e.g., 192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
@@ -191,7 +191,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 3. On the Client side:  
 
-   Activate the NetChannel kernel module and run a test client application with the Server IP address (192.168.10.117):
+   Activate the NetChannel kernel module and run a test client application with the Server IP address (e.g., 192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
@@ -240,39 +240,23 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 ### NetChannel Experiments
 
-1. **Figure 6a, 6b** (data copy processing parallelism):
+- **Figure 6a--6b** (Data copy processing parallelism):
 
    For read/write syscalls:
 
-   On the Server side:
+   - Server: `./fig6a6b-nc-server.sh`
+   - Client: `./fig6a6b-nc-client.sh`
 
-   ```
-   ./fig6a6b-nc-server.sh
-   ```
-
-   On the Client side:
-
-   ```
-   ./fig6a6b-nc-client.sh
-   ```
-    
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
 
    For io_uring:
    
-   On the Server side:
-   
-    ```
-   ./fig6a6b-nc-uring-server.sh
-   ```
-
-   On the Client side:
-
-   ```
-   ./fig6a6b-nc-uring-client.sh
-   ```
+   - Server: `./fig6a6b-nc-uring-server.sh`
+   - Client: `./fig6a6b-nc-uring-client.sh`
  
- 2. **Figure 6c** (network processing parallelism):
+ - **Figure 6c** (Network processing parallelism):
+ 
+    For read/write syscalls:
  
     On the Server side:
 
@@ -291,10 +275,28 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
     ```
 
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
-    
-The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
+    The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
-3. **Figure 6d** (performance isolation):
+ - For io_uring:
+ 
+    On the Server side:
+    
+    ```
+    sudo ./run_np.sh 
+    cd util/
+    sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
+    ``` 
+ 
+    On the Client side:
+    
+    ```
+    sudo ./run_np.sh 
+    cd util/
+    sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
+    ```
+    
+
+3. **Figure 6d** (Performance isolation):
 
     On the Server side:
 
@@ -378,45 +380,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 tcp -20
     ```
     
-### Experiments with io_uring
- 1. Figure 6a (data copy processing parallelism)
-
- On the server side,
- 
- ```
- sudo ./run_single_flow_set_up.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
- ```
- 
- On the client side,
- 
- ```
- sudo ./run_single_flow_set_up.sh 
- sudo sysctl  net.nd.nd_num_dc_thread=0
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc client 192.168.10.117 9095 60
- ```
-
- 2. Figure 6b (network processing parallelism) 
-
- On the server side,
- 
- ```
- sudo ./run_np.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
- ``` 
- 
- On the client side,
- 
- ```
- sudo ./run_np.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
- ```
- 
-### Redis Experiment
+### Redis Experiment (Figure 7)
  
  1. Clone the repo of Redis and build Redis at both sides,
  
