@@ -214,19 +214,28 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments with NetChannel
+**[NOTE] You should confirm that the NetChannel kernel module is loaded in both Server and Client machines. And then, run the scripts corresponding to each experiment on the sender and receiver respectively.**
 
-First, **load NetChannel kernel modules in both machines**
+On both sides:  
+   ```
+   sudo insmod ~/NetChannel/module/nd_module.ko
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   ```
 
+On the Server side:  
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/sigcomm22_artifact/
+   ```
 
+On the Client side:  
 
-Run the scripts corresponding to each experiment on the sender and receiver respectively.
-
-```
-sudo ~/NetChannel/scripts/run_module.sh
-sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-cd ~/NetChannel/sigcomm22_artifact/
-```
+   Activate the NetChannel kernel module and run a test client application:
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/sigcomm22_artifact/
+   ```
 
 1. Figure 6a, 6b (data copy processing parallelism experiment),
  
