@@ -230,8 +230,6 @@ On the Server side:
    ```
 
 On the Client side:  
-
-   Activate the NetChannel kernel module and run a test client application:
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/sigcomm22_artifact/
