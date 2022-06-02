@@ -274,6 +274,8 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
  
  2. **Figure 6c** (network processing parallelism):
  
+ - For read/write syscalls:
+ 
     On the Server side:
 
     ```
@@ -291,8 +293,24 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
     ```
 
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
+    The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
+
+ - For io_uring:
+ 
+    On the server side,
+    ```
+    sudo ./run_np.sh 
+    cd util/
+    sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
+    ``` 
+ 
+    On the client side,
+    ```
+    sudo ./run_np.sh 
+    cd util/
+    sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
+    ```
     
-The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
 3. **Figure 6d** (performance isolation):
 
@@ -378,45 +396,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 tcp -20
     ```
     
-### Experiments with io_uring
- 1. Figure 6a (data copy processing parallelism)
-
- On the server side,
- 
- ```
- sudo ./run_single_flow_set_up.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
- ```
- 
- On the client side,
- 
- ```
- sudo ./run_single_flow_set_up.sh 
- sudo sysctl  net.nd.nd_num_dc_thread=0
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc client 192.168.10.117 9095 60
- ```
-
- 2. Figure 6b (network processing parallelism) 
-
- On the server side,
- 
- ```
- sudo ./run_np.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
- ``` 
- 
- On the client side,
- 
- ```
- sudo ./run_np.sh 
- cd util/
- sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
- ```
- 
-### Redis Experiment
+### Redis Experiment (Figure 7)
  
  1. Clone the repo of Redis and build Redis at both sides,
  
