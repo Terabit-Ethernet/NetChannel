@@ -267,46 +267,21 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    - Server: `./fig6a6b-nc-uring-server.sh`
    - Client: `./fig6a6b-nc-uring-client.sh`
  
- - **Figure 6c** (Network processing parallelism):
+- **Figure 6c** (Network processing parallelism):
+
+   For read/write syscalls:
  
-    For read/write syscalls:
- 
-    On the Server side:
-
-    ```
-    sudo ./run_np.sh 
-    cd util/
-    ./run_np_server.sh 1
-    ```
-
-    On the Client side:
-
-    ```
-    sudo ./run_np.sh 
-    cd util/
-    ./run_pingpong_setup3.sh 1 nd
-    ```
+   - Server: `./fig6c-nc-server.sh 1`
+   - Client: `./fig6c-nc-client.sh 1`
 
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
-    The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
- - For io_uring:
+   For io_uring:
  
-    On the Server side:
+   - Server: `./fig6c-nc-uring-server.sh 1`
+   - Client: `./fig6c-nc-uring-client.sh 1`
     
-    ```
-    sudo ./run_np.sh 
-    cd util/
-    sudo taskset -c 28 ./iouring_bench_nc server 192.168.10.117 9095
-    ``` 
- 
-    On the Client side:
-    
-    ```
-    sudo ./run_np.sh 
-    cd util/
-    sudo taskset -c 28 ./iouring_bench_nc client-shortflows-qd 192.168.10.117 9095 60
-    ```
+The scripts set the number of channels via the first argument. Change the number of channels from 1 to 4 and repeat the experiments to get the entire Figure 6c results.
     
 
 3. **Figure 6d** (Performance isolation):
