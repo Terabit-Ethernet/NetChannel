@@ -216,20 +216,20 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 ### NetChannel Configurations
 **[NOTE] Each step should be done in BOTH SIDES before the next step.**
 
-Step 1 (load NetChannel module):  
+1. Step 1 (load NetChannel module):  
    ```
    sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
    ```
 
-Step 2 (activate NetChannel module):  
+2. Step 2 (activate NetChannel module):  
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/sigcomm22_artifact/
    ```
    
-Step 3 (configure parameters):
+3. Step 3 (configure parameters):
 
    Edit `param.sh` to change the IP addresses and interface name:
    ```
