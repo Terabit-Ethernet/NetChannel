@@ -245,7 +245,8 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    For read/write syscalls:
 
    - Server: `./fig6a6b-nc-server.sh`
-   - Client: `./fig6a6b-nc-client.sh`  
+   - Client: `./fig6a6b-nc-client.sh`
+
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
 
    For io_uring:
