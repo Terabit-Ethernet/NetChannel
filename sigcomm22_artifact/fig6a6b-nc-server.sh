@@ -3,6 +3,7 @@ source param.sh
 # Configuration
 sudo ~/NetChannel/scripts/run_single_flow_set_up.sh $iface
 
+# Run the server program
 flows=1
 #core_id=12
 flow=0
