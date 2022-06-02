@@ -242,7 +242,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 1. **Figure 6a, 6b** (data copy processing parallelism):
 
-   With read/write syscalls:
+   For read/write syscalls:
 
    On the Server side:
 
@@ -256,9 +256,11 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    ./fig6a6b-nc-client.sh
    ```
     
-   On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+   (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
 
-   With io_uring:
+   For io_uring:
+   
+   On the Server side:
    
     ```
    ./fig6a6b-nc-uring-server.sh
@@ -288,7 +290,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
     ./run_pingpong_setup3.sh 1 nd
     ```
 
-   On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+   (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
     
 The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
