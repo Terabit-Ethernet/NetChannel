@@ -213,8 +213,8 @@ We have used the follwing hardware and software configurations for running the e
 #### Caveats of Our Work
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
-### Running Experiments with NetChannel
-**[NOTE]** You should confirm that NetChannel kernel module is loaded in both Client and Server machines before activating the NetChannel module -- i.e., **Step 1 should be done in both sides before Step 2.**
+### NetChannel Configurations
+**[NOTE] Each step should be done in BOTH SIDES before the next step.**
 
 Step 1 (load NetChannel module):  
    ```
@@ -238,24 +238,37 @@ Step 3 (configure parameters):
    iface=ens2f0
    ```
 
-### NetChannel with read/write syscalls
+### NetChannel Experiments
 
 1. **Figure 6a, 6b** (data copy processing parallelism):
 
-    On the Server side:
+   With read/write syscalls:
 
-    ```
-    ./fig6a6b-nc-server.sh
-    ```
+   On the Server side:
 
-    On the Client side:
+   ```
+   ./fig6a6b-nc-server.sh
+   ```
 
-    ```
-    ./fig6a6b-nc-client.sh
-    ```
+   On the Client side:
+
+   ```
+   ./fig6a6b-nc-client.sh
+   ```
     
    On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
 
+   With io_uring:
+   
+    ```
+   ./fig6a6b-nc-uring-server.sh
+   ```
+
+   On the Client side:
+
+   ```
+   ./fig6a6b-nc-uring-client.sh
+   ```
  
  2. **Figure 6c** (network processing parallelism):
  
@@ -301,7 +314,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 nd -20
     ```
 
-### Default Linux TCP with read/write syscalls
+### Default Linux TCP Experiments
  1. **Figure 6a, 6b** (data copy processing parallelism):
  
     On the Server side:
@@ -363,7 +376,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 tcp -20
     ```
     
-### Linux TCP Experiments with io_uring
+### Experiments with io_uring
  1. Figure 6a (data copy processing parallelism)
 
  On the server side,
