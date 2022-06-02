@@ -244,7 +244,7 @@ Step 2 for both Server and Client:
     On the client side:
 
     ```
-    ./fig6a6b-nc-server.sh 192.168.10.117 ens2f0
+    ./fig6a6b-nc-client.sh 192.168.10.117 ens2f0
     ```
     
     The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
