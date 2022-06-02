@@ -238,7 +238,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    
 4. (Skip if already configured) Configure `sysstat` and `ssh`:
 
-   We use `sar/sysstat` and `ssh` to measure CPU utilization on both sides. Please refer to [Installing sar/sysstat](https://www.digitalocean.com/community/questions/how-to-install-and-configure-sar-sysstat-on-ubuntu) and [SSH login without password](https://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/). The following command should work on the Client-side:
+   We use `sar/sysstat` and `ssh` to measure CPU utilization on both sides. Please refer to [Installing sar/sysstat](https://www.digitalocean.com/community/questions/how-to-install-and-configure-sar-sysstat-on-ubuntu) and [SSH login without password](https://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/) (Client-side only). The following command should work on the Client-side:
    ```
    ssh 192.168.10.117 'sar -u 5 1'
    ```
