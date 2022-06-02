@@ -242,18 +242,15 @@ On the Client side:
     On the server side:
 
     ```
-    sudo ./run_single_flow_set_up.sh 
-    cd util/
-    ./run_single_server.sh 1
+    ./fig6a6b-nc-server.sh 192.168.10.117 ens2f0
     ```
 
     On the client side:
 
     ```
-    sudo ./run_single_flow_set_up.sh 
-    cd util/
-    ./run_client.sh 1 nd
+    ./fig6a6b-nc-server.sh 192.168.10.117 ens2f0
     ```
+    
     The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
  
  2. Figure 6c (network processing parallelism experiment),
