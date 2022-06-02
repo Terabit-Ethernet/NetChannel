@@ -198,7 +198,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ./run_client.sh 192.168.10.117 1 nd
    ```
 
-On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+Type `sudo killall server` on the Server machine to stop the server application.
    
  
 ## SIGCOMM 2022 Artifact Evaluation
