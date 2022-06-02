@@ -281,7 +281,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    - Server: `./fig6c-nc-uring-server.sh 1`
    - Client: `./fig6c-nc-uring-client.sh 1`
     
-The scripts set the number of channels via the first argument. Change the number of channels from 1 to 4 and repeat the experiments to get the entire Figure 6c results.
+   **[NOTE]** The scripts set the number of channels via the first argument. Repeat the experiments with varying the number of channels from 1 to 4 to get the entire Figure 6c results.
     
 
 3. **Figure 6d** (Performance isolation):
