@@ -99,30 +99,35 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    
 ### NetChannel Kernel Modules
 1. Go to the kernel module directory:  
+
    ```
    cd ~/NetChannel/module/
    ```
    
 2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:  
-    ```
-    params->local_ip = "192.168.10.116";
 
-    /* set the number of remote hosts */
-    params->num_remote_hosts = 2;
-    params->remote_ips[0] = "192.168.10.116";
-    params->remote_ips[1] = "192.168.10.117";
    ```
+   params->local_ip = "192.168.10.116";
+
+   /* set the number of remote hosts */
+   params->num_remote_hosts = 2;
+   params->remote_ips[0] = "192.168.10.116";
+   params->remote_ips[1] = "192.168.10.117";
+   ```
+
    **[NOTE]** Use `params->local_ip = "192.168.10.117"` on the Server-side.  
    
   
 3. Compile and load the NetChannel kernel module:  
-    ```
+
+   ```
    make
    sudo insmod nd_module.ko
    ```
 
 ### NetChannel Applications  
 1. Build io_uring library (liburing):  
+
    ```
    cd ~
    git clone https://github.com/axboe/liburing
@@ -132,23 +137,29 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 2. Edit `Makefile` to set the liburing-path (line 1):  
+
    ```
    liburing-path = /home/(account name)/liburing
    ```
 
 3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):  
-    ```
-    addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
-    ```
-    **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
+
+   ```
+   addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
+   ```
+
+   **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
 
 4. Compile the applications:  
+
    ```
    make
    ```
 
 5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
-  We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+
+   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+
    ```
    ...
       IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
@@ -157,31 +168,33 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ## 3. Run a Toy Experiment  
-  1. On both sides:  
-    Load the NetChannel kernel module and run network configuration scripts:
-    ```
-    sudo insmod ~/NetChannel/module/nd_module.ko
-    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-    ```
+
+1. On both sides:  
+   Load the NetChannel kernel module and run network configuration scripts:
+
+   ```
+   sudo insmod ~/NetChannel/module/nd_module.ko
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   ```
 
 **[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
-  2. On the Server side:  
-    Activate the NetChannel kernel module and run a test server application:
-    ```
-    sudo ~/NetChannel/scripts/run_module.sh
-    cd ~/NetChannel/util/
-    ./run_single_server.sh 1
-    ```
+2. On the Server side:  
+   Activate the NetChannel kernel module and run a test server application:
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/util/
+   ./run_single_server.sh 1
+   ```
 
-  3. On the Client side:  
-    Activate the NetChannel kernel module and run a test client application:
-    ```
-    sudo ~/NetChannel/scripts/run_module.sh
-    cd ~/NetChannel/util/
-    ./run_client.sh 1 nd
-    ```
+3. On the Client side:  
+   Activate the NetChannel kernel module and run a test client application:
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/util/
+   ./run_client.sh 1 nd
+   ```
 
 On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
    
