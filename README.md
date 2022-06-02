@@ -168,6 +168,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ## 3. Run a Toy Experiment  
+**[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
 1. On both sides:  
 
@@ -178,8 +179,6 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
    ```
-
-**[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
 2. On the Server side:  
 
