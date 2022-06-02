@@ -238,10 +238,9 @@ Step 3 (configure parameters):
    iface=ens2f0
    ```
 
+### NetChannel with read/write syscalls
 
-1. Figure 6a, 6b (data copy processing parallelism):
- 
-    For the normal read/write syscall experiment,
+1. **Figure 6a, 6b** (data copy processing parallelism):
 
     On the Server side:
 
@@ -255,14 +254,12 @@ Step 3 (configure parameters):
     ./fig6a6b-nc-client.sh
     ```
     
-On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+   On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
 
  
- 2. Figure 6c (network processing parallelism experiment),
+ 2. **Figure 6c** (network processing parallelism):
  
-    For the normal read/write syscall experiment,
-
-    On the server side:
+    On the Server side:
 
     ```
     sudo ./run_np.sh 
@@ -270,19 +267,21 @@ On the Server side: the throughput will be shown after 60s. Type `sudo killall s
     ./run_np_server.sh 1
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
     sudo ./run_np.sh 
     cd util/
     ./run_pingpong_setup3.sh 1 nd
     ```
-    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
+
+   On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+    
 The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
-3. Figure 6d (performance isolation experiment),
+3. **Figure 6d** (performance isolation):
 
-    On the server side:
+    On the Server side:
 
     ```
     sudo ./run_mix_flow.sh 
@@ -292,7 +291,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_server.sh 8
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
     sudo ./run_mix_flow.sh
@@ -302,20 +301,18 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_pingpong_setup1.sh 1 nd -20
     ```
 
-### Linux TCP Experiments
- 1. Figure 6a, 6b (data copy processing parallelism experiment),
+### Default Linux TCP with read/write syscalls
+ 1. **Figure 6a, 6b** (data copy processing parallelism):
  
-    For the normal read/write syscall experiment,
-
-    On the server side:
-
+    On the Server side:
+    
     ```
     sudo ./run_single_flow_set_up_tcp.sh 
     cd util/
     ./run_single_server.sh 1
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
     sudo ./run_single_flow_set_up_tcp.sh 
@@ -324,11 +321,9 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ```
     The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
  
- 2. Figure 6c (network processing parallelism experiment),
+ 2. **Figure 6c** (network processing parallelism):
  
-    For the normal read/write syscall experiment,
-
-    On the server side:
+    On the Server side:
 
     ```
     sudo ./run_np_tcp.sh 
@@ -336,7 +331,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_np_server.sh 1
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
     sudo ./run_np_tcp.sh 
@@ -346,9 +341,9 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
 The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
 
-3. Figure 6d (performance isolation experiment),
+3. **Figure 6d** (performance isolation):
 
-    On the server side:
+    On the Server side:
 
     ```
     sudo ./run_mix_flow_tcp.sh 
@@ -358,7 +353,7 @@ The `run_np.sh` will set the number of throught channel to be 4. To change the n
     ./run_server.sh 8
     ```
 
-    On the client side:
+    On the Client side:
 
     ```
     sudo ./run_mix_flow_tcp.sh
