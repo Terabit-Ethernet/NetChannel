@@ -112,7 +112,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
     params->remote_ips[0] = "192.168.10.116";
     params->remote_ips[1] = "192.168.10.117";
    ```
-   **[NOTE]** Use `params->local_ip = "192.168.10.117` on the Server-side.  
+   **[NOTE]** Use `params->local_ip = "192.168.10.117"` on the Server-side.  
    
   
 3. Compile and load the NetChannel kernel module:
