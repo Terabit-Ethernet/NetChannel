@@ -21,11 +21,11 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 Through the following sections, we provide getting started instructions to install NetChannel and to run experiments.
 
 * **Build NetChannel**
-   * **Build NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+   * **NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
-   * **Build NetChannel Kernel Module: (5 human-mins):**  
+   * **NetChannel Kernel Module: (5 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
-   * **Build NetChannel Applications: (10 human-mins):**  
+   * **NetChannel Applications: (10 human-mins):**  
 This section covers how to build the NetChannel test applications.
 * **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
@@ -122,18 +122,6 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Applications
-
-
-### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
-We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
-   ```
-   ...
-    IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
-#define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
-   ...
-   ```
-
-## 3. Run a Toy Experiment
 1. Build liburing
    ```
    cd ~
@@ -154,15 +142,47 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
     ```
     **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
 
-4. Compile and run the application:
+4. Compile the applications:
    ```
    make
-   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-   sudo ./xxx
+
+5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:
+  We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+   ```
+   ...
+    IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
+#define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
+   ...
    ```
 
-   sudo ~/NetChannel/scripts/run_module.sh
+## 3. Run a Toy Experiment
+  On both sides:
+  ```
+  sudo insmod ~/NetChannel/module/nd_module.ko
+  sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+  sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+  ```
+
+**You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module**
+
+  On the Server side:  
+  Activate the NetChannel kernel module and run a test server application:
+  ```
+  sudo ~/NetChannel/scripts/run_module.sh
+  cd ~/NetChannel/util/
+  ./run_single_server.sh 1
+  ```
+
+  On the Client side:  
+  Activate the NetChannel kernel module and run a test client application:
+  ```
+  sudo ~/NetChannel/scripts/run_module.sh
+  cd ~/NetChannel/util/
+  ./run_client.sh 1 nd
+  ```
+
+On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+   
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
@@ -180,9 +200,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 First, **load NetChannel kernel modules in both machines**
 
-```
-sudo insmod ~/NetChannel/module/nd_module.ko
-```
+
 
 Run the scripts corresponding to each experiment on the sender and receiver respectively.
 
