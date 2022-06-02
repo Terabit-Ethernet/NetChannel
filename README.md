@@ -40,7 +40,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
    ```
    sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
-                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf
+                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat
    ```
 
 ### NetChannel Kernel
@@ -240,41 +240,22 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 ### NetChannel Experiments
 
-1. **Figure 6a, 6b** (Data copy processing parallelism):
+- **Figure 6a--6b** (Data copy processing parallelism):
 
-- For read/write syscalls:
+   For read/write syscalls:
 
-   On the Server side:
-
-   ```
-   ./fig6a6b-nc-server.sh
-   ```
-
-   On the Client side:
-
-   ```
-   ./fig6a6b-nc-client.sh
-   ```
-    
+   - Server: `./fig6a6b-nc-server.sh`
+   - Client: `./fig6a6b-nc-client.sh`
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
 
-- For io_uring:
+   For io_uring:
    
-   On the Server side:
-   
-    ```
-   ./fig6a6b-nc-uring-server.sh
-   ```
-
-   On the Client side:
-
-   ```
-   ./fig6a6b-nc-uring-client.sh
-   ```
+   - Server: `./fig6a6b-nc-uring-server.sh`
+   - Client: `./fig6a6b-nc-uring-client.sh`
  
- 2. **Figure 6c** (Network processing parallelism):
+ - **Figure 6c** (Network processing parallelism):
  
- - For read/write syscalls:
+    For read/write syscalls:
  
     On the Server side:
 
