@@ -145,6 +145,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 4. Compile the applications:
    ```
    make
+   ```
 
 5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:
   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
@@ -157,13 +158,14 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 ## 3. Run a Toy Experiment
   On both sides:
+  Load the NetChannel kernel module and run network configuration scripts:
   ```
   sudo insmod ~/NetChannel/module/nd_module.ko
   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
   ```
 
-**You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module**
+**[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
   On the Server side:  
   Activate the NetChannel kernel module and run a test server application:
