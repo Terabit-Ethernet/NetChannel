@@ -122,7 +122,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Applications  
-1. Build liburing  
+1. Build io_uring library (liburing):  
    ```
    cd ~
    git clone https://github.com/axboe/liburing
@@ -157,34 +157,31 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ## 3. Run a Toy Experiment  
-  On both sides:  
-  
-  Load the NetChannel kernel module and run network configuration scripts:
-  ```
-  sudo insmod ~/NetChannel/module/nd_module.ko
-  sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-  sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-  ```
+  1. On both sides:  
+    Load the NetChannel kernel module and run network configuration scripts:
+    ```
+    sudo insmod ~/NetChannel/module/nd_module.ko
+    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+    ```
 
 **[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
-  On the Server side:  
-  
-  Activate the NetChannel kernel module and run a test server application:
-  ```
-  sudo ~/NetChannel/scripts/run_module.sh
-  cd ~/NetChannel/util/
-  ./run_single_server.sh 1
-  ```
+  2. On the Server side:  
+    Activate the NetChannel kernel module and run a test server application:
+    ```
+    sudo ~/NetChannel/scripts/run_module.sh
+    cd ~/NetChannel/util/
+    ./run_single_server.sh 1
+    ```
 
-  On the Client side:  
-  
-  Activate the NetChannel kernel module and run a test client application:
-  ```
-  sudo ~/NetChannel/scripts/run_module.sh
-  cd ~/NetChannel/util/
-  ./run_client.sh 1 nd
-  ```
+  3. On the Client side:  
+    Activate the NetChannel kernel module and run a test client application:
+    ```
+    sudo ~/NetChannel/scripts/run_module.sh
+    cd ~/NetChannel/util/
+    ./run_client.sh 1 nd
+    ```
 
 On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
    
