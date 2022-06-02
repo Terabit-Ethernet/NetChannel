@@ -44,14 +44,14 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Kernel
-1. Download Linux kernel source tree:
+1. Download Linux kernel source tree:  
    ```
    cd ~
    wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
    tar xzvf linux-5.6.tar.gz
    ```
 
-2. Download and apply the NetChannel kernel patch to the kernel source:
+2. Download and apply the NetChannel kernel patch to the kernel source:  
 
    ```
    git clone -b new_flow_control https://github.com/Terabit-Ethernet/NetChannel.git
@@ -59,7 +59,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
 
-3. Update kernel configuration (with root):
+3. Update kernel configuration (with root):  
 
    ```
    sudo -s
@@ -68,7 +68,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
    ```
 
-4. Compile and install:
+4. Compile and install:  
 
    ```
    make -j32 bzImage
@@ -83,27 +83,27 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    On-line CPU(s) list:   0-31
    ```
 
-5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
+5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:  
 
    ```
    GRUB_DEFAULT="1>Ubuntu, with Linux 5.6.0-netchannel"
    ```
 
-6. Update the grub configuration and reboot into the new kernel.
+6. Update the grub configuration and reboot into the new kernel.  
 
    ```
    update-grub && reboot
    ```
    
-7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.  
    
 ### NetChannel Kernel Modules
-1. Go to the kernel module directory:
+1. Go to the kernel module directory:  
    ```
    cd ~/NetChannel/module/
    ```
    
-2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:
+2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:  
     ```
     params->local_ip = "192.168.10.116";
 
@@ -115,14 +115,14 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    **[NOTE]** Use `params->local_ip = "192.168.10.117"` on the Server-side.  
    
   
-3. Compile and load the NetChannel kernel module:
+3. Compile and load the NetChannel kernel module:  
     ```
    make
    sudo insmod nd_module.ko
    ```
 
-### NetChannel Applications
-1. Build liburing
+### NetChannel Applications  
+1. Build liburing  
    ```
    cd ~
    git clone https://github.com/axboe/liburing
@@ -131,33 +131,34 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    cd ~/NetChannel/util/
    ```
 
-2. Edit `Makefile` to set the liburing-path (line 1):
+2. Edit `Makefile` to set the liburing-path (line 1):  
    ```
    liburing-path = /home/(account name)/liburing
    ```
 
-3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):
+3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):  
     ```
     addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
     ```
     **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
 
-4. Compile the applications:
+4. Compile the applications:  
    ```
    make
    ```
 
-5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:
+5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
    ```
    ...
-    IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
-#define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
+      IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
+   #define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
    ...
    ```
 
-## 3. Run a Toy Experiment
-  On both sides:
+## 3. Run a Toy Experiment  
+  On both sides:  
+  
   Load the NetChannel kernel module and run network configuration scripts:
   ```
   sudo insmod ~/NetChannel/module/nd_module.ko
@@ -168,6 +169,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 **[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
   On the Server side:  
+  
   Activate the NetChannel kernel module and run a test server application:
   ```
   sudo ~/NetChannel/scripts/run_module.sh
@@ -176,6 +178,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
   ```
 
   On the Client side:  
+  
   Activate the NetChannel kernel module and run a test client application:
   ```
   sudo ~/NetChannel/scripts/run_module.sh
