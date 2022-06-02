@@ -242,7 +242,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
 
 1. **Figure 6a, 6b** (data copy processing parallelism):
 
-   - For read/write syscalls:
+- For read/write syscalls:
 
    On the Server side:
 
@@ -258,7 +258,7 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
     
    (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
 
-   - For io_uring:
+- For io_uring:
    
    On the Server side:
    
