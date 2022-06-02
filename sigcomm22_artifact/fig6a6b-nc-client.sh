@@ -1,5 +1,4 @@
-server_ip=${1:-192.168.10.117}
-iface=${2:-ens2f0}
+source param.sh
 
 # Configuration
 sudo ~/NetChannel/scripts/run_single_flow_set_up.sh $iface
