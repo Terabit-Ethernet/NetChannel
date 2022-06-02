@@ -170,6 +170,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 ## 3. Run a Toy Experiment  
 
 1. On both sides:  
+
    Load the NetChannel kernel module and run network configuration scripts:
 
    ```
@@ -181,6 +182,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 **[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
 
 2. On the Server side:  
+
    Activate the NetChannel kernel module and run a test server application:
    ```
    sudo ~/NetChannel/scripts/run_module.sh
@@ -189,6 +191,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 3. On the Client side:  
+
    Activate the NetChannel kernel module and run a test client application:
    ```
    sudo ~/NetChannel/scripts/run_module.sh
