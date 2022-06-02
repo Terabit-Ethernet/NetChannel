@@ -18,10 +18,14 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 - Server: `192.168.10.117` (interface: **ens2f0**)
 
 ### Getting Started Guide
-Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
+Through the following sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
-NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
+   - **Build NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
+   - **Build NetChannel Kernel Module: (5 human-mins):**  
+This section covers how to build the NetChannel kernel modules.
+   - **Build NetChannel Applications: (10 human-mins):**  
+This section covers how to build the NetChannel test applications.
    - **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
    - **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
@@ -110,12 +114,14 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    **[NOTE]** Use `params->local_ip = "192.168.10.117` on the Server-side.  
    
   
-3. Compile, load, and activate the NetChannel kernel module:
+3. Compile and load the NetChannel kernel module:
     ```
    make
    sudo insmod nd_module.ko
-   sudo ~/NetChannel/scripts/run_module.sh
    ```
+
+### NetChannel Applications
+
 
 ### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
 We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
@@ -155,6 +161,7 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
    sudo ./xxx
    ```
 
+   sudo ~/NetChannel/scripts/run_module.sh
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
