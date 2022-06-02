@@ -182,20 +182,20 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 2. On the Server side:  
 
-   Activate the NetChannel kernel module and run a test server application:
+   Activate the NetChannel kernel module and run a test server application with the Server IP address (192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
-   ./run_single_server.sh 1
+   ./run_single_server.sh 192.168.10.117 1
    ```
 
 3. On the Client side:  
 
-   Activate the NetChannel kernel module and run a test client application:
+   Activate the NetChannel kernel module and run a test client application with the Server IP address (192.168.10.117):
    ```
    sudo ~/NetChannel/scripts/run_module.sh
    cd ~/NetChannel/util/
-   ./run_client.sh 1 nd
+   ./run_client.sh 192.168.10.117 1 nd
    ```
 
 On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
