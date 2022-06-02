@@ -18,13 +18,18 @@ For simplicity, we assume that users have two physical servers (Client and Serve
 - Server: `192.168.10.117` (interface: **ens2f0**)
 
 ### Getting Started Guide
-Through the following three sections, we provide getting started instructions to install NetChannel and to run experiments.
+Through the following sections, we provide getting started instructions to install NetChannel and to run experiments.
 
-   - **Build NetChannel (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
-NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build (1) the Linux kernel with the NetChannel patch, (2) the NetChannel kernel modules, and (3) the NetChannel test applications.
-   - **Run a Toy Experiment (5-10 compute-mins):**  
+* **Build NetChannel**
+   * **NetChannel Kernel: (10 human-mins + 30 compute-mins + 5 reboot-mins):**  
+NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
+   * **NetChannel Kernel Module: (5 human-mins):**  
+This section covers how to build the NetChannel kernel modules.
+   * **NetChannel Applications: (10 human-mins):**  
+This section covers how to build the NetChannel test applications.
+* **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-   - **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
+* **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
@@ -39,14 +44,14 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Kernel
-1. Download Linux kernel source tree:
+1. Download Linux kernel source tree:  
    ```
    cd ~
    wget https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.6.tar.gz
    tar xzvf linux-5.6.tar.gz
    ```
 
-2. Download and apply the NetChannel kernel patch to the kernel source:
+2. Download and apply the NetChannel kernel patch to the kernel source:  
 
    ```
    git clone -b new_flow_control https://github.com/Terabit-Ethernet/NetChannel.git
@@ -54,7 +59,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
 
-3. Update kernel configuration (with root):
+3. Update kernel configuration (with root):  
 
    ```
    sudo -s
@@ -63,7 +68,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
    ```
 
-4. Compile and install:
+4. Compile and install:  
 
    ```
    make -j32 bzImage
@@ -78,56 +83,51 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    On-line CPU(s) list:   0-31
    ```
 
-5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:
+5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:  
 
    ```
    GRUB_DEFAULT="1>Ubuntu, with Linux 5.6.0-netchannel"
    ```
 
-6. Update the grub configuration and reboot into the new kernel.
+6. Update the grub configuration and reboot into the new kernel.  
 
    ```
    update-grub && reboot
    ```
    
-7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.
+7. When system is rebooted, check the kernel version, type `uname -r` in the command-line. It should be `5.6.0-netchannel`.  
    
 ### NetChannel Kernel Modules
-1. Go to the kernel module directory:
+1. Go to the kernel module directory:  
+
    ```
    cd ~/NetChannel/module/
    ```
    
-2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:
-    ```
-    params->local_ip = "192.168.10.116";
+2. Edit `nd_plumbing.c` (line 281) to change the local IP, remote IP address and the number of remote hosts:  
 
-    /* set the number of remote hosts */
-    params->num_remote_hosts = 2;
-    params->remote_ips[0] = "192.168.10.116";
-    params->remote_ips[1] = "192.168.10.117";
    ```
-   **[NOTE]** Use `params->local_ip = "192.168.10.117` on the Server-side.  
+   params->local_ip = "192.168.10.116";
+
+   /* set the number of remote hosts */
+   params->num_remote_hosts = 2;
+   params->remote_ips[0] = "192.168.10.116";
+   params->remote_ips[1] = "192.168.10.117";
+   ```
+
+   **[NOTE]** Use `params->local_ip = "192.168.10.117"` on the Server-side.  
    
   
-3. Compile, load, and activate the NetChannel kernel module:
-    ```
+3. Compile and load the NetChannel kernel module:  
+
+   ```
    make
    sudo insmod nd_module.ko
-   sudo ~/NetChannel/scripts/run_module.sh
    ```
 
-### Add IPPROTO_VIRTUAL_SOCK in netinet/in.h
-We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
-   ```
-   ...
-    IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
-#define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
-   ...
-   ```
+### NetChannel Applications  
+1. Build io_uring library (liburing):  
 
-## 3. Run a Toy Experiment
-1. Build liburing
    ```
    cd ~
    git clone https://github.com/axboe/liburing
@@ -136,25 +136,70 @@ We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the 
    cd ~/NetChannel/util/
    ```
 
-2. Edit `Makefile` to set the liburing-path (line 1):
+2. Edit `Makefile` to set the liburing-path (line 1):  
+
    ```
    liburing-path = /home/(account name)/liburing
    ```
 
-3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):
-    ```
-    addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
-    ```
-    **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
+3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):  
 
-4. Compile and run the application:
+   ```
+   addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
+   ```
+
+   **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
+
+4. Compile the applications:  
+
    ```
    make
-   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-   sudo ./xxx
    ```
 
+5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
+
+   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+
+   ```
+   ...
+      IPPROTO_VIRTUAL_SOCK = 19,      /* Virtual Socket.  */
+   #define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
+   ...
+   ```
+
+## 3. Run a Toy Experiment  
+**[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
+
+1. On both sides:  
+
+   Load the NetChannel kernel module and run network configuration scripts:
+
+   ```
+   sudo insmod ~/NetChannel/module/nd_module.ko
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   ```
+
+2. On the Server side:  
+
+   Activate the NetChannel kernel module and run a test server application:
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/util/
+   ./run_single_server.sh 1
+   ```
+
+3. On the Client side:  
+
+   Activate the NetChannel kernel module and run a test client application:
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/util/
+   ./run_client.sh 1 nd
+   ```
+
+On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.
+   
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
@@ -169,21 +214,26 @@ We have used the follwing hardware and software configurations for running the e
 Our work has been evaluated with two servers with 4-socket multi-core CPUs and 100 Gbps NICs directly connected with a DAC cable. While we generally focus on trends rather than individual data points, other combinations of end-host network stacks and hardware may exhibit different performance characteristics. All our scripts use `network_setup.sh` to configure the NIC to allow a specific benchmark to be performed. Some of these configurations may be specific to Mellanox NICs (e.g., enabling aRFS).
 
 ### Running Experiments with NetChannel
+**[NOTE] You should confirm that the NetChannel kernel module is loaded in both Server and Client machines.** And then activate the module and run the network configuration scripts:
 
-First, **load NetChannel kernel modules in both machines**
+On both sides:  
+   ```
+   sudo insmod ~/NetChannel/module/nd_module.ko
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   ```
 
-```
-sudo insmod ~/NetChannel/module/nd_module.ko
-```
+On the Server side:  
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/sigcomm22_artifact/
+   ```
 
-Run the scripts corresponding to each experiment on the sender and receiver respectively.
-
-```
-sudo ~/NetChannel/scripts/run_module.sh
-sudo ~/NetChannel/scripts/network_setup.sh ens2f0
-sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
-cd ~/NetChannel/sigcomm22_artifact/
-```
+On the Client side:  
+   ```
+   sudo ~/NetChannel/scripts/run_module.sh
+   cd ~/NetChannel/sigcomm22_artifact/
+   ```
 
 1. Figure 6a, 6b (data copy processing parallelism experiment),
  
