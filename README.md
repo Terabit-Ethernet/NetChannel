@@ -238,11 +238,9 @@ Our work has been evaluated with two servers with 4-socket multi-core CPUs and 1
    
 4. (**Skip if configured**) Configure `sysstat` and `ssh`:
 
-   We use `sar/sysstat` and `ssh` to measure CPU utilization in the artifact evaluation scripts. Please refer to [Installing sar/sysstat](https://www.digitalocean.com/community/questions/how-to-install-and-configure-sar-sysstat-on-ubuntu) (both sides) and [SSH login without password](https://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/) (Client-side only). Once the configrations are done correctly, you should be able to measure Server-side CPU utilization at Client via the following command:
-   ```
-   ssh 192.168.10.117 'sar -u 3 1'
-   ```
-   Here is an example of output:
+   We use `sar/sysstat` and `ssh` to measure CPU utilization in the artifact evaluation scripts. Please refer to [Installing sar/sysstat](https://www.digitalocean.com/community/questions/how-to-install-and-configure-sar-sysstat-on-ubuntu) (both sides) and [SSH login without password](https://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/) (Client-side only). Once the configrations are done correctly, you should be able to measure Server-side CPU utilization via the following command:
+   
+   Client: `ssh 192.168.10.117 'sar -u 3 1'`
    ```
    Linux 5.6.0-netchannel (xxxx)         xx/xx/2022      _x86_64_        (32 CPU)
 
