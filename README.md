@@ -355,7 +355,7 @@ On both sides:
  
 Download and build Redis
 
-   On both sides:
+1. On both sides:
 
    ```
    cd ~
@@ -365,7 +365,7 @@ Download and build Redis
    sudo ~/NetChannel/scripts/run_np.sh
    ```
    
-   On the Client side:
+2. On the Client side:
 
    ```
    cd redis/deps/hiredis
