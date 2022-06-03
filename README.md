@@ -353,7 +353,7 @@ On both sides:
     
 ### Redis Experiment (Figure 7)
  
-Download and build Redis
+Download and build Redis.
 
 1. On both sides:
 
@@ -368,7 +368,7 @@ Download and build Redis
 2. On the Client side:
 
    ```
-   cd redis/deps/hiredis
+   cd ~/redis/deps/hiredis
    make 
    sudo make install
    cd ../../
