@@ -303,9 +303,9 @@ On both sides:
 
 ### Default Linux TCP Experiments
  
- 1. **Figure 6a, 6b** (data copy processing parallelism):
+1. **Figure 6a, 6b** (data copy processing parallelism):
  
-    For read/write syscalls:
+   For read/write syscalls:
 
    - Server: `./fig6a6b-tcp-server.sh`
    - Client: `./fig6a6b-tcp-client.sh`
