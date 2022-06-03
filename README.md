@@ -320,24 +320,20 @@ On both sides:
 
  2. **Figure 6c** (network processing parallelism):
  
-    On the Server side:
+   For read/write syscalls:
+ 
+   - Server: `./fig6c-tcp-server.sh 1`
+   - Client: `./fig6c-tcp-client.sh 1`
 
-    ```
-    sudo ./run_np_tcp.sh 
-    cd util/
-    ./run_np_server.sh 1
-    ```
+   (On the Server side: type `sudo killall server` to stop the server application.)
 
-    On the Client side:
-
-    ```
-    sudo ./run_np_tcp.sh 
-    cd util/
-    ./run_pingpong_setup3.sh 1 tcp
-    ```
-    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
-The `run_np.sh` will set the number of throught channel to be 4. To change the number of thpt channel to be 1 : `sudo sysctl  net.nd.num_thpt_channels=1` on both sides and rerun the experiments again for getting new results.
-
+   For io_uring:
+ 
+   - Server: `./fig6c-tcp-uring-server.sh 1`
+   - Client: `./fig6c-tcp-uring-client.sh 1`
+    
+   **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig6c-tcp-server.sh` and `./fig6c-tcp-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 6c results.
+   
 3. **Figure 6d** (performance isolation):
 
     On the Server side:
