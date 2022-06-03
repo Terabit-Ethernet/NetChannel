@@ -1,11 +1,11 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_np.sh $iface $1
+sudo ~/NetChannel/scripts/run_np_tcp.sh $iface $1
 
 # Run the client program
 flows=1
-protocol='nd'
+protocol='tcp'
 nice=-20
 i=0
 while (( i < flows ));do
