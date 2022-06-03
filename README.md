@@ -281,7 +281,7 @@ On both sides:
    - Server: `./fig6c-nc-uring-server.sh 1`
    - Client: `./fig6c-nc-uring-client.sh 1`
     
-   **[NOTE]** The scripts set the number of channels via the first argument. Repeat the experiments with varying the number of channels from 1 to 4 to get the entire Figure 6c results.
+   **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig6c-nc-server.sh` and `./fig6c-nc-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 6c results.
     
 
 3. **Figure 6d** (Performance isolation):
