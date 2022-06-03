@@ -322,17 +322,17 @@ On both sides:
  
    For read/write syscalls:
  
-   - Server: `./fig6c-tcp-server.sh 1`
-   - Client: `./fig6c-tcp-client.sh 1`
+   - Server: `./fig6c-tcp-server.sh`
+   - Client: `./fig6c-tcp-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
 
    For io_uring:
  
-   - Server: `./fig6c-tcp-uring-server.sh 1`
-   - Client: `./fig6c-tcp-uring-client.sh 1`
+   - Server: `./fig6c-tcp-uring-server.sh`
+   - Client: `./fig6c-tcp-uring-client.sh`
     
-   **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig6c-tcp-server.sh` and `./fig6c-tcp-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 6c results.
+   **[NOTE]** This result generates the "Without NetChannel" case in Figure 6c.
    
 - **Figure 6d** (performance isolation):
 
@@ -372,7 +372,7 @@ Download and build Redis.
    make 
    sudo make install
    cd ../../
-   g++ redis_async.cpp -lpthread -lhiredis -o redis_async
+   g++ redis_async.cpp -levent -levent_core -lhiredis -lpthread -o redis_async
    g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
    ./redis_populate
    ```
