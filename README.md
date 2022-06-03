@@ -286,25 +286,20 @@ On both sides:
 
 3. **Figure 6d** (Performance isolation):
 
-    On the Server side:
+   For the isolated case:
+ 
+   - Server: `./fig6d-nc-isol-server.sh`
+   - Client: `./fig6d-nc-isol-client.sh`
 
-    ```
-    sudo ./run_mix_flow.sh 
-    cd util/
-    sudo -s
-    ./run_pingpong.sh 1 -20
-    ./run_server.sh 8
-    ```
+   (On the Server side: type `sudo killall pingpong_server` to stop the server application.)
+   
+   For the interference case:
+ 
+   - Server: `./fig6d-nc-intf-server.sh`
+   - Client: `./fig6d-nc-intf-client.sh`
 
-    On the Client side:
+   (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
 
-    ```
-    sudo ./run_mix_flow.sh
-    cd util/
-    sudo -s
-    ./run_client_oto.sh 8 nd
-    ./run_pingpong_setup1.sh 1 nd -20
-    ```
 
 ### Default Linux TCP Experiments
  1. **Figure 6a, 6b** (data copy processing parallelism):
