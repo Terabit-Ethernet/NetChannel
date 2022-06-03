@@ -353,7 +353,9 @@ On both sides:
     
 ### Redis Experiment (Figure 7)
  
-Download and build Redis at both sides:
+Download and build Redis
+
+   On both sides:
 
    ```
    cd ~
@@ -362,16 +364,8 @@ Download and build Redis at both sides:
    make
    sudo ~/NetChannel/scripts/run_np.sh
    ```
- 
-On the Server side:
-
-   ```
-   sudo taskset -c 0 ./src/redis-server redis_nd.conf 
-   ```
- 
-On the Client side:
-
-1. Compile the client code:
+   
+   On the Client side:
 
    ```
    cd redis/deps/hiredis
@@ -380,22 +374,15 @@ On the Client side:
    cd ../../
    g++ redis_async.cpp -lpthread -lhiredis -o redis_async
    g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
-   ```
- 
-2. Populate the database:
-
-   ```
    ./redis_populate
    ```
- 
-3. Run the experiment:
 
-   ```
-   taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1
-   ```
+- **Figure 7** (Redis performance):
  
-   The client uses 8 threads and each thread queue depth is 1. To tune the queue depth,
-   
+   - Server: `sudo taskset -c 0 ./src/redis-server redis_nd.conf`
+   - Client: `taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1`
+ 
+   **[NOTE]** The client uses 8 threads and each thread queue depth is 1. To tune the queue depth:   
    ```
    taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 $QUEUE_DEPTH$
    ```
