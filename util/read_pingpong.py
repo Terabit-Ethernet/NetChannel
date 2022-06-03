@@ -25,4 +25,9 @@ for i in range(num_files):
     for a in r:
         result.append(a)
     result.sort()
-print("mean:", np.mean(result),"median:", np.percentile(result,50), "99: ", np.percentile(result, 99), "99.9: ", np.percentile(result, 99.9))
+
+print("L-app latency (us)");
+print("mean:   %5.2f" % np.mean(result))
+print("median: %5.2f" % np.percentile(result,50))
+print("99th:   %5.2f" % np.percentile(result, 99))
+print("99.9th: %5.2f" % np.percentile(result, 99.9))
