@@ -354,6 +354,7 @@ On both sides:
 ### Redis Experiment (Figure 7)
  
 Download and build Redis at both sides:
+
    ```
    cd ~
    git clone https://github.com/qizhe/redis.git
@@ -363,13 +364,14 @@ Download and build Redis at both sides:
    ```
  
 On the Server side:
+
    ```
    sudo taskset -c 0 ./src/redis-server redis_nd.conf 
    ```
  
 On the Client side:
 
-   1. Compile the client code:
+1. Compile the client code:
 
    ```
    cd redis/deps/hiredis
@@ -380,17 +382,20 @@ On the Client side:
    g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
    ```
  
-   2. Populate the database:
+2. Populate the database:
+
    ```
    ./redis_populate
    ```
  
-   3. Run the experiment:
+3. Run the experiment:
+
    ```
    taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1
    ```
  
    The client uses 8 threads and each thread queue depth is 1. To tune the queue depth,
+   
    ```
    taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 $QUEUE_DEPTH$
    ```
