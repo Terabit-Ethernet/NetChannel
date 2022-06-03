@@ -318,7 +318,7 @@ On both sides:
    - Client: `./fig6a6b-tcp-uring-client.sh`
 
 
- 2. **Figure 6c** (network processing parallelism):
+2. **Figure 6c** (network processing parallelism):
  
    For read/write syscalls:
  
