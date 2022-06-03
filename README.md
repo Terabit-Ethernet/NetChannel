@@ -353,49 +353,45 @@ On both sides:
     
 ### Redis Experiment (Figure 7)
  
- 1. Clone the repo of Redis and build Redis at both sides,
+Download and build Redis at both sides:
+   ```
+   cd ~
+   git clone https://github.com/qizhe/redis.git
+   cd redis/
+   make
+   sudo ~/NetChannel/scripts/run_np.sh
+   ```
  
- ```
- git clone https://github.com/qizhe/redis.git
- cd redis/
- make
- sudo ~/NetChannel/run_np.sh
- ```
+On the Server side:
+   ```
+   sudo taskset -c 0 ./src/redis-server redis_nd.conf 
+   ```
  
- 2. On the server side,
- 
- ```
- sudo taskset -c 0 ./src/redis-server redis_nd.conf 
- ```
- 
- 3. On the client side,
- 
- Compile the client code first
+On the Client side:
 
-```
- cd redis/deps/hiredis
- make 
- sudo make install
- cd ../../
- g++ redis_async.cpp -lpthread -lhiredis -o redis_async
- g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
- ```
+   1. Compile the client code:
+
+   ```
+   cd redis/deps/hiredis
+   make 
+   sudo make install
+   cd ../../
+   g++ redis_async.cpp -lpthread -lhiredis -o redis_async
+   g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
+   ```
  
- We need to populate the database first,
+   2. Populate the database:
+   ```
+   ./redis_populate
+   ```
  
- ```
- ./redis_populate
- ```
+   3. Run the experiment:
+   ```
+   taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1
+   ```
  
- Then running the experiment,
- 
- ```
- taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1
- ```
- 
- The client uses 8 threads and each thread queue depth is 1. To tune the queue depth,
- 
- ```
- taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 $QUEUE_DEPTH$
- ```
+   The client uses 8 threads and each thread queue depth is 1. To tune the queue depth,
+   ```
+   taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 $QUEUE_DEPTH$
+   ```
  
