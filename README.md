@@ -284,7 +284,7 @@ On both sides:
    **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig6c-nc-server.sh` and `./fig6c-nc-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 6c results.
     
 
-3. **Figure 6d** (Performance isolation):
+- **Figure 6d** (Performance isolation):
 
    For the isolated case:
  
@@ -303,7 +303,7 @@ On both sides:
 
 ### Default Linux TCP Experiments
  
-1. **Figure 6a, 6b** (data copy processing parallelism):
+- **Figure 6a, 6b** (data copy processing parallelism):
  
    For read/write syscalls:
 
@@ -318,7 +318,7 @@ On both sides:
    - Client: `./fig6a6b-tcp-uring-client.sh`
 
 
-2. **Figure 6c** (network processing parallelism):
+- **Figure 6c** (network processing parallelism):
  
    For read/write syscalls:
  
@@ -334,7 +334,7 @@ On both sides:
     
    **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig6c-tcp-server.sh` and `./fig6c-tcp-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 6c results.
    
-3. **Figure 6d** (performance isolation):
+- **Figure 6d** (performance isolation):
 
    For the isolated case:
  
