@@ -260,7 +260,7 @@ On both sides:
    - Server: `./fig6a6b-nc-server.sh`
    - Client: `./fig6a6b-nc-client.sh`
 
-   (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
+   (On the Server side: type `sudo killall server` to stop the server application.)
 
    For io_uring:
    
@@ -274,7 +274,7 @@ On both sides:
    - Server: `./fig6c-nc-server.sh 1`
    - Client: `./fig6c-nc-client.sh 1`
 
-   (On the Server side: the throughput will be shown after 60s. Type `sudo killall server` to stop the server application.)
+   (On the Server side: type `sudo killall server` to stop the server application.)
 
    For io_uring:
  
@@ -302,25 +302,22 @@ On both sides:
 
 
 ### Default Linux TCP Experiments
+ 
  1. **Figure 6a, 6b** (data copy processing parallelism):
  
-    On the Server side:
-    
-    ```
-    sudo ./run_single_flow_set_up_tcp.sh 
-    cd util/
-    ./run_single_server.sh 1
-    ```
+    For read/write syscalls:
 
-    On the Client side:
+   - Server: `./fig6a6b-tcp-server.sh`
+   - Client: `./fig6a6b-tcp-client.sh`
 
-    ```
-    sudo ./run_single_flow_set_up_tcp.sh 
-    cd util/
-    ./run_client.sh 1 tcp
-    ```
-    The throughput will be shown on the server side. After the experiment finishes, kill the server: `sudo killall server`.
- 
+   (On the Server side: type `sudo killall server` to stop the server application.)
+
+   For io_uring:
+   
+   - Server: `./fig6a6b-tcp-uring-server.sh`
+   - Client: `./fig6a6b-tcp-uring-client.sh`
+
+
  2. **Figure 6c** (network processing parallelism):
  
     On the Server side:
