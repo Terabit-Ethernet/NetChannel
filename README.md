@@ -378,3 +378,5 @@ Download and build Redis.
 - **Figure 7** (Redis performance) (~6 minutes):
    - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-server.sh`
    - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-client.sh` 
+   
+   (On the Server side: type `Ctrl + C` to stop the server application.)
