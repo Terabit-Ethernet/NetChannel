@@ -362,7 +362,6 @@ Download and build Redis.
    git clone https://github.com/qizhe/redis.git
    cd redis/
    make
-   sudo ~/NetChannel/scripts/run_np.sh
    ```
    
 2. On the Client side:
@@ -374,13 +373,11 @@ Download and build Redis.
    cd ../../
    g++ redis_async.cpp -levent -levent_core -lhiredis -lpthread -o redis_async
    g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
-   ./redis_populate
    ```
 
 - **Figure 7** (Redis performance):
- 
-   - Server: `sudo taskset -c 0 ./src/redis-server redis_nd.conf`
-   - Client: `taskset -c 0-31:4 ./redis_async 192.168.10.117 6379 8 0.75 1 1`
+   - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-server.sh`
+   - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-client.sh`
  
    **[NOTE]** The client uses 8 threads and each thread queue depth is 1. To tune the queue depth:   
    ```
