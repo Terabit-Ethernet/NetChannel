@@ -376,9 +376,8 @@ Download and build Redis.
    ```
 
 - **Figure 7** (Redis performance):
-   - Both: `cd ~/NetChannel/sigcomm22_artifact/`
-   - Server: `./fig7-nc-server.sh`
-   - Client: `./fig7-nc-client.sh`
+   - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-server.sh`
+   - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-client.sh`
  
    **[NOTE]** The client uses 8 threads and each thread queue depth is 1. To tune the queue depth:   
    ```
