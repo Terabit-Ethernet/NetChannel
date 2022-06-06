@@ -720,7 +720,7 @@ int main(int argc, char** argv) {
 	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
 	workers.push_back(std::thread(nd_server, port));
-	workers.push_back(std::thread(aggre_thread, &agg_stats));
+//	workers.push_back(std::thread(aggre_thread, &agg_stats));
 	for(int i = 0; i < num_ports; i++) {
 		workers[i].join();
 	}

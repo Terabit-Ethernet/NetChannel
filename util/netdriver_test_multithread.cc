@@ -429,7 +429,7 @@ void test_ndping_send(int fd, struct sockaddr *dest)
 				break;
 		
 		}
-		printf("%" PRIu64 "\n", write_len);
+		printf("Throughput: %" PRIu64 " Gbps\n", write_len * 8 / times / 1000000000);
 	close(fd);
 	return;
 }
