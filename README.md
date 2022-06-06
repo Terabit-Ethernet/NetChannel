@@ -142,7 +142,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    liburing-path = /home/(account name)/liburing
    ```
 
-3. Edit `netdriver_test.cc` to change the host IP adddress (line 758):  
+3. Edit `netdriver_test.cc` to change the host IP adddress (line 761):  
 
    ```
    addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
