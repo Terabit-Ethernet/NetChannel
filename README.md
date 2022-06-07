@@ -367,12 +367,8 @@ Download and build Redis.
 2. On the Client side:
 
    ```
-   cd ~/redis/deps/hiredis
-   make 
-   sudo make install
-   cd ../../
-   g++ redis_async.cpp -levent -levent_core -lhiredis -lpthread -o redis_async
-   g++ redis_populate.cpp -levent -lpthread -lhiredis -o redis_populate
+   cd ~/redis
+   ./build-client
    ```
 
 - **Figure 7** (Redis performance) (~6 minutes):
