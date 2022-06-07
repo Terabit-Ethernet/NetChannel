@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_single_flow_set_up_tcp.sh $iface
+~/NetChannel/scripts/run_single_flow_set_up_tcp.sh $iface
 
 # Run the client program
 flows=1

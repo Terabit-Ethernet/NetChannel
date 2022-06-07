@@ -245,7 +245,7 @@ void tcp_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
+	//printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
@@ -312,8 +312,8 @@ void nd_connection(int fd, struct sockaddr_in source)
 	// setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 	if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
 	    perror("getsockname");
-	else
-	    printf("port number %d\n", ntohs(sin.sin_port));
+	//else
+	//    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
@@ -402,7 +402,7 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// }
 	}
 		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);

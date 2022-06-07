@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_np.sh $iface $1
+~/NetChannel/scripts/run_np.sh $iface $1
 
 # Run the server program
 flows=1

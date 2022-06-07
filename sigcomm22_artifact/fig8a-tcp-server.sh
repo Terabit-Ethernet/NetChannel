@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-~/NetChannel/scripts/run_single_flow_set_up.sh $iface
+~/NetChannel/scripts/run_single_flow_set_up_tcp_0.sh $iface
 
 # Run the server program
 flows=1
@@ -9,6 +9,6 @@ flows=1
 flow=0
 while (( flow < flows ));do
         ((core=flow%4*4+16))
-        sudo taskset -c 28 ~/NetChannel/util/server --ip $server_ip --port $((4000 + flow)) &
+        sudo taskset -c 16 ~/NetChannel/util/server --ip $server_ip --port $((4000 + flow)) &
         (( flow++ ))
 done

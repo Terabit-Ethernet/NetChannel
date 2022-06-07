@@ -1,11 +1,11 @@
 source param.sh
 
 # Configuration
-~/NetChannel/scripts/run_single_flow_set_up_0.sh $iface
+~/NetChannel/scripts/run_single_flow_set_up_tcp_0.sh $iface
 
 # Run the client program
 flows=1
-protocol='nd'
+protocol='tcp'
 flow=0
 while (( flow < flows ));do
         ((core=16+4*flow))

@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_np.sh $iface
+~/NetChannel/scripts/run_np.sh $iface
 
 # Run the client program
 ~/redis/build-client-linux

@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_single_flow_set_up.sh $iface
+~/NetChannel/scripts/run_single_flow_set_up_0.sh $iface
 
 # Run the server program
 sudo taskset -c 28 ~/NetChannel/util/iouring_bench_nc server $server_ip 9095

@@ -11,3 +11,5 @@ sudo ethtool -G $iface rx 1024
 sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 6291456'
 sudo ethtool -K $iface tso off gso off gro off lro off
 sudo ifconfig $iface mtu 1500
+
+sudo ~/NetChannel/scripts/enable_arfs.sh $iface

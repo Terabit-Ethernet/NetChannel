@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_single_flow_set_up_0.sh $iface
+~/NetChannel/scripts/run_single_flow_set_up_0.sh $iface
 
 # Run the server program
 flows=1

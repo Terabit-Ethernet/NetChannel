@@ -1,8 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_single_flow_set_up_tcp.sh $iface
-sudo sysctl  net.nd.nd_num_dc_thread=0
+~/NetChannel/scripts/run_single_flow_set_up_tcp.sh $iface
 
 # Run the client program
 sudo taskset -c 28 ~/NetChannel/util/iouring_bench client $server_ip 9095 60 &
