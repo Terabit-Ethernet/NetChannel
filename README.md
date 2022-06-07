@@ -322,6 +322,15 @@ On both sides:
    - Client: `./fig8a-nc-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
+   
+- **Figure 8c** (Overheads of scaling packet processin):
+
+   - Server: `./fig8c-nc-server.sh 1`
+   - Client: `./fig8c-nc-client.sh 1`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+    
+   **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig8c-nc-server.sh` and `./fig8c-nc-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 8c results.
 
 ### Default Linux TCP Experiments
  
