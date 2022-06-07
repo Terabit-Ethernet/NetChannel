@@ -365,7 +365,8 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 				break;
 		}
 	// }
-		printf("Throughput: %" PRIu64 " Gbps \n", write_len / times * 8 / 1000000000);
+		//printf("Throughput: %" PRIu64 " Gbps \n", write_len / times * 8 / 1000000000);
+		printf("Throughput: %.2f Gbps \n", write_len / times * 8.0 / 1000000000.0);
 		// printf("end\n");
 		 //    result = write(fd, buffer, 10000);			
 			// if( result < 0 ) {
@@ -758,7 +759,7 @@ int main(int argc, char** argv)
 		memset(&addr_in, 0, sizeof(addr_in));
 		addr_in.sin_family = AF_INET;
 		addr_in.sin_port = htons(srcPort + i);
-		addr_in.sin_addr.s_addr = inet_addr("192.168.10.117");
+		addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
 
 
 		if (bind(fd, (struct sockaddr *) &addr_in, sizeof(addr_in)) != 0) {
