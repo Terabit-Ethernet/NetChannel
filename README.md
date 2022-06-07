@@ -155,8 +155,18 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
    make
    ```
+   
+5. Build Redis and client applications:
 
-5. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
+   ```
+   cd ~
+   git clone https://github.com/qizhe/redis.git
+   cd redis/
+   make
+   ./build-client
+   ```  
+
+6. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
 
    We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
 
@@ -300,6 +310,13 @@ On both sides:
 
    (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
 
+- **Figure 7** (Redis performance) (~6 minutes):
+   
+   - Server: `./fig7-nc-server.sh`
+   - Client: `./fig7-nc-client.sh` 
+   
+   (On the Server side: type `Ctrl + C` to stop the server application.)
+   
 
 ### Default Linux TCP Experiments
  
@@ -351,38 +368,9 @@ On both sides:
    (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
 
     
-### Redis Experiment (Figure 7)
- 
-Download and build Redis.
-
-1. On both sides:
-
-   ```
-   cd ~
-   git clone https://github.com/qizhe/redis.git
-   cd redis/
-   make
-   ```
+- **Figure 7** (Redis performance) (~6 minutes):
    
-2. On the Client side:
-
-   ```
-   cd ~/redis
-   ./build-client
-   ```
-
-- **Figure 7** (Redis performance) (~12 minutes):
-   
-   For NetChannel:
-   
-   - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-server.sh`
-   - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-client.sh` 
-   
-   (On the Server side: type `Ctrl + C` to stop the server application.)
-   
-   For default Linux:
-   
-   - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-tcp-server.sh`
-   - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-tcp-client.sh` 
+   - Server: `./fig7-tcp-server.sh`
+   - Client: `./fig7-tcp-client.sh` 
    
    (On the Server side: type `Ctrl + C` to stop the server application.)
