@@ -322,8 +322,15 @@ On both sides:
    - Client: `./fig8a-nc-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
-   
-- **Figure 8c** (Overheads of scaling packet processin):
+
+- **Figure 8b** (Overheads of scaling data copy processing):
+
+   - Server: `./fig8b-nc-server.sh`
+   - Client: `./fig8b-nc-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+
+- **Figure 8c** (Overheads of scaling packet processing):
 
    - Server: `./fig8c-nc-server.sh 1`
    - Client: `./fig8c-nc-client.sh 1`
@@ -393,5 +400,12 @@ On both sides:
 
    - Server: `./fig8a-tcp-server.sh`
    - Client: `./fig8a-tcp-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+   
+- **Figure 8b** (Overheads of scaling data copy processing):
+
+   - Server: `./fig8b-tcp-server.sh`
+   - Client: `./fig8b-tcp-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
