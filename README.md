@@ -156,14 +156,13 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    make
    ```
    
-5. Build Redis and client applications:
+5. Build Redis (for artifact evaluation):
 
    ```
    cd ~
    git clone https://github.com/qizhe/redis.git
    cd redis/
    make
-   ./build-client
    ```  
 
 6. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
