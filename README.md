@@ -371,8 +371,18 @@ Download and build Redis.
    ./build-client
    ```
 
-- **Figure 7** (Redis performance) (~6 minutes):
+- **Figure 7** (Redis performance) (~12 minutes):
+   
+   For NetChannel:
+   
    - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-server.sh`
    - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-nc-client.sh` 
+   
+   (On the Server side: type `Ctrl + C` to stop the server application.)
+   
+   For default Linux:
+   
+   - Server: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-tcp-server.sh`
+   - Client: `cd ~/NetChannel/sigcomm22_artifact/; ./fig7-tcp-client.sh` 
    
    (On the Server side: type `Ctrl + C` to stop the server application.)
