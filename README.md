@@ -315,7 +315,13 @@ On both sides:
    - Client: `./fig7-nc-client.sh` 
    
    (On the Server side: type `Ctrl + C` to stop the server application.)
-   
+
+- **Figure 8a** (Overheads of emulating Linux network stack):
+
+   - Server: `./fig8a-nc-server.sh`
+   - Client: `./fig8a-nc-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
 
 ### Default Linux TCP Experiments
  
@@ -373,3 +379,10 @@ On both sides:
    - Client: `./fig7-tcp-client.sh` 
    
    (On the Server side: type `Ctrl + C` to stop the server application.)
+   
+- **Figure 8a** (Overheads of emulating Linux network stack):
+
+   - Server: `./fig8a-tcp-server.sh`
+   - Client: `./fig8a-tcp-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
