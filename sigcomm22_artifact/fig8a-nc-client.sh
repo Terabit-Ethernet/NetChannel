@@ -20,7 +20,7 @@ ssh $server_ip 'sar -u 55 1 -P 16' > cpu_server.log &
 
 sleep 62
 
-thru=$(cat thru.log | awk '{print $2;}');
+thru=$(grep Throughput: thru.log | awk '{print $2;}');
 cpu_client=$(grep Average: cpu_client.log | awk '{x=$3+$5;} END {print x/100.0;}')
 cpu_server=$(grep Average: cpu_server.log | awk '{x=$3+$5;} END {print x/100.0;}')
 cpu=$(echo $cpu_client $cpu_server | awk '{if ($1 > $2) print $1; else print $2}')
