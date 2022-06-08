@@ -17,4 +17,4 @@ tpc=$(echo $thru $cpu | awk '{print $1/$2}')
 echo "Throughput: $thru (Gbps)"
 echo "CPU cores used: $cpu"
 echo "Throughput-per-core: $tpc (Gbps)"
-rm thru.log cpu_client.log cpu_server.log
+#rm thru.log cpu_client.log cpu_server.log

@@ -6,7 +6,7 @@ source param.sh
 sar -u 55 1 > cpu_client.log &
 ssh $server_ip 'sar -u 55 1' > cpu_server.log &
 
-sleep 62
+sleep 65
 
 thru=$(grep Throughput: thru.log | awk '{x=x+$2;} END {print x;}')
 cpu_client=$(grep Average: cpu_client.log | awk '{x=$3+$5;} END {print x*32/100.0;}')

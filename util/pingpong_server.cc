@@ -444,8 +444,8 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// 	};
 		// }
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);

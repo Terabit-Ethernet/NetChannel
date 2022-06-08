@@ -216,8 +216,8 @@ void nd_outputfile(int fd, struct sockaddr_in source)
 		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);
@@ -401,7 +401,7 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// 	};
 		// }
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
+		//printf( "total len:%" PRIu64 "\n", total_length);
 		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
@@ -486,8 +486,8 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 close:
