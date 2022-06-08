@@ -93,12 +93,12 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	int which = PRIO_PROCESS;
 	id_t pid;
 	int ret;
-	printf("reach here\n");
+	//printf("reach here\n");
 	pid = getpid();
 	//ret = setpriority(which, pid, -20);
 	//std::cout << "ret "<< ret << std::endl;
 	ret = getpriority(which, pid);
-	std::cout << "priority " << ret << std::endl;
+	//std::cout << "priority " << ret << std::endl;
 	// int *int_buffer = reinterpret_cast<int*>(buffer);
 	if (verbose)
 		printf("New ND socket from %s\n", print_address(&source));
@@ -111,7 +111,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	printf("start connection\n");
 	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
 	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-	printf("optval:%d\n", optval);
+	//printf("optval:%d\n", optval);
 
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
@@ -158,8 +158,8 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 close:
