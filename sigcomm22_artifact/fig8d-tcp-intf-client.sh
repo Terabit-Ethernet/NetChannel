@@ -1,12 +1,12 @@
 source param.sh
 
-./fig8d-nc-isol-client-run.sh > thru.log &
+./fig8d-tcp-intf-client-run.sh > thru.log &
 
 # Measure CPU utilization
 sar -u 55 1 > cpu_client.log &
 ssh $server_ip 'sar -u 55 1' > cpu_server.log &
 
-sleep 62
+sleep 65
 
 thru=$(grep Throughput: thru.log | awk '{x=x+$2;} END {print x;}')
 cpu_client=$(grep Average: cpu_client.log | awk '{x=$3+$5;} END {print x*32/100.0;}')
@@ -17,4 +17,4 @@ tpc=$(echo $thru $cpu | awk '{print $1/$2}')
 echo "Throughput: $thru (Gbps)"
 echo "CPU cores used: $cpu"
 echo "Throughput-per-core: $tpc (Gbps)"
-rm thru.log cpu_client.log cpu_server.log
+rm thru.log cpu_client.log cpu_server.log result_tcp_pingpong_0

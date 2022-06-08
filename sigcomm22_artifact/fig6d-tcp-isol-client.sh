@@ -1,7 +1,7 @@
 source param.sh
 
 # Configuration
-sudo ~/NetChannel/scripts/run_mix_flow_tcp.sh $iface
+~/NetChannel/scripts/run_mix_flow_tcp.sh $iface
 
 # Run the client program
 

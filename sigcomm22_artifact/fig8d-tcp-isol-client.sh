@@ -1,6 +1,6 @@
 source param.sh
 
-./fig8d-nc-isol-client-run.sh > thru.log &
+./fig8d-tcp-isol-client-run.sh > thru.log &
 
 # Measure CPU utilization
 sar -u 55 1 > cpu_client.log &
