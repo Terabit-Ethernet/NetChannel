@@ -586,7 +586,7 @@ void nd_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
+	//printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
