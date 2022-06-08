@@ -424,7 +424,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	//int cur_length = 0;
 	//bool streaming = false;
 	uint64_t count = 0;
-	uint64_t total_length = 0;
+	//uint64_t total_length = 0;
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
