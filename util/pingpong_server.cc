@@ -86,18 +86,18 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
-	uint64_t total_length = 0;
+	//uint64_t total_length = 0;
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
 	int which = PRIO_PROCESS;
 	id_t pid;
-	int ret;
+	//int ret = 0;
 	//printf("reach here\n");
 	pid = getpid();
-	//ret = setpriority(which, pid, -20);
+	setpriority(which, pid, -20);
 	//std::cout << "ret "<< ret << std::endl;
-	ret = getpriority(which, pid);
+	getpriority(which, pid);
 	//std::cout << "priority " << ret << std::endl;
 	// int *int_buffer = reinterpret_cast<int*>(buffer);
 	if (verbose)
