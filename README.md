@@ -322,8 +322,15 @@ On both sides:
    - Client: `./fig8a-nc-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
-   
-- **Figure 8c** (Overheads of scaling packet processin):
+
+- **Figure 8b** (Overheads of scaling data copy processing):
+
+   - Server: `./fig8b-nc-server.sh`
+   - Client: `./fig8b-nc-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+
+- **Figure 8c** (Overheads of scaling packet processing):
 
    - Server: `./fig8c-nc-server.sh 1`
    - Client: `./fig8c-nc-client.sh 1`
@@ -331,6 +338,22 @@ On both sides:
    (On the Server side: type `sudo killall server` to stop the server application.)
     
    **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig8c-nc-server.sh` and `./fig8c-nc-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 8c results.
+
+- **Figure 8d** (Overheads of achieving performance isolation):
+
+   For the isolated case:
+ 
+   - Server: `./fig8d-nc-isol-server.sh`
+   - Client: `./fig8d-nc-isol-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+   
+   For the interference case:
+ 
+   - Server: `./fig8d-nc-intf-server.sh`
+   - Client: `./fig8d-nc-intf-client.sh`
+
+   (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
 
 ### Default Linux TCP Experiments
  
@@ -393,5 +416,12 @@ On both sides:
 
    - Server: `./fig8a-tcp-server.sh`
    - Client: `./fig8a-tcp-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+   
+- **Figure 8b** (Overheads of scaling data copy processing):
+
+   - Server: `./fig8b-tcp-server.sh`
+   - Client: `./fig8b-tcp-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
