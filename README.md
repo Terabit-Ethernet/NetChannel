@@ -339,6 +339,22 @@ On both sides:
     
    **[NOTE]** The argument `1` sets the number of channel. Rerun `./fig8c-nc-server.sh` and `./fig8c-nc-client.sh` with varying the number of channels from `2` to `4` to get the entire Figure 8c results.
 
+- **Figure 8d** (Overheads of achieving performance isolation):
+
+   For the isolated case:
+ 
+   - Server: `./fig8d-nc-isol-server.sh`
+   - Client: `./fig8d-nc-isol-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+   
+   For the interference case:
+ 
+   - Server: `./fig8d-nc-intf-server.sh`
+   - Client: `./fig8d-nc-intf-client.sh`
+
+   (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
+
 ### Default Linux TCP Experiments
  
 - **Figure 6a, 6b** (data copy processing parallelism):
