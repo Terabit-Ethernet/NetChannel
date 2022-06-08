@@ -425,3 +425,19 @@ On both sides:
    - Client: `./fig8b-tcp-client.sh`
 
    (On the Server side: type `sudo killall server` to stop the server application.)
+   
+- **Figure 8d** (Overheads of achieving performance isolation):
+
+   For the isolated case:
+ 
+   - Server: `./fig8d-tcp-isol-server.sh`
+   - Client: `./fig8d-tcp-isol-client.sh`
+
+   (On the Server side: type `sudo killall server` to stop the server application.)
+   
+   For the interference case:
+ 
+   - Server: `./fig8d-tcp-intf-server.sh`
+   - Client: `./fig8d-tcp-intf-client.sh`
+
+   (On the Server side: type `sudo killall server pingpong_server` to stop the server application.)
