@@ -32,14 +32,12 @@
       ```
    
    On the Server side:
-   
       ```
       cd script/
       bash receiver/single-flow_mptcp.sh
       ```
    
    On the Client side:
-   
       ```
       cd script/
       bash sender/single-flow_mptcp.sh
