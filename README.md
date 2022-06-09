@@ -287,7 +287,7 @@ On both sides:
    - Server: `./fig6c-nc-server.sh <#channels>`
    - Client: `./fig6c-nc-client.sh <#channels>`
 
-   (Server: `sudo killall server` to stop the server application.)
+   (Server: `sudo killall server` to change <#channels>.)
 
    For io_uring:
  
@@ -334,12 +334,12 @@ On both sides:
 
 - **Figure 8c** (Overheads of scaling packet processing) (~4 minutes):
 
-   - Server: `./fig8c-nc-server.sh 1`
-   - Client: `./fig8c-nc-client.sh 1`
+   **[NOTE]** Repeat the following experiment with varying <#channels>: `1, 2, 3, 4` to get the entire Figure 8c results.
 
-   (Server: `sudo killall server` to stop the server application.)
-    
-   **[NOTE]** Rerun the above experiment with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
+   - Server: `./fig8c-nc-server.sh <#channels>`
+   - Client: `./fig8c-nc-client.sh <#channels>`
+
+   (Server: `sudo killall server` to change <#channels>.)
 
 - **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
