@@ -181,12 +181,12 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 1. On both sides:  
 
-   Load the NetChannel kernel module and run network configuration scripts:
+   Load the NetChannel kernel module with network configuration scripts:
 
    ```
-   sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   sudo insmod ~/NetChannel/module/nd_module.ko
    ```
 
 2. On the Server side:  
@@ -227,9 +227,9 @@ On both sides:
 
 1. Load NetChannel module:  
    ```
-   sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   sudo insmod ~/NetChannel/module/nd_module.ko
    ```
    
    **[NOTE] Step 1 should be done on both sides before Step 2.**
