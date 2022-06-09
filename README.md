@@ -40,7 +40,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
    ```
    sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
-                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat
+                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat iperf
    ```
 
 ### NetChannel Kernel
