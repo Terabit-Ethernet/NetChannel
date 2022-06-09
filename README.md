@@ -359,7 +359,7 @@ On both sides:
 
 ### Default Linux TCP Experiments
  
-- **Figure 6a, 6b** (data copy processing parallelism):
+- **Figure 6a, 6b** (data copy processing parallelism) (~2 minutes)
  
    For read/write syscalls:
 
@@ -374,7 +374,7 @@ On both sides:
    - Client: `./fig6a6b-tcp-uring-client.sh`
 
 
-- **Figure 6c** (network processing parallelism):
+- **Figure 6c** (network processing parallelism) (~2 minutes)
  
    For read/write syscalls:
  
@@ -390,7 +390,7 @@ On both sides:
     
    **[NOTE]** This result generates the "Without NetChannel" case in Figure 6c.
    
-- **Figure 6d** (performance isolation):
+- **Figure 6d** (performance isolation) (~2 minutes)
 
    For the isolated case:
  
@@ -414,21 +414,21 @@ On both sides:
    
    (Server: `Ctrl+C` to stop the server application.)
    
-- **Figure 8a** (Overheads of emulating Linux network stack):
+- **Figure 8a** (Overheads of emulating Linux network stack) (~1 minute):
 
    - Server: `./fig8a-tcp-server.sh`
    - Client: `./fig8a-tcp-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
    
-- **Figure 8b** (Overheads of scaling data copy processing):
+- **Figure 8b** (Overheads of scaling data copy processing) (~1 minute):
 
    - Server: `./fig8b-tcp-server.sh`
    - Client: `./fig8b-tcp-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
    
-- **Figure 8d** (Overheads of achieving performance isolation):
+- **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
    For the isolated case:
  
