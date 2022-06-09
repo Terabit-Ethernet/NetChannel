@@ -262,7 +262,7 @@ On both sides:
 
 ### NetChannel Experiments
 
-- **Figure 6a--6b** (Data copy processing parallelism) (2 minutes):
+- **Figure 6a--6b** (Data copy processing parallelism) (~2 minutes):
 
    For read/write syscalls:
 
@@ -278,7 +278,7 @@ On both sides:
 
    **[NOTE]** You can ignore these error messages for io_uring: `failed cqe: -107` `recv_longflow failed`
  
-- **Figure 6c** (Network processing parallelism) (8 minutes):
+- **Figure 6c** (Network processing parallelism) (~8 minutes):
 
    For read/write syscalls:
  
@@ -295,7 +295,7 @@ On both sides:
    **[NOTE]** Rerun the above experiments with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
     
 
-- **Figure 6d** (Performance isolation):
+- **Figure 6d** (Performance isolation) (~2 minutes):
 
    For the isolated case:
  
@@ -318,21 +318,21 @@ On both sides:
    
    (Server: `Ctrl+C` to stop the server application.)
 
-- **Figure 8a** (Overheads of emulating Linux network stack):
+- **Figure 8a** (Overheads of emulating Linux network stack) (~1 minute):
 
    - Server: `./fig8a-nc-server.sh`
    - Client: `./fig8a-nc-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
 
-- **Figure 8b** (Overheads of scaling data copy processing):
+- **Figure 8b** (Overheads of scaling data copy processing) (~1 minute):
 
    - Server: `./fig8b-nc-server.sh`
    - Client: `./fig8b-nc-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
 
-- **Figure 8c** (Overheads of scaling packet processing):
+- **Figure 8c** (Overheads of scaling packet processing) (~4 minutes):
 
    - Server: `./fig8c-nc-server.sh 1`
    - Client: `./fig8c-nc-client.sh 1`
@@ -341,7 +341,7 @@ On both sides:
     
    **[NOTE]** Rerun the above experiment with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
 
-- **Figure 8d** (Overheads of achieving performance isolation):
+- **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
    For the isolated case:
  
