@@ -262,7 +262,7 @@ On both sides:
 
 ### NetChannel Experiments
 
-- **Figure 6a--6b** (Data copy processing parallelism):
+- **Figure 6a--6b** (Data copy processing parallelism) (2 minutes):
 
    For read/write syscalls:
 
@@ -275,8 +275,10 @@ On both sides:
    
    - Server: `./fig6a6b-nc-uring-server.sh`
    - Client: `./fig6a6b-nc-uring-client.sh`
+
+   **[NOTE]** You can ignore these error messages for io_uring: `failed cqe: -107` `recv_longflow failed`
  
-- **Figure 6c** (Network processing parallelism):
+- **Figure 6c** (Network processing parallelism) (8 minutes):
 
    For read/write syscalls:
  
