@@ -13,10 +13,11 @@ On both sides:
 2. Update the grub configuration and reboot into the new kernel.  
 
    ```
-   sudu update-grub && reboot
+   sudo -s
+   update-grub && reboot
    ```
    
-3. Download the script:
+3. Download MPTCP scripts:
 
    ```
    cd ~
