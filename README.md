@@ -292,7 +292,7 @@ On both sides:
    - Server: `./fig6c-nc-uring-server.sh 1`
    - Client: `./fig6c-nc-uring-client.sh 1`
     
-   **[NOTE]** Rerun `./fig6c-nc-server.sh` and `./fig6c-nc-client.sh` with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
+   **[NOTE]** Rerun the above experiments with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
     
 
 - **Figure 6d** (Performance isolation):
@@ -339,7 +339,7 @@ On both sides:
 
    (Server: `sudo killall server` to stop the server application.)
     
-   **[NOTE]** Rerun `./fig8c-nc-server.sh` and `./fig8c-nc-client.sh` with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
+   **[NOTE]** Rerun the above experiment with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
 
 - **Figure 8d** (Overheads of achieving performance isolation):
 
