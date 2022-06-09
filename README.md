@@ -181,12 +181,12 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 1. On both sides:  
 
-   Load the NetChannel kernel module and run network configuration scripts:
+   Load the NetChannel kernel module with network configuration scripts:
 
    ```
-   sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   sudo insmod ~/NetChannel/module/nd_module.ko
    ```
 
 2. On the Server side:  
@@ -227,9 +227,9 @@ On both sides:
 
 1. Load NetChannel module:  
    ```
-   sudo insmod ~/NetChannel/module/nd_module.ko
    sudo ~/NetChannel/scripts/network_setup.sh ens2f0
    sudo ~/NetChannel/scripts/enable_arfs.sh ens2f0
+   sudo insmod ~/NetChannel/module/nd_module.ko
    ```
    
    **[NOTE] Step 1 should be done on both sides before Step 2.**
@@ -262,7 +262,7 @@ On both sides:
 
 ### NetChannel Experiments
 
-- **Figure 6a--6b** (Data copy processing parallelism):
+- **Figure 6a--6b** (Data copy processing parallelism) (~2 minutes):
 
    For read/write syscalls:
 
@@ -275,8 +275,10 @@ On both sides:
    
    - Server: `./fig6a6b-nc-uring-server.sh`
    - Client: `./fig6a6b-nc-uring-client.sh`
+
+   **[NOTE]** You can ignore these error messages for io_uring: `failed cqe: -107` `recv_longflow failed`
  
-- **Figure 6c** (Network processing parallelism):
+- **Figure 6c** (Network processing parallelism) (~8 minutes):
 
    For read/write syscalls:
  
@@ -290,10 +292,10 @@ On both sides:
    - Server: `./fig6c-nc-uring-server.sh 1`
    - Client: `./fig6c-nc-uring-client.sh 1`
     
-   **[NOTE]** Rerun `./fig6c-nc-server.sh` and `./fig6c-nc-client.sh` with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
+   **[NOTE]** Rerun the above experiments with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
     
 
-- **Figure 6d** (Performance isolation):
+- **Figure 6d** (Performance isolation) (~2 minutes):
 
    For the isolated case:
  
@@ -316,30 +318,30 @@ On both sides:
    
    (Server: `Ctrl+C` to stop the server application.)
 
-- **Figure 8a** (Overheads of emulating Linux network stack):
+- **Figure 8a** (Overheads of emulating Linux network stack) (~1 minute):
 
    - Server: `./fig8a-nc-server.sh`
    - Client: `./fig8a-nc-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
 
-- **Figure 8b** (Overheads of scaling data copy processing):
+- **Figure 8b** (Overheads of scaling data copy processing) (~1 minute):
 
    - Server: `./fig8b-nc-server.sh`
    - Client: `./fig8b-nc-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
 
-- **Figure 8c** (Overheads of scaling packet processing):
+- **Figure 8c** (Overheads of scaling packet processing) (~4 minutes):
 
    - Server: `./fig8c-nc-server.sh 1`
    - Client: `./fig8c-nc-client.sh 1`
 
    (Server: `sudo killall server` to stop the server application.)
     
-   **[NOTE]** Rerun `./fig8c-nc-server.sh` and `./fig8c-nc-client.sh` with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
+   **[NOTE]** Rerun the above experiment with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
 
-- **Figure 8d** (Overheads of achieving performance isolation):
+- **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
    For the isolated case:
  
@@ -357,7 +359,7 @@ On both sides:
 
 ### Default Linux TCP Experiments
  
-- **Figure 6a, 6b** (data copy processing parallelism):
+- **Figure 6a, 6b** (data copy processing parallelism) (~2 minutes)
  
    For read/write syscalls:
 
@@ -372,7 +374,7 @@ On both sides:
    - Client: `./fig6a6b-tcp-uring-client.sh`
 
 
-- **Figure 6c** (network processing parallelism):
+- **Figure 6c** (network processing parallelism) (~2 minutes)
  
    For read/write syscalls:
  
@@ -388,7 +390,7 @@ On both sides:
     
    **[NOTE]** This result generates the "Without NetChannel" case in Figure 6c.
    
-- **Figure 6d** (performance isolation):
+- **Figure 6d** (performance isolation) (~2 minutes)
 
    For the isolated case:
  
@@ -412,21 +414,21 @@ On both sides:
    
    (Server: `Ctrl+C` to stop the server application.)
    
-- **Figure 8a** (Overheads of emulating Linux network stack):
+- **Figure 8a** (Overheads of emulating Linux network stack) (~1 minute):
 
    - Server: `./fig8a-tcp-server.sh`
    - Client: `./fig8a-tcp-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
    
-- **Figure 8b** (Overheads of scaling data copy processing):
+- **Figure 8b** (Overheads of scaling data copy processing) (~1 minute):
 
    - Server: `./fig8b-tcp-server.sh`
    - Client: `./fig8b-tcp-client.sh`
 
    (Server: `sudo killall server` to stop the server application.)
    
-- **Figure 8d** (Overheads of achieving performance isolation):
+- **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
    For the isolated case:
  
