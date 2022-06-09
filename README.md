@@ -25,11 +25,11 @@ Through the following sections, we provide getting started instructions to insta
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
    * **NetChannel Kernel Module: (5 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
-   * **NetChannel Applications: (10 human-mins):**  
+   * **NetChannel Applications: (5 human-mins):**  
 This section covers how to build the NetChannel test applications.
 * **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-* **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
+* **SIGCOMM 2022 Artifact Evaluation (45 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
