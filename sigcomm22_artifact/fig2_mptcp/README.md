@@ -4,7 +4,7 @@
 
 On both sides:
 
-1. Edit `/etc/default/grub` to boot with mptcp kernel by default. For example:  
+1. `sudo vi /etc/default/grub` to boot with mptcp kernel by default. For example:  
 
    ```
    GRUB_DEFAULT="1>Ubuntu, with Linux 4.19.155-mptcp+"
