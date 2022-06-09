@@ -2,44 +2,40 @@
 
 ### MPTCP configurations
 
-   On both sides:
+On both sides:
 
-   1. Edit `/etc/default/grub` to boot with mptcp kernel by default. For example:  
+1. Edit `/etc/default/grub` to boot with mptcp kernel by default. For example:  
 
-      ```
-      GRUB_DEFAULT="1>Ubuntu, with Linux 4.19.155-mptcp+"
-      ```
+   ```
+   GRUB_DEFAULT="1>Ubuntu, with Linux 4.19.155-mptcp+"
+   ```
 
-   2. Update the grub configuration and reboot into the new kernel.  
+2. Update the grub configuration and reboot into the new kernel.  
 
-      ```
-      update-grub && reboot
-      ```
+   ```
+   update-grub && reboot
+   ```
    
-   3. Download the script and run the configuration:
+3. Download the script:
 
-      ```
-      cd ~
-      git clone https://github.com/qizhe/Understanding-network-stack-overheads-SIGCOMM-2021
-      cd Understanding-network-stack-overheads-SIGCOMM-2021/
-      sudo ./mptcp_setup
-      ```
-   
-   4. Chabge the number of subflows <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
+   ```
+   cd ~
+   git clone https://github.com/qizhe/Understanding-network-stack-overheads-SIGCOMM-2021
+   ```
 
-      ```
-      sudo echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows
-      ```
-   
-   On the Server side:
-      ```
-      cd script/
-      bash receiver/single-flow_mptcp.sh
-      ```
-   
-   On the Client side:
-      ```
-      cd script/
-      bash sender/single-flow_mptcp.sh
-      ```
+4. Run the configuration script:
 
+   ```
+   cd ~/Understanding-network-stack-overheads-SIGCOMM-2021/
+   sudo ./mptcp_setup
+   cd script/
+   ```
+   
+- **Figure 2** (Static pipeline of MPTCP Linux stack):
+
+   **[NOTE]** Repeat the following experiment with varying <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
+
+   - Both: `sudo echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows`
+
+   - Server: `receiver/single-flow_mptcp.sh`
+   - Client: `sender/single-flow_mptcp.sh`
