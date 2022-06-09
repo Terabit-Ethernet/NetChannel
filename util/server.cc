@@ -24,9 +24,6 @@
 /* Log events to standard output. */
 bool verbose = false;
 
-/* Port number on which to listen (both for Homa and TCP); if multiple
- * Homa ports are in use, they will be consecutive numbers starting with
- * this. */
 int port = 4000;
 
 /* True that a specific format is expected for incoming messages, and we
@@ -79,7 +76,7 @@ void print_help(const char *name)
 		"The following options are supported:\n\n"
 		"--help       Print this message and exit\n"
 		"--port       (First) port number to use (default: 4000)\n"
-		"--num_ports  Number of Homa ports to open (default: 1)\n"
+		"--num_ports  Number of ports to open (default: 1)\n"
 		"--validate   Validate contents of incoming messages (default: false\n"
 		"--verbose    Log events as they happen (default: false)\n",
 		name);
@@ -219,8 +216,8 @@ void nd_outputfile(int fd, struct sockaddr_in source)
 		std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);
@@ -248,7 +245,7 @@ void tcp_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
+	//printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
@@ -315,8 +312,8 @@ void nd_connection(int fd, struct sockaddr_in source)
 	// setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 	if (getsockname(fd, (struct sockaddr *)&sin, &len) == -1)
 	    perror("getsockname");
-	else
-	    printf("port number %d\n", ntohs(sin.sin_port));
+	//else
+	//    printf("port number %d\n", ntohs(sin.sin_port));
 	// start_cycle = rdtsc();
 	printf("start connection\n");
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
@@ -404,8 +401,8 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// 	};
 		// }
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);
@@ -427,7 +424,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	//int cur_length = 0;
 	//bool streaming = false;
 	uint64_t count = 0;
-	uint64_t total_length = 0;
+	//uint64_t total_length = 0;
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
@@ -489,8 +486,8 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 close:
@@ -589,7 +586,7 @@ void nd_server(int port)
 		printf("Couldn't open server socket: %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("reach here\n");
+	//printf("reach here\n");
 	int option_value = 1;
 	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR | SO_NO_CHECK, &option_value,
 			sizeof(option_value)) != 0) {
@@ -723,7 +720,7 @@ int main(int argc, char** argv) {
 	workers.push_back(std::thread(tcp_server, port));
 	workers.push_back(std::thread(udp_server, port));
 	workers.push_back(std::thread(nd_server, port));
-	workers.push_back(std::thread(aggre_thread, &agg_stats));
+//	workers.push_back(std::thread(aggre_thread, &agg_stats));
 	for(int i = 0; i < num_ports; i++) {
 		workers[i].join();
 	}

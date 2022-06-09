@@ -429,7 +429,10 @@ void test_ndping_send(int fd, struct sockaddr *dest)
 				break;
 		
 		}
-		printf("%" PRIu64 "\n", write_len);
+		//printf("Throughput: %" PRIu64 " Gbps\n", write_len * 8 / times / 1000000000);
+		printf("Throughput: %.2f Gbps\n", write_len * 8.0 / times / 1000000000.0);
+	close(fd);
+	return;
 }
 
 void test_ndping_recv(int fd, struct sockaddr *dest, int id)
@@ -504,7 +507,7 @@ void test_tcppingpong(int fd, struct sockaddr *dest, int id)
 	// uint64_t total_length = 0;
 	uint64_t start_time;
 	std::vector<double> latency;
-	printf("reach here1\n");
+	//printf("reach here1\n");
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
 		exit(1);
@@ -590,7 +593,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, int id)
 	file.open("result_nd_pingpong_"+ std::to_string(id));
 	uint64_t start_time;
 	std::vector<double> latency;
-	printf("reach here1\n");
+	//printf("reach here1\n");
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
 		exit(1);
@@ -919,7 +922,7 @@ int main(int argc, char** argv)
 	for(i = 0; i < count; i++) {
 		nextArg = tempArg;
 
-		printf("nextArg:%d\n", nextArg);
+		//printf("nextArg:%d\n", nextArg);
 		fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 		// fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -961,27 +964,27 @@ int main(int argc, char** argv)
 				workers.push_back(std::thread(test_ndping, fd, dest));
 			} else if (strcmp(argv[nextArg], "tcpppasync") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				std::cout << "limit " <<limit << std::endl;
+				//std::cout << "limit " <<limit << std::endl;
 
 				if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 					printf("Couldn't connect to dest %s\n", strerror(errno));
 					exit(1);
 				}
-				printf("reach here tcp async\n");
+				//printf("reach here tcp async\n");
 				workers.push_back(std::thread(test_ndping_send, fd, dest));
 				// workers.push_back(std::thread(test_ndping_recv, fd, dest, srcPort - 10000));
 			} else if (strcmp(argv[nextArg], "ndppasync") == 0) {
-				std::cout << "limit " <<limit << std::endl;
+				//std::cout << "limit " <<limit << std::endl;
 
 				if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 					printf("Couldn't connect to dest %s\n", strerror(errno));
 					exit(1);
 				}
-				printf("reach here\n");
+				//printf("reach here\n");
 				workers.push_back(std::thread(test_ndping_send, fd, dest));
 				// workers.push_back(std::thread(test_ndping_recv, fd, dest, srcPort - 10000));
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
-				printf("call ndpingpong\n");
+				//printf("call ndpingpong\n");
 				optval = 6;
 				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				// cpu_set_t cpuset;
@@ -995,7 +998,7 @@ int main(int argc, char** argv)
 				optval = 6;
 				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-				printf("optval:%d\n", optval);
+				//printf("optval:%d\n", optval);
 				workers.push_back(std::thread(test_tcppingpong, fd, dest, i));
 			} 
 			 else {
@@ -1004,7 +1007,7 @@ int main(int argc, char** argv)
 			}
 		}
 	}
-       std::this_thread::sleep_for (std::chrono::seconds(100));
+//       std::this_thread::sleep_for (std::chrono::seconds(100));
 
 	for(unsigned i = 0; i < workers.size(); i++) {
 		workers[i].join();

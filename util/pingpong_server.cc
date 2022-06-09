@@ -27,9 +27,6 @@
 /* Log events to standard output. */
 bool verbose = false;
 
-/* Port number on which to listen (both for Homa and TCP); if multiple
- * Homa ports are in use, they will be consecutive numbers starting with
- * this. */
 int port = 4000;
 
 /* True that a specific format is expected for incoming messages, and we
@@ -89,19 +86,19 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
-	uint64_t total_length = 0;
+	//uint64_t total_length = 0;
 	// uint64_t start_cycle = 0, end_cycle = 0;
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
 	int which = PRIO_PROCESS;
 	id_t pid;
-	int ret;
-	printf("reach here\n");
+	//int ret = 0;
+	//printf("reach here\n");
 	pid = getpid();
-	//ret = setpriority(which, pid, -20);
+	setpriority(which, pid, -20);
 	//std::cout << "ret "<< ret << std::endl;
-	ret = getpriority(which, pid);
-	std::cout << "priority " << ret << std::endl;
+	getpriority(which, pid);
+	//std::cout << "priority " << ret << std::endl;
 	// int *int_buffer = reinterpret_cast<int*>(buffer);
 	if (verbose)
 		printf("New ND socket from %s\n", print_address(&source));
@@ -114,7 +111,7 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 	printf("start connection\n");
 	setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));   
 	getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-	printf("optval:%d\n", optval);
+	//printf("optval:%d\n", optval);
 
 	// printf("sizeof buffer:%ld\n", sizeof(buffer));
 	while (1) {
@@ -161,8 +158,8 @@ void nd_pingpong(int fd, struct sockaddr_in source)
 		// std::atomic_fetch_add(&agg_stats.interval_bytes, (unsigned long)result);
 		// std::atomic_fetch_add(&agg_stats.total_bytes, (unsigned long)result);
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 close:
@@ -180,7 +177,7 @@ void print_help(const char *name)
 		"The following options are supported:\n\n"
 		"--help       Print this message and exit\n"
 		"--port       (First) port number to use (default: 4000)\n"
-		"--num_ports  Number of Homa ports to open (default: 1)\n"
+		"--num_ports  Number of ports to open (default: 1)\n"
 		"--validate   Validate contents of incoming messages (default: false\n"
 		"--verbose    Log events as they happen (default: false)\n",
 		name);
@@ -447,8 +444,8 @@ void nd_connection(int fd, struct sockaddr_in source)
 		// 	};
 		// }
 	}
-		printf( "total len:%" PRIu64 "\n", total_length);
-		printf("done!");
+		//printf( "total len:%" PRIu64 "\n", total_length);
+		printf("done!\n");
 	if (verbose)
 		printf("Closing TCP socket from %s\n", print_address(&source));
 	close(fd);

@@ -1,0 +1,231 @@
+diff --git a/Makefile b/Makefile
+index 4d0711f54047..436729ef4439 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@
+ VERSION = 5
+ PATCHLEVEL = 6
+ SUBLEVEL = 0
+-EXTRAVERSION =
++EXTRAVERSION = -netchannel
+ NAME = Kleptomaniac Octopus
+ 
+ # *DOCUMENTATION*
+diff --git a/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c b/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c
+index 312d4692425b..fec1a4b170eb 100644
+--- a/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c
++++ b/drivers/net/ethernet/mellanox/mlx5/core/en_rx.c
+@@ -1276,6 +1276,10 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
+ 	skb->tail += headlen;
+ 	skb->len  += headlen;
+ 
++	/* For NetChannel */
++	if(rq->page_pool)
++		skb_shinfo(skb)->page_pool = rq->page_pool;
++
+ 	return skb;
+ }
+ 
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index e59620234415..c971f17114d3 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -520,6 +520,9 @@ struct skb_shared_info {
+ 	unsigned int	gso_type;
+ 	u32		tskey;
+ 
++	/* NetChannel: add page_pool */
++        void *page_pool;
++
+ 	/*
+ 	 * Warning : all fields before dataref are cleared in __alloc_skb()
+ 	 */
+diff --git a/include/linux/tcp.h b/include/linux/tcp.h
+index 3dc964010fef..fffbc1168974 100644
+--- a/include/linux/tcp.h
++++ b/include/linux/tcp.h
+@@ -401,6 +401,9 @@ struct tcp_sock {
+ 		u32	space;
+ 		u32	seq;
+ 		u64	time;
++		/* NetChannel: add hol_alloc */
++		int	hol_alloc;
++		int	hol_len;
+ 	} rcvq_space;
+ 
+ /* TCP-specific MTU probe information. */
+@@ -430,6 +433,10 @@ struct tcp_sock {
+ 	 */
+ 	struct request_sock __rcu *fastopen_rsk;
+ 	u32	*saved_syn;
++
++/* NetChannel: add hol state */
++	atomic_t hol_alloc;
++	atomic_t hol_len;
+ };
+ 
+ enum tsq_enum {
+diff --git a/include/net/page_pool.h b/include/net/page_pool.h
+index cfbed00ba7ee..82456242c286 100644
+--- a/include/net/page_pool.h
++++ b/include/net/page_pool.h
+@@ -87,7 +87,8 @@ struct page_pool {
+ 	unsigned long defer_start;
+ 	unsigned long defer_warn;
+ 
+-	u32 pages_state_hold_cnt;
++	/* Modified for NetChannel */
++	atomic_t pages_state_hold_cnt;
+ 
+ 	/*
+ 	 * Data structure for allocation side
+diff --git a/include/net/tcp.h b/include/net/tcp.h
+index a5ea27df3c2b..e2fe9bcece5a 100644
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -317,6 +317,9 @@ void tcp_tasklet_init(void);
+ int tcp_v4_err(struct sk_buff *skb, u32);
+ 
+ void tcp_shutdown(struct sock *sk, int how);
++/* NetChannel: add two non-static functions */
++void tcp_cleanup_rbuf(struct sock *sk, int copied);
++struct sk_buff *tcp_recv_skb(struct sock *sk, u32 seq, u32 *off);
+ 
+ int tcp_v4_early_demux(struct sk_buff *skb);
+ int tcp_v4_rcv(struct sk_buff *skb);
+diff --git a/net/core/dev_ioctl.c b/net/core/dev_ioctl.c
+index dbaebbe573f0..1e5f7a0dbb34 100644
+--- a/net/core/dev_ioctl.c
++++ b/net/core/dev_ioctl.c
+@@ -96,6 +96,8 @@ int dev_ifconf(struct net *net, struct ifconf *ifc, int size)
+ 	 */
+ 	return 0;
+ }
++/* NetChannel: add export_symbol */
++EXPORT_SYMBOL(dev_ifconf);
+ 
+ /*
+  *	Perform the SIOCxIFxxx calls, inside rcu_read_lock()
+@@ -519,3 +521,5 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr, bool *need_c
+ 		return -ENOTTY;
+ 	}
+ }
++/* NetChannel: add export_symbol */
++EXPORT_SYMBOL(dev_ioctl);
+diff --git a/net/core/page_pool.c b/net/core/page_pool.c
+index 10d2b255df5e..3b4b56fcafe1 100644
+--- a/net/core/page_pool.c
++++ b/net/core/page_pool.c
+@@ -184,6 +184,7 @@ static struct page *__page_pool_alloc_pages_slow(struct page_pool *pool,
+ 	struct page *page;
+ 	gfp_t gfp = _gfp;
+ 	dma_addr_t dma;
++	int count;
+ 
+ 	/* We could always set __GFP_COMP, and avoid this branch, as
+ 	 * prep_new_page() can handle order-0 with __GFP_COMP.
+@@ -229,9 +230,10 @@ static struct page *__page_pool_alloc_pages_slow(struct page_pool *pool,
+ 
+ skip_dma_map:
+ 	/* Track how many pages are held 'in-flight' */
+-	pool->pages_state_hold_cnt++;
++	/* Modified for NetChannel */
++	count = atomic_inc_return(&pool->pages_state_hold_cnt);
+ 
+-	trace_page_pool_state_hold(pool, page, pool->pages_state_hold_cnt);
++	trace_page_pool_state_hold(pool, page, count);
+ 
+ 	/* When page just alloc'ed is should/must have refcnt 1. */
+ 	return page;
+@@ -263,7 +265,8 @@ EXPORT_SYMBOL(page_pool_alloc_pages);
+ static s32 page_pool_inflight(struct page_pool *pool)
+ {
+ 	u32 release_cnt = atomic_read(&pool->pages_state_release_cnt);
+-	u32 hold_cnt = READ_ONCE(pool->pages_state_hold_cnt);
++	/* Modified for NetChannel */
++	u32 hold_cnt = atomic_read(&pool->pages_state_hold_cnt);
+ 	s32 inflight;
+ 
+ 	inflight = _distance(hold_cnt, release_cnt);
+diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
+index d545fb99a8a1..d7df9bc1b97e 100644
+--- a/net/ipv4/inet_connection_sock.c
++++ b/net/ipv4/inet_connection_sock.c
+@@ -111,6 +111,8 @@ bool inet_rcv_saddr_any(const struct sock *sk)
+ #endif
+ 	return !sk->sk_rcv_saddr;
+ }
++/* NetChannel: add export_symbol */
++EXPORT_SYMBOL(inet_rcv_saddr_any);
+ 
+ void inet_get_local_port_range(struct net *net, int *low, int *high)
+ {
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index dc77c303e6f7..bccd439bb772 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -454,6 +454,10 @@ void tcp_init_sock(struct sock *sk)
+ 
+ 	sk_sockets_allocated_inc(sk);
+ 	sk->sk_route_forced_caps = NETIF_F_GSO;
++
++	/* NetChannel: add hol state */
++	atomic_set(&tp->hol_alloc, 0);
++	atomic_set(&tp->hol_len, 0);
+ }
+ EXPORT_SYMBOL(tcp_init_sock);
+ 
+@@ -1517,7 +1521,8 @@ static int tcp_peek_sndq(struct sock *sk, struct msghdr *msg, int len)
+  * calculation of whether or not we must ACK for the sake of
+  * a window update.
+  */
+-static void tcp_cleanup_rbuf(struct sock *sk, int copied)
++/* NetChannel: make the function non-static */
++void tcp_cleanup_rbuf(struct sock *sk, int copied)
+ {
+ 	struct tcp_sock *tp = tcp_sk(sk);
+ 	bool time_to_ack = false;
+@@ -1574,8 +1579,10 @@ static void tcp_cleanup_rbuf(struct sock *sk, int copied)
+ 	if (time_to_ack)
+ 		tcp_send_ack(sk);
+ }
++EXPORT_SYMBOL(tcp_cleanup_rbuf);
+ 
+-static struct sk_buff *tcp_recv_skb(struct sock *sk, u32 seq, u32 *off)
++/* NetChannel: make the function non-static */
++struct sk_buff *tcp_recv_skb(struct sock *sk, u32 seq, u32 *off)
+ {
+ 	struct sk_buff *skb;
+ 	u32 offset;
+@@ -1598,6 +1605,7 @@ static struct sk_buff *tcp_recv_skb(struct sock *sk, u32 seq, u32 *off)
+ 	}
+ 	return NULL;
+ }
++EXPORT_SYMBOL(tcp_recv_skb);
+ 
+ /*
+  * This routine provides an alternative to tcp_recvmsg() for routines
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 6b6b57000dad..09ba9dec7100 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -80,6 +80,7 @@
+ #include <linux/jump_label_ratelimit.h>
+ #include <net/busy_poll.h>
+ #include <net/mptcp.h>
++#include <linux/inet.h>
+ 
+ int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
+ 
+@@ -663,6 +664,8 @@ void tcp_rcv_space_adjust(struct sock *sk)
+ 	tp->rcvq_space.seq = tp->copied_seq;
+ 	tp->rcvq_space.time = tp->tcp_mstamp;
+ }
++/* NetChannel: add export_symbol */
++EXPORT_SYMBOL(tcp_rcv_space_adjust);
+ 
+ /* There is something which you must keep in mind when you analyze the
+  * behavior of the tp->ato delayed ack timeout interval.  When a
+-- 
+2.25.1
+

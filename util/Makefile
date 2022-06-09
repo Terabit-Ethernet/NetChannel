@@ -1,8 +1,7 @@
-# Makefile to build various testing programs for Homa.
-liburing-path = /home/midhul/liburing
+liburing-path = /home/sigcomm22/liburing
 CFLAGS := -Wall -Werror -g -fno-strict-aliasing -O3 -I..
 
-BINS := netdriver_test netdriver_test_multithread  pingpong_server pingpong_server_async server iouring_bench
+BINS := netdriver_test netdriver_test_multithread  pingpong_server pingpong_server_async server iouring_bench iouring_bench_nc
 
 OBJS := $(patsubst %,%.o,$(BINS))
 	
@@ -19,6 +18,12 @@ iouring_bench: iouring_bench.o $(LIB_OBJS)
 iouring_bench.o: iouring_bench.c test_utils.h
 	cc -c $(CFLAGS) $< -o $@ -I$(liburing-path)/src/include/
 
+iouring_bench_nc: iouring_bench_nc.o $(LIB_OBJS)
+	g++ $(CFLAGS) $^ -L$(liburing-path)/src/ -lpthread -luring -o $@
+
+iouring_bench_nc.o: iouring_bench_nc.c test_utils.h
+	cc -c $(CFLAGS) $< -o $@ -I$(liburing-path)/src/include/
+
 # This seems to be the only way to disable the built-in implicit rules
 # for %:%.c and %:%.cc.
 .SUFFIXES:
@@ -32,9 +37,6 @@ iouring_bench.o: iouring_bench.c test_utils.h
 %.o: %.c test_utils.h 
 	cc -c $(CFLAGS) $< -o $@
 	
-# homa_api.o: ../homa_api.c
-# 	cc -c $(CFLAGS) $< -o $@
-
 clean:
 	rm -f $(BINS) $(OBJS) $(LIB_OBJS)
 

@@ -157,7 +157,7 @@ void test_tcpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count; i++) {
@@ -233,7 +233,7 @@ void test_udpstream(char *server_name, int port)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 	    for (int i = 0; i < count * 100; i++) {
 	    	int result = sendto(fd, buffer, 64000, MSG_CONFIRM, dest, sizeof(struct sockaddr_in));			
@@ -307,7 +307,7 @@ void test_ndstream(int fd, struct sockaddr *dest, char* buffer)
 
 		// if (bytes_sent > 1010000000)
 		// 	break;
-		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(120)) 
+		if(std::chrono::steady_clock::now() - start_clock > std::chrono::seconds(60)) 
 	            break;
 
 	    for (int i = 0; i < count * 100; i++) {
@@ -339,14 +339,14 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 	//struct sockaddr_in* in = (struct sockaddr_in*) dest;
 	uint32_t buffer_size = 10000000;
 	// uint64_t flow_size = 10000000000000;
-	int times = 120;
+	int times = 60;
 	uint64_t write_len = 0;
 	uint64_t start_time = rdtsc();
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("connect done\n");
+	//printf("connect done\n");
 	    // for (int i = 0; i < count * 100; i++) {
 		while(1) {
 
@@ -365,7 +365,8 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 				break;
 		}
 	// }
-		printf("%" PRIu64 "\n", write_len);
+		//printf("Throughput: %" PRIu64 " Gbps \n", write_len / times * 8 / 1000000000);
+		printf("Throughput: %.2f Gbps \n", write_len / times * 8.0 / 1000000000.0);
 		// printf("end\n");
 		 //    result = write(fd, buffer, 10000);			
 			// if( result < 0 ) {
@@ -406,7 +407,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 	// uint64_t total_length = 0;
 	uint64_t start_time;
 	std::vector<double> latency;
-	printf("reach here1\n");
+	//printf("reach here1\n");
 	if (connect(fd, dest, sizeof(struct sockaddr_in)) == -1) {
 		printf("Couldn't connect to dest %s\n", strerror(errno));
 		exit(1);
@@ -423,7 +424,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 			int result = write(fd, buffer + copied,
 				rpc_length);
 			if (result <= 0) {
-				printf("goto close\n");
+				//printf("goto close\n");
 					goto close;
 			}
 			rpc_length -= result;
@@ -438,7 +439,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 			int result = read(fd, buffer + copied,
 				rpc_length);
 			if (result <= 0) {
-					printf("goto close2\n");
+					//printf("goto close2\n");
 					goto close;
 			}
 			// printf("result:%d\n",result);
@@ -451,7 +452,8 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 		}
 		end = rdtsc();
 		latency.push_back(to_seconds(end-start));
-		// printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
+		//printf("finsh time: %f cycles:%lu\n",  to_seconds(end-start), end-start);
+		printf("finsh time: %f (us)\n",  to_seconds(end-start)*1000000);
 		if(to_seconds(end-start_time) > times)
 			break;
 	//	if (total_length <= 8000000)
@@ -462,11 +464,13 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 		// printf( "total len:%" PRIu64 "\n", total_length);
 		// printf("done!");
 close:
+/*
 	sleep(10);
 
 	for(uint32_t i = 0; i < latency.size(); i++) {
 		std::cout << "finish time: " << latency[i] << "\n"; 
 	}
+*/
 	return;
 }
 
@@ -741,7 +745,7 @@ int main(int argc, char** argv)
 	for(i = 0; i < count; i++) {
 		nextArg = tempArg;
 
-		printf("nextArg:%d\n", nextArg);
+		//printf("nextArg:%d\n", nextArg);
 		fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_VIRTUAL_SOCK);
 		// fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -797,26 +801,26 @@ int main(int argc, char** argv)
 			} else if (strcmp(argv[nextArg], "ndstream") == 0) {
 				test_ndstream(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndping") == 0) {
-				printf("call ndping\n");
+				//printf("call ndping\n");
 				test_ndping(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "tcpping") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
-				printf("call tcpping\n");
+				//printf("call tcpping\n");
 				test_ndping(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "ndpingpong") == 0) {
-				printf("call ndpingpong\n");
+				//printf("call ndpingpong\n");
 				optval = 6;
                 setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "whileloop") == 0) {
-				printf("call whileloop\n");
+				//printf("call whileloop\n");
 				test_whileloop();
 			}  else if (strcmp(argv[nextArg], "tcppingpong") == 0) {
 				fd = socket(AF_INET, SOCK_STREAM, 0);
 				optval = 7;
 				setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));  
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
-				printf("optval:%d\n", optval);
+				//printf("optval:%d\n", optval);
 				test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "sendfile") == 0) {
 				// fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -828,7 +832,7 @@ int main(int argc, char** argv)
 			}
 		}
 		close(fd);
-		printf("i:%d\n", i);
+		//printf("i:%d\n", i);
 	}
 	free(buffer);
 	exit(0);
