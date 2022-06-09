@@ -29,7 +29,7 @@ On both sides:
    ```
    cd ~/Understanding-network-stack-overheads-SIGCOMM-2021/
    sudo ./mptcp_setup
-   cd script/
+   cd scripts/
    ```
    
 - **Figure 2** (Static pipeline of MPTCP Linux stack):
