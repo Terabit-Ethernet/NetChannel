@@ -28,5 +28,5 @@ done
 
 sleep 62
 
-python3 ~/NetChannel/util/read_pingpong.py 1 nd
-rm result_nd_pingpong_0
+python3 ~/NetChannel/util/read_pingpong.py 1 tcp
+rm result_tcp_pingpong_0

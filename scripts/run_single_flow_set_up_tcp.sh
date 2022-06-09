@@ -9,4 +9,4 @@ sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 6291456'
 sudo ethtool -K $iface tso on gso on gro on lro off
 sudo ifconfig $iface mtu 9000
 
-/usr/sbin/set_irq_affinity_cpulist.sh 4 $iface
+sudo /usr/sbin/set_irq_affinity_cpulist.sh 4 $iface
