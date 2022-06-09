@@ -13,7 +13,7 @@ On both sides:
 2. Update the grub configuration and reboot into the new kernel.  
 
    ```
-   update-grub && reboot
+   sudu update-grub && reboot
    ```
    
 3. Download the script:
