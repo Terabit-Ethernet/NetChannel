@@ -25,11 +25,11 @@ Through the following sections, we provide getting started instructions to insta
 NetChannel requires some modifications in the Linux kernel, so it requires kernel compilation and system reboot into the NetChannel kernel. This section covers how to build the Linux kernel with the NetChannel patch.
    * **NetChannel Kernel Module: (5 human-mins):**  
 This section covers how to build the NetChannel kernel modules.
-   * **NetChannel Applications: (10 human-mins):**  
+   * **NetChannel Applications: (5 human-mins):**  
 This section covers how to build the NetChannel test applications.
 * **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-* **SIGCOMM 2022 Artifact Evaluation (30-40 compute-mins):**  
+* **SIGCOMM 2022 Artifact Evaluation (45 compute-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
@@ -40,7 +40,7 @@ NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
    ```
    sudo apt-get install libncurses-dev gawk flex bison openssl libssl-dev dkms dwarves  \
-                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat
+                     libelf-dev libudev-dev libpci-dev libiberty-dev autoconf sysstat iperf
    ```
 
 ### NetChannel Kernel
@@ -262,7 +262,7 @@ On both sides:
 
 ### NetChannel Experiments
 
-- **Figure 6a--6b** (Data copy processing parallelism) (~2 minutes):
+- **Figure 6a, 6b** (Data copy processing parallelism) (~2 minutes):
 
    For read/write syscalls:
 
@@ -276,23 +276,23 @@ On both sides:
    - Server: `./fig6a6b-nc-uring-server.sh`
    - Client: `./fig6a6b-nc-uring-client.sh`
 
-   **[NOTE]** You can ignore these error messages for io_uring: `failed cqe: -107` `recv_longflow failed`
+   **[NOTE]** You can ignore these error messages: `failed cqe: -107` `recv_longflow failed`
  
 - **Figure 6c** (Network processing parallelism) (~8 minutes):
 
+   **[NOTE]** Repeat the following experiments with varying <#channels>: `1, 2, 3, 4` to get the entire Figure 6c results.
+
    For read/write syscalls:
  
-   - Server: `./fig6c-nc-server.sh 1`
-   - Client: `./fig6c-nc-client.sh 1`
+   - Server: `./fig6c-nc-server.sh <#channels>`
+   - Client: `./fig6c-nc-client.sh <#channels>`
 
-   (Server: `sudo killall server` to stop the server application.)
+   (Server: `sudo killall server` to change <#channels>.)
 
    For io_uring:
  
-   - Server: `./fig6c-nc-uring-server.sh 1`
-   - Client: `./fig6c-nc-uring-client.sh 1`
-    
-   **[NOTE]** Rerun the above experiments with varying the argument (number of channels) from `2` to `4` to get the entire Figure 6c results.
+   - Server: `./fig6c-nc-uring-server.sh <#channels>`
+   - Client: `./fig6c-nc-uring-client.sh <#channels>`   
     
 
 - **Figure 6d** (Performance isolation) (~2 minutes):
@@ -334,12 +334,12 @@ On both sides:
 
 - **Figure 8c** (Overheads of scaling packet processing) (~4 minutes):
 
-   - Server: `./fig8c-nc-server.sh 1`
-   - Client: `./fig8c-nc-client.sh 1`
+   **[NOTE]** Repeat the following experiment with varying <#channels>: `1, 2, 3, 4` to get the entire Figure 8c results.
 
-   (Server: `sudo killall server` to stop the server application.)
-    
-   **[NOTE]** Rerun the above experiment with varying the argument (number of channels) from `2` to `4` to get the entire Figure 8c results.
+   - Server: `./fig8c-nc-server.sh <#channels>`
+   - Client: `./fig8c-nc-client.sh <#channels>`
+
+   (Server: `sudo killall server` to change <#channels>.)
 
 - **Figure 8d** (Overheads of achieving performance isolation) (~2 minutes):
 
