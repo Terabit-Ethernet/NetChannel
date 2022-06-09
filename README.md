@@ -54,7 +54,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 2. Download and apply the NetChannel kernel patch to the kernel source:  
 
    ```
-   git clone -b new_flow_control https://github.com/Terabit-Ethernet/NetChannel.git
+   git clone https://github.com/Terabit-Ethernet/NetChannel.git
    cd ~/linux-5.6/
    git apply ../NetChannel/kernel_patch/netchannel-kernel.patch
    ```
