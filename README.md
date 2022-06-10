@@ -474,6 +474,16 @@ On both sides:
    - Client: `./fig2-irq-tcp-uring-client.sh`
 
    
-- **Figure 3** (Sender-side processing) (~1 minutes):
+- **Figure 3** (Sender-side processing) (~2 minutes):
 
+   For read/write syscalls:
+   
+   - Server: `./fig3-tcp-server.sh`
+   - Client: `./fig3-tcp-client.sh`
 
+   (Server: `sudo killall server` to stop the server application.)
+   
+   For io_uring:
+   
+   - Server: `./fig3-tcp-uring-server.sh`
+   - Client: `./fig3-tcp-uring-client.sh`
