@@ -445,7 +445,7 @@ On both sides:
    (Server: `sudo killall server pingpong_server` to stop the server application.)
    
    
-### Section 2 (Motivation) Experiments
+### (Optional) Section 2 Motivation Experiments
  
 - **Figure 2a, 2b** (Static pipeline of Linux network stack) (~4 minutes):
 
