@@ -447,7 +447,7 @@ On both sides:
    
 ### (Optional) Section 2 Motivation Experiments
  
-- **Figure 2a, 2b** (Static pipeline of Linux network stack) (~4 minutes):
+- **Figure 2a, 2b** (Lack of scalability for long flows) (~4 minutes):
 
    For TCP read/write syscalls with aRFS:
    
@@ -474,7 +474,7 @@ On both sides:
    - Client: `./fig2-irq-tcp-uring-client.sh`
 
    
-- **Figure 3** (Sender-side processing) (~2 minutes):
+- **Figure 3** (Lack of scalability for short flows) (~2 minutes):
 
    For read/write syscalls:
    
@@ -487,3 +487,8 @@ On both sides:
    
    - Server: `./fig3-tcp-uring-server.sh`
    - Client: `./fig3-tcp-uring-client.sh`
+
+
+- **Figure 4** (Lack of performance isolation) (~4 minutes):
+
+
