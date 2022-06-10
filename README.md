@@ -468,15 +468,11 @@ On both sides:
    - Server: `./fig2-arfs-tcp-uring-server.sh`
    - Client: `./fig2-arfs-tcp-uring-client.sh`
 
-   **[NOTE]** You can ignore these error messages: `failed cqe: -107` `recv_longflow failed`
-   
    For TCP io_uring with manual IRQ steering:
    
    - Server: `./fig2-irq-tcp-uring-server.sh`
    - Client: `./fig2-irq-tcp-uring-client.sh`
 
-   **[NOTE]** You can ignore these error messages: `failed cqe: -107` `recv_longflow failed`
-   
    
 - **Figure 3** (Sender-side processing) (~1 minutes):
 
