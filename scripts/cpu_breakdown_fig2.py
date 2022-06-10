@@ -102,9 +102,9 @@ def parse_contri(filename="../results/nsdi2021/oto/baseline_s",util=1.0):
             elif function in tcp_ip_p:
                 p.tcp_ip_cost += precentage
             elif function in system_call:
-                p.etc_cost += precentage
+                p.system_cost += precentage
             elif function in net_driver:
-                p.etc_cost += precentage
+                p.nd_cost += precentage
             elif function in skb:
                 p.skb_cost += precentage
             elif function in memory:

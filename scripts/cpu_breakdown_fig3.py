@@ -74,15 +74,15 @@ class Profiling:
 
 def output_file(filename, p):
     f = open(filename, "w+")
-    f.write("{} {}\n".format("data copy :", p.dc_cost))
-    f.write("{} {}\n".format("system call cost :", p.system_cost))
-    f.write("{} {}\n".format("tcp/ip processing :", p.tcp_ip_cost))
-    f.write("{} {}\n".format("netdevice subsystem :", p.network_sub_cost))
-    f.write("{} {}\n".format("skb mgmt :", p.skb_cost))
-    f.write("{} {}\n".format("memory alloc/dealloc :", p.memory_cost))
-    f.write("{} {}\n".format("lock/unlock :", p.lock_cost))
-    f.write("{} {}\n".format("scheduling :", p.schedule_cost))
-    f.write("{} {}\n".format("etc. :", p.etc_cost))
+    f.write("{} {:.2f}\n".format("           data copy :", p.dc_cost))
+    f.write("{} {:.2f}\n".format("    system call cost :", p.system_cost))
+    f.write("{} {:.2f}\n".format("   tcp/ip processing :", p.tcp_ip_cost))
+    f.write("{} {:.2f}\n".format(" netdevice subsystem :", p.network_sub_cost))
+    f.write("{} {:.2f}\n".format("            skb mgmt :", p.skb_cost))
+    f.write("{} {:.2f}\n".format("memory alloc/dealloc :", p.memory_cost))
+    f.write("{} {:.2f}\n".format("         lock/unlock :", p.lock_cost))
+    f.write("{} {:.2f}\n".format("          scheduling :", p.schedule_cost))
+    f.write("{} {:.2f}\n".format("                etc. :", p.etc_cost))
 
 def parse_contri(filename="../results/nsdi2021/oto/baseline_s"):
     p = Profiling()
