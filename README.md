@@ -443,3 +443,22 @@ On both sides:
    - Client: `./fig8d-tcp-intf-client.sh`
 
    (Server: `sudo killall server pingpong_server` to stop the server application.)
+   
+   
+### Section 2 (Motivation) Experiments
+ 
+- **Figure 2a, 2b** (Static pipeline of Linux network stack) (~4 minutes):
+
+   For TCP read/write syscalls with aRFS:
+   
+   - Server: `./fig2-arfs-tcp-server.sh`
+   - Client: `./fig2-arfs-tcp-client.sh`
+
+   (Server: `sudo killall server` to stop the server application.)
+   
+   For TCP read/write syscalls with manual IRQ steering:
+   
+   - Server: `./fig2-irq-tcp-server.sh`
+   - Client: `./fig2-irq-tcp-client.sh`
+
+   (Server: `sudo killall server` to stop the server application.)
