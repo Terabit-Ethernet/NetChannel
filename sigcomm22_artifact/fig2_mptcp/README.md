@@ -29,7 +29,12 @@ On both sides:
 
    **[NOTE]** Repeat the following experiment with varying <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
 
-   - Both: `sudo -s; echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows; exit`
+   - Both:
+      ```
+      sudo -s
+      echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows
+      exit
+      ```
 
    - Server: `./fig2-arfs-mptcp-server.sh`
    - Client: `./fig2-arfs-mptcp-client.sh`
