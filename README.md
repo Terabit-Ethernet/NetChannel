@@ -494,8 +494,8 @@ On both sides:
    For the isolated case:
  
    - Server: `./fig4-tcp-isol-server.sh`
-   - Client: `./fig4-tcp-isol-server.sh` for Linux
-   - Client: `./fig4-tcp-prio-isol-server.sh` for Linux+prioritization
+   - Client: `./fig4-tcp-isol-client.sh` for Linux
+   - Client: `./fig4-tcp-prio-isol-client.sh` for Linux+prioritization
 
    (Server: `sudo killall server pingpong_server` to stop the server application.)
    
