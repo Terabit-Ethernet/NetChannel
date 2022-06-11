@@ -29,7 +29,7 @@ This section covers how to build the NetChannel kernel modules.
 This section covers how to build the NetChannel test applications.
 * **Run a Toy Experiment (5-10 compute-mins):**  
 This section covers how to setup the servers and run experiments with the NetChannel kernel modules.
-* **SIGCOMM 2022 Artifact Evaluation (45 compute-mins):**  
+* **SIGCOMM 2022 Artifact Evaluation (45 compute-mins, and optionally 20 compute-mins + 5 reboot-mins):**  
 This section provides the detailed instructions to reproduce all individual results presented in our SIGCOMM 2022 paper.
 
 
