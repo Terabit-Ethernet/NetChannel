@@ -473,6 +473,9 @@ On both sides:
    - Server: `./fig2-irq-tcp-uring-server.sh`
    - Client: `./fig2-irq-tcp-uring-client.sh`
 
+
+   For MPTCP: **[NOTE]** Please go to "[fig2_mptcp/](https://github.com/Terabit-Ethernet/NetChannel/tree/main/sigcomm22_artifact/fig2_mptcp)" to run the MPTCP scripts. We however recommend you complete the following experiments first and come back to the MPTCP experiments as MPTCP requires a system reboot to change the kernel.
+
    
 - **Figure 3** (Lack of scalability for short flows) (~2 minutes):
 
