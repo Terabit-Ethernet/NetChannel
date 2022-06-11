@@ -489,6 +489,20 @@ On both sides:
    - Client: `./fig3-tcp-uring-client.sh`
 
 
-- **Figure 4** (Lack of performance isolation) (~4 minutes):
+- **Figure 4** (Lack of performance isolation) (~6 minutes):
 
+   For the isolated case:
+ 
+   - Server: `./fig4-tcp-isol-server.sh`
+   - Client: `./fig4-tcp-isol-server.sh` for Linux
+   - Client: `./fig4-tcp-prio-isol-server.sh` for Linux+prioritization
 
+   (Server: `sudo killall server pingpong_server` to stop the server application.)
+   
+   For the interference case:
+ 
+   - Server: `./fig4-tcp-intf-server.sh`
+   - Client: `./fig4-tcp-intf-client.sh` for Linux
+   - Client: `./fig4-tcp-prio-intf-client.sh` for Linux+prioritization
+
+   (Server: `sudo killall server pingpong_server` to stop the server application.)
