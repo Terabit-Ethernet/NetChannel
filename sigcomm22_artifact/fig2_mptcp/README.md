@@ -32,7 +32,7 @@ On both sides:
    cd scripts/
    ```
    
-- **Figure 2** (Static pipeline of MPTCP Linux stack):
+- **Figure 2** (Lack of scalability for long flows):
 
    **[NOTE]** Repeat the following experiment with varying <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
 
