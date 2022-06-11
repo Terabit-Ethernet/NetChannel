@@ -17,26 +17,22 @@ On both sides:
    update-grub && reboot
    ```
    
-3. Download MPTCP scripts:
+3. When system is rebooted, run the configuration script:
 
    ```
-   cd ~
-   git clone https://github.com/qizhe/Understanding-network-stack-overheads-SIGCOMM-2021
-   ```
-
-4. Run the configuration script:
-
-   ```
-   cd ~/Understanding-network-stack-overheads-SIGCOMM-2021/
-   sudo ./mptcp_setup
-   cd scripts/
+   sudo ~/NetChannel/scripts/network_setup.sh ens2f0
+   sudo ~/NetChannel/scripts/mptcp_setup
+   cd ~/NetChannel/sigcomm22_artifact/fig2_mptcp/
    ```
    
 - **Figure 2** (Lack of scalability for long flows):
 
    **[NOTE]** Repeat the following experiment with varying <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
 
-   - Both: `sudo echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows`
+   - Both: `sudo -s; echo <#subflows> > /sys/module/mptcp_fullmesh/parameters/num_subflows; exit`
 
-   - Server: `receiver/single-flow_mptcp.sh`
-   - Client: `sender/single-flow_mptcp.sh`
+   - Server: `./fig2-arfs-mptcp-server.sh`
+   - Client: `./fig2-arfs-mptcp-client.sh`
+
+   (Server: `sudo killall iperf` to stop the server application.)
+
