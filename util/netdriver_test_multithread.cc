@@ -1000,7 +1000,14 @@ int main(int argc, char** argv)
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
 				//printf("optval:%d\n", optval);
 				workers.push_back(std::thread(test_tcppingpong, fd, dest, i));
-			} 
+			} else if (strcmp(argv[nextArg], "tcppingpong0") == 0) {
+                                fd = socket(AF_INET, SOCK_STREAM, 0);
+                                optval = 0;
+                                setsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, unsigned(sizeof(optval)));
+                                getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
+                                //printf("optval:%d\n", optval);
+                                workers.push_back(std::thread(test_tcppingpong, fd, dest, i));
+                        }	
 			 else {
 				printf("Unknown operation '%s'\n", argv[nextArg]);
 				exit(1);
