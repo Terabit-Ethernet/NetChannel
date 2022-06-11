@@ -1,0 +1,9 @@
+sudo modprobe mptcp_olia
+sudo sysctl -w net.ipv4.tcp_congestion_control=olia
+sudo sysctl -w net.mptcp.mptcp_path_manager=fullmesh
+sudo sysctl -w net.mptcp.mptcp_checksum=0
+ifconfig ens2f1 down
+ifconfig ens6f0 down
+ifconfig ens6f1 down
+iptables -A INPUT -s 128.84.155.133 -j DROP
+iptables -A OUTPUT -s 128.84.155.133 -j DROP
