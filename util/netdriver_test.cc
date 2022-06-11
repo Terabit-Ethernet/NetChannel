@@ -400,7 +400,7 @@ void test_ndping(int fd, struct sockaddr *dest, char* buffer)
 void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 {
 	// int flag = 1;
-	int times = 90;
+	int times = 60;
 	// int cur_length = 0;
 	// bool streaming = false;
 	uint64_t count = 0;
@@ -462,7 +462,7 @@ void test_ndpingpong(int fd, struct sockaddr *dest, char* buffer)
 
 	}
 		// printf( "total len:%" PRIu64 "\n", total_length);
-		// printf("done!");
+		printf("done!\n");
 close:
 /*
 	sleep(10);
@@ -822,6 +822,9 @@ int main(int argc, char** argv)
 				getsockopt(fd, SOL_SOCKET, SO_PRIORITY, &optval, &optlen);
 				//printf("optval:%d\n", optval);
 				test_ndpingpong(fd, dest, buffer);
+			} else if (strcmp(argv[nextArg], "tcppingpong_prio0") == 0) {
+                                fd = socket(AF_INET, SOCK_STREAM, 0);
+                                test_ndpingpong(fd, dest, buffer);
 			} else if (strcmp(argv[nextArg], "sendfile") == 0) {
 				// fd = socket(AF_INET, SOCK_STREAM, 0);
 				send_file("debug", fd, dest);
