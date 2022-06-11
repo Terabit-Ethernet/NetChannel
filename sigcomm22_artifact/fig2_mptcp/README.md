@@ -25,7 +25,7 @@ On both sides:
    cd ~/NetChannel/sigcomm22_artifact/fig2_mptcp/
    ```
    
-- **Figure 2** (Lack of scalability for long flows):
+- **Figure 2** (Lack of scalability for long flows) (~3 minutes):
 
    **[NOTE]** Repeat the following experiment with varying <#subflows>: `2, 4, 8` to get the MPTCP result in Figure 2.
 
