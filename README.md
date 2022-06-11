@@ -489,7 +489,7 @@ On both sides:
    - Client: `./fig3-tcp-uring-client.sh`
 
 
-- **Figure 4** (Lack of performance isolation) (~7 minutes):
+- **Figure 4** (Lack of performance isolation) (~6 minutes):
 
    For the isolated case:
  
