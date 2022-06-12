@@ -92,6 +92,8 @@ def parse_contri(filename="../results/nsdi2021/oto/baseline_s",util=1.0):
                 continue
             # if i > 40:
             #     break
+            if "llvmpipe" in lines[i]:
+                continue
             params = lines[i].split()
             if len(params) < 5:
                 continue

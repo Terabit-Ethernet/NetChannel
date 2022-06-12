@@ -19,4 +19,4 @@ python3 ~/NetChannel/util/read_pingpong.py 1 tcp
 echo ""
 echo "T-apps Throughput: $thru (Gbps)"
 echo "Per-core CPU usage: $tpc"
-#rm thru.log cpu_client.log cpu_server.log result_tcp_pingpong_0
+rm thru.log cpu_client.log cpu_server.log result_tcp_pingpong_0

@@ -94,6 +94,8 @@ def parse_contri(filename="../results/nsdi2021/oto/baseline_s"):
             # if i > 40:
             #     break
             params = lines[i].split()
+            if "llvmpipe" in lines[i]:
+                continue   
             if len(params) < 5:
                 continue
             precentage = float(params[0][:-1]) / 100.0

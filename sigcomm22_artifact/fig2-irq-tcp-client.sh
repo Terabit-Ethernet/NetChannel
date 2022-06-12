@@ -11,7 +11,6 @@ while (( flow < flows ));do
         ((core=16+4*flow))
         ((port=4000+flow))
 	sudo taskset -c 28 ~/NetChannel/util/netdriver_test $server_ip:$port --sp $((6000+core)) --count 1 "$protocol"ping > thru.log &
-        #sudo taskset -c 28 iperf -c $server_ip -p $port -t 60 &
         ((flow++))
 done
 
