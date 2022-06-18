@@ -2448,6 +2448,7 @@ void nd_destroy_sock(struct sock *sk)
 int nd_setsockopt(struct sock *sk, int level, int optname,
 		   char __user *optval, unsigned int optlen)
 {
+	int val;
 	if (get_user(val, (int __user *)optval))
 		return -EFAULT;
 	printk(KERN_WARNING "unimplemented setsockopt invoked on ND socket:"
