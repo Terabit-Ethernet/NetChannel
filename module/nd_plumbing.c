@@ -68,6 +68,7 @@ const struct proto_ops nd_dgram_ops = {
     .mmap          = sock_no_mmap,
     .sendpage      = inet_sendpage,
     .set_peek_off      = sk_set_peek_off,
+    .read_sock	   = nd_read_sock,
 // #ifdef CONFIG_COMPAT
 //     .compat_setsockopt = compat_sock_common_setsockopt,
 //     .compat_getsockopt = compat_sock_common_getsockopt,
