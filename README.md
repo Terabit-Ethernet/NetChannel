@@ -34,7 +34,7 @@ This section provides the detailed instructions to reproduce all individual resu
 
 
 ## 2. Build NetChannel
-NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on _both Client and Server machines_. **Note: if you are using our machines, you can skip this part and directly jump into SIGCOMM 2022 Artifact Evaluation[#sigcomm-2022-artifact-evaluation].**
+NetChannel has been successfully tested on Ubuntu 20.04 LTS with Linux kernel 5.6. Building the NetChannel kernel and kernel modules should be done on _both Client and Server machines_. **Note: if you are using our machines, you can skip this part and directly jump into [SIGCOMM 2022 Artifact Evaluation](#sigcomm-2022-artifact-evaluation).**
 
 ### Install Prerequisites
 We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this can be done with
