@@ -44,6 +44,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Kernel
+**Note: Don't build the kernel if you use our machine; please jump into [SIGCOMM 2022 Artifact Evaluation](#sigcomm-2022-artifact-evaluation).**
 1. Download Linux kernel source tree:  
    ```
    cd ~
