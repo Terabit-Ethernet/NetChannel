@@ -129,7 +129,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 ### NetChannel Applications  
 1. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
 
-   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
+   We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines with `sudo vi /usr/include/netinet/in.h` (line 58):
 
    ```
    ...
