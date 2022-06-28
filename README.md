@@ -127,46 +127,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    ```
 
 ### NetChannel Applications  
-1. Build io_uring library (liburing):  
-
-   ```
-   cd ~
-   git clone https://github.com/axboe/liburing
-   cd liburing
-   make
-   cd ~/NetChannel/util/
-   ```
-
-2. Edit `Makefile` to set the liburing-path (line 1):  
-
-   ```
-   liburing-path = /home/(account name)/liburing
-   ```
-
-3. Edit `netdriver_test.cc` to change the host IP adddress (line 761):  
-
-   ```
-   addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
-   ```
-
-   **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
-
-4. Compile the applications:  
-
-   ```
-   make
-   ```
-   
-5. Build Redis (for artifact evaluation):
-
-   ```
-   cd ~
-   git clone https://github.com/qizhe/redis.git
-   cd redis/
-   make
-   ```  
-
-6. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
+1. Add IPPROTO_VIRTUAL_SOCK in netinet/in.h:  
 
    We need to define **IPPROTO_VIRTUAL_SOCK** for NetChannel applications. Add the two lines in `/usr/include/netinet/in.h` (line 58):
 
@@ -176,6 +137,46 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    #define IPPROTO_VIRTUAL_SOCK     IPPROTO_VIRTUAL_SOCK
    ...
    ```
+
+2. Build io_uring library (liburing):  
+
+   ```
+   cd ~
+   git clone https://github.com/axboe/liburing
+   cd liburing
+   make
+   cd ~/NetChannel/util/
+   ```
+
+3. Edit `Makefile` to set the liburing-path (line 1):  
+
+   ```
+   liburing-path = /home/(account name)/liburing
+   ```
+
+4. Edit `netdriver_test.cc` to change the host IP adddress (line 761):  
+
+   ```
+   addr_in.sin_addr.s_addr = inet_addr("192.168.10.116");
+   ```
+
+   **[NOTE]** Use `inet_addr("192.168.10.117")` on the Server-side.
+
+5. Compile the applications:  
+
+   ```
+   make
+   ```
+   
+6. Build Redis (for artifact evaluation):
+
+   ```
+   cd ~
+   git clone https://github.com/qizhe/redis.git
+   cd redis/
+   make
+   ```  
+
 
 ## 3. Run a Toy Experiment  
 **[NOTE]** You should confirm that NetChannel kernel module is loaded in both machines before activating the NetChannel module.
