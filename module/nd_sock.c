@@ -525,13 +525,13 @@ int nd_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	struct flowi4 *fl4;
 	struct rtable *rt;
 	int err;
-	uint32_t flow_len;
+	// uint32_t flow_len;
 	struct ip_options_rcu *inet_opt;
 	// struct inet_timewait_death_row *tcp_death_row = &sock_net(sk)->ipv4.tcp_death_row;
-	flow_len = (uint32_t)usin->sin_zero[0] << 24 |
-      (uint32_t)usin->sin_zero[1] << 16 |
-      (uint32_t)usin->sin_zero[2] << 8  |
-      (uint32_t)usin->sin_zero[3];
+	// flow_len = (uint32_t)usin->sin_zero[0] << 24 |
+    //   (uint32_t)usin->sin_zero[1] << 16 |
+    //   (uint32_t)usin->sin_zero[2] << 8  |
+    //   (uint32_t)usin->sin_zero[3];
     if(sk->sk_state == ND_ESTABLISH)
 	return 0;
 	//WARN_ON(sk->sk_state != TCP_CLOSE);
@@ -837,13 +837,15 @@ struct sock *nd_sk_accept(struct sock *sk, int flags, int *err, bool kern)
 		error = -EAGAIN;
 		if (!timeo)
 			goto out_err;
-
+	
 		error = nd_sk_wait_for_connect(sk, timeo);
 		if (error)
 			goto out_err;
 	}
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
+	// if(inet_sk(newsk)->inet_saddr == inet_sk(newsk)->inet_daddr) {
+	// }
 	// printk("accept core id:%d\n", raw_smp_processor_id());
 	// nd_rps_record_flow(newsk);
 
@@ -1150,7 +1152,6 @@ struct sock *nd_create_con_sock(struct sock *sk, struct sk_buff *skb,
 	sk_setup_caps(newsk, dst);
 	/* set up nd_ctrl for rx socket */
 	dsk->nd_ctrl = nd_conn_find_nd_ctrl(newinet->inet_daddr);
-	printk("inet daddr dest:%d\n", newinet->inet_daddr);
 	/* add new socket to binding table */
 	if (__nd_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;

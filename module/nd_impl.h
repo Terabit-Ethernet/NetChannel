@@ -98,6 +98,10 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 int nd_sendpage(struct sock *sk, struct page *page, int offset, size_t size,
 		 int flags);
 void nd_destroy_sock(struct sock *sk);
+__poll_t nd_poll(struct file *file, struct socket *sock,
+               struct poll_table_struct *wait);
+int nd_read_sock(struct sock *sk, read_descriptor_t *desc,
+		  sk_read_actor_t recv_actor);
 
 #ifdef CONFIG_PROC_FS
 int udp4_seq_show(struct seq_file *seq, void *v);

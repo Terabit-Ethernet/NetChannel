@@ -1708,7 +1708,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 	// cmsg_flags = tp->recvmsg_inq ? 1 : 0;
 	timeo = sock_rcvtimeo(sk, nonblock);
 
-	if (sk->sk_state != ND_ESTABLISH)
+	if (sk->sk_state == ND_LISTEN)
 		goto out;
 
 	/* init bvec page */	
@@ -1779,7 +1779,7 @@ int nd_recvmsg_new_2(struct sock *sk, struct msghdr *msg, size_t len, int nonblo
 				/* This occurs when user tries to read
 				 * from never connected socket.
 				 */
-				copied = -ENOTCONN;
+//				copied = -ENOTCONN;
 				break;
 			}
 
@@ -1952,6 +1952,7 @@ local_copy:
 		nd_release_pages(bv_arr, true, nr_segs);
 		kfree(bv_arr);
 	}
+
 	// nd_try_send_ack(sk, copied);
 	release_sock(sk);
 	return copied;
@@ -2447,6 +2448,9 @@ void nd_destroy_sock(struct sock *sk)
 int nd_setsockopt(struct sock *sk, int level, int optname,
 		   char __user *optval, unsigned int optlen)
 {
+	int val;
+	if (get_user(val, (int __user *)optval))
+		return -EFAULT;
 	printk(KERN_WARNING "unimplemented setsockopt invoked on ND socket:"
 			" level %d, optname %d, optlen %d\n",
 			level, optname, optlen);
@@ -2486,12 +2490,12 @@ int nd_getsockopt(struct sock *sk, int level, int optname,
 	return -EINVAL;
 }
 
-__poll_t nd_poll(struct file *file, struct socket *sock, poll_table *wait)
-{
-	printk(KERN_WARNING "unimplemented poll invoked on ND socket\n");
-	return -ENOSYS;
-}
-EXPORT_SYMBOL(nd_poll);
+// __poll_t nd_poll(struct file *file, struct socket *sock, poll_table *wait)
+// {
+// 	printk(KERN_WARNING "unimplemented poll invoked on ND socket\n");
+// 	return -ENOSYS;
+// }
+// EXPORT_SYMBOL(nd_poll);
 
 int nd_abort(struct sock *sk, int err)
 {
@@ -2529,6 +2533,120 @@ EXPORT_SYMBOL(nd_flow_hashrnd);
 // static struct pernet_operations __net_initdata nd_sysctl_ops = {
 // 	.init	= nd_sysctl_init,
 // };
+
+static inline bool nd_stream_is_readable(const struct nd_sock *nsk,
+					  int target, struct sock *sk)
+{
+	return  ((u32)atomic_read(&nsk->receiver.rcv_nxt) - (u32)atomic_read(&nsk->receiver.copied_seq))
+			 - (u32)atomic_read(&nsk->receiver.in_flight_copy_bytes);
+}
+
+__poll_t nd_poll(struct file *file, struct socket *sock,
+		struct poll_table_struct *wait) {
+		struct sock *sk = sock->sk;
+		struct nd_sock *nsk = nd_sk(sk);
+		__poll_t mask = 0;
+		int state = smp_load_acquire(&sk->sk_state);
+		// int target = sock_rcvlowat(sk, 0, INT_MAX);	
+		sock_poll_wait(file, sock, wait);
+		if(state == ND_LISTEN) {
+			if(!reqsk_queue_empty(&nsk->icsk_accept_queue)) 
+				return EPOLLIN | EPOLLRDNORM;
+			else 
+				return 0;
+		}
+		/* copy from datagram poll*/
+		if (sk->sk_shutdown & RCV_SHUTDOWN)
+			mask |= EPOLLRDHUP | EPOLLIN | EPOLLRDNORM;
+		if (sk->sk_shutdown == SHUTDOWN_MASK)
+			mask |= EPOLLHUP;
+
+		/* Socket is not locked. We are protected from async events
+		* by poll logic and correct handling of state changes
+		* made by other threads is impossible in any case.
+		*/
+		if(nd_stream_memory_free(sk, nsk->sender.pending_queue))
+			mask |= POLLOUT | POLLWRNORM | EPOLLWRBAND;
+		else
+			sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
+
+		if (nd_stream_is_readable(nsk, 0, sk))
+			mask |= EPOLLIN | EPOLLRDNORM;
+		return mask;
+}
+
+EXPORT_SYMBOL(nd_poll);
+
+
+static struct sk_buff *nd_recv_skb(struct sock *sk, u32 seq, u32 *off)
+{
+	struct sk_buff *skb;
+	u32 offset;
+
+	while ((skb = skb_peek(&sk->sk_receive_queue)) != NULL) {
+		offset = seq - ND_SKB_CB(skb)->seq;
+
+		if (offset < skb->len) {
+			*off = offset;
+			return skb;
+		}
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		kfree_skb(skb);
+	}
+	return NULL;
+}
+
+int nd_read_sock(struct sock *sk, read_descriptor_t *desc,
+		  sk_read_actor_t recv_actor)
+{
+	struct sk_buff *skb;
+	struct nd_sock *nsk = nd_sk(sk);
+	u32 seq = (u32)atomic_read(&nsk->receiver.copied_seq);
+	u32 offset;
+	int copied = 0;
+
+	if (sk->sk_state == ND_LISTEN)
+		return -ENOTCONN;
+	while ((skb = nd_recv_skb(sk, seq, &offset)) != NULL) {
+		if (offset < skb->len) {
+			int used;
+			size_t len;
+
+			len = skb->len - offset;
+			used = recv_actor(desc, skb, offset, len);
+			if (used <= 0) {
+				if (!copied)
+					copied = used;
+				break;
+			} else if (used <= len) {
+				seq += used;
+				copied += used;
+				offset += used;
+			}
+			/* this follows tcp_read_sock which assuming recv_actor will drop the lock; 
+			it is unclear whether we need it */
+			skb = nd_recv_skb(sk, seq - 1, &offset);
+			if (!skb)
+				break;
+			if (offset + 1 != skb->len)
+				continue;
+		}
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		kfree_skb(skb);
+		if (!desc->count)
+			break;
+		atomic_set(&nsk->receiver.copied_seq, seq);
+	}
+	atomic_set(&nsk->receiver.copied_seq, seq);
+
+	/* Clean up data we have read. */
+	if (copied > 0) {
+		nd_recv_skb(sk, seq, &offset);
+	}
+	return copied;
+}
 
 void __init nd_init(void)
 {
