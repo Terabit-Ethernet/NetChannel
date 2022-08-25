@@ -211,6 +211,18 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
 
 Type `sudo killall server` on the Server machine to stop the server application.
    
+## 4.Run your own applications with NetChannel without any changes of applications
+
+1. build socket redirect library,
+```
+cd custom_socket/
+sudo ./compile.sh
+```
+
+2. Run your applications
+```
+sudo LD_PRELOAD=~/NetChannel/custom_socket/nd_socket.so ./program
+```
  
 ## SIGCOMM 2022 Artifact Evaluation
 ### Hardware/Software Configuration
