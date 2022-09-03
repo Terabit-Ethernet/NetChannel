@@ -2577,6 +2577,77 @@ __poll_t nd_poll(struct file *file, struct socket *sock,
 
 EXPORT_SYMBOL(nd_poll);
 
+
+static struct sk_buff *nd_recv_skb(struct sock *sk, u32 seq, u32 *off)
+{
+	struct sk_buff *skb;
+	u32 offset;
+
+	while ((skb = skb_peek(&sk->sk_receive_queue)) != NULL) {
+		offset = seq - ND_SKB_CB(skb)->seq;
+
+		if (offset < skb->len) {
+			*off = offset;
+			return skb;
+		}
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		kfree_skb(skb);
+	}
+	return NULL;
+}
+
+int nd_read_sock(struct sock *sk, read_descriptor_t *desc,
+		  sk_read_actor_t recv_actor)
+{
+	struct sk_buff *skb;
+	struct nd_sock *nsk = nd_sk(sk);
+	u32 seq = (u32)atomic_read(&nsk->receiver.copied_seq);
+	u32 offset;
+	int copied = 0;
+
+	if (sk->sk_state == ND_LISTEN)
+		return -ENOTCONN;
+	while ((skb = nd_recv_skb(sk, seq, &offset)) != NULL) {
+		if (offset < skb->len) {
+			int used;
+			size_t len;
+
+			len = skb->len - offset;
+			used = recv_actor(desc, skb, offset, len);
+			if (used <= 0) {
+				if (!copied)
+					copied = used;
+				break;
+			} else if (used <= len) {
+				seq += used;
+				copied += used;
+				offset += used;
+			}
+			/* this follows tcp_read_sock which assuming recv_actor will drop the lock; 
+			it is unclear whether we need it */
+			skb = nd_recv_skb(sk, seq - 1, &offset);
+			if (!skb)
+				break;
+			if (offset + 1 != skb->len)
+				continue;
+		}
+		__skb_unlink(skb, &sk->sk_receive_queue);
+		// atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
+		kfree_skb(skb);
+		if (!desc->count)
+			break;
+		atomic_set(&nsk->receiver.copied_seq, seq);
+	}
+	atomic_set(&nsk->receiver.copied_seq, seq);
+
+	/* Clean up data we have read. */
+	if (copied > 0) {
+		nd_recv_skb(sk, seq, &offset);
+	}
+	return copied;
+}
+
 void __init nd_init(void)
 {
 	unsigned long limit;
