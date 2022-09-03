@@ -251,7 +251,7 @@ int nd_conn_sche_rr(struct nd_conn_queue* queues, int last_q, int cur_count, int
 
 /* round-robin; will not select the previous one except if there is only one channel. */
 int nd_conn_sche_low_lat(void) {
-	return  raw_smp_processor_id() / 4 + nd_params.lat_channel_idx;
+	return  raw_smp_processor_id() / nd_params.nr_nodes + nd_params.lat_channel_idx;
 }
 
 /* round-robin; will not select the previous one except if there is only one channel. */
@@ -929,8 +929,7 @@ int nd_conn_alloc_queue(struct nd_conn_ctrl *ctrl,
 	else
 		n = (qid - 1) % num_online_cpus();
 	// queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask, -1, false);
-	/* mod 28 is hard code for now. */
-	queue->io_cpu = (4 * qid) % 32;
+	queue->io_cpu = (nd_params.nr_nodes * qid) % nd_params.nr_cpus;
 	// queue->io_cpu = 0;
 	queue->qid = qid;
 	// printk("queue id:%d\n", queue->io_cpu);

@@ -268,6 +268,8 @@ void nd_params_init(struct nd_params* params) {
     params->nd_num_dc_thread = 1;
     params->nd_host_added = 0;
     params->nd_debug = 0;
+    params->nr_cpus = num_online_cpus();
+    params->nr_nodes = num_online_nodes();
     params->ldcopy_tx_inflight_thre = ND_MAX_SKB_LEN * 12;
     params->ldcopy_rx_inflight_thre = ND_MAX_SKB_LEN * 4;
     params->ldcopy_min_thre = ND_MAX_SKB_LEN;

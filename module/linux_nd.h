@@ -125,6 +125,8 @@ struct nd_params {
 	int rmem_default;
 	int wmem_default;
 
+        int nr_cpus;
+        int nr_nodes;
 	int data_budget;
 	int nd_num_queue;
 	int nd_num_dc_thread;
@@ -141,7 +143,6 @@ struct nd_params {
 	int thpt_channel_idx;
 	int num_thpt_channels;
 	int nd_default_sche_policy;
-
 };
 
 static inline struct ndhdr *nd_hdr(const struct sk_buff *skb)

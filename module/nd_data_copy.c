@@ -66,15 +66,15 @@ nd_dcopy_fetch_request(struct nd_dcopy_queue *queue)
 /* round-robin */
 int nd_dcopy_sche_rr(int last_qid) {
 	struct nd_dcopy_queue *queue;
-	int last_q =  (last_qid - nd_params.data_cpy_core) / 4;
+	int last_q =  (last_qid - nd_params.data_cpy_core) / nd_params.nr_nodes;
 	int i = 0, qid;
 	bool find = false;
 	
  	for (i = 1; i <= nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i + last_q) % (nd_params.nd_num_dc_thread);
-		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
-		if(qid * 4 + nd_params.data_cpy_core == raw_smp_processor_id())
+		queue =  &nd_dcopy_q[qid * nd_params.nr_nodes + nd_params.data_cpy_core];
+		if(qid * nd_params.nr_nodes + nd_params.data_cpy_core == raw_smp_processor_id())
 			continue;
 		if(atomic_read(&queue->queue_size) >= queue->queue_threshold)
 			continue;
@@ -88,7 +88,7 @@ int nd_dcopy_sche_rr(int last_qid) {
 		// qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
 		// last_q = qid;
 	}
-	return last_q * 4 + nd_params.data_cpy_core;
+	return last_q * nd_params.nr_nodes + nd_params.data_cpy_core;
 	// }
 	// return -1;
 }
@@ -102,7 +102,7 @@ int nd_dcopy_sche_compact(void) {
 	for (i = 0; i < nd_params.nd_num_dc_thread; i++) {
 
 		qid = (i) % (nd_params.nd_num_dc_thread);
-		queue =  &nd_dcopy_q[qid * 4 + nd_params.data_cpy_core];
+		queue =  &nd_dcopy_q[qid * nd_params.nr_nodes + nd_params.data_cpy_core];
 		// if(nd_params.nd_debug)
 		// 	pr_info("qid:%d queue size:%d \n",qid, atomic_read(&queue->queue_size));
 		if(atomic_read(&queue->queue_size) >= queue->queue_threshold) {
@@ -120,7 +120,7 @@ int nd_dcopy_sche_compact(void) {
 		// qid = (1 + last_q) % (nd_params.nd_num_dc_thread);
 		// last_q = qid;
 	}
-	return last_q * 4 + nd_params.data_cpy_core;
+	return last_q * nd_params.nr_nodes + nd_params.data_cpy_core;
 	// }
 	// return -1;
 }

@@ -789,7 +789,7 @@ int ndt_conn_alloc_queue(struct ndt_conn_port *port,
 		goto out_destroy_sq;
 	
 	// hard code for now
-	queue->io_cpu = (cur_io_cpu * 4) % 32;
+	queue->io_cpu = (cur_io_cpu * nd_params.nr_nodes) % nd_params.nr_cpus;
 	cur_io_cpu += 1;
 	if(ndt_conn_is_latency(queue)) {
 		queue_work_on(queue_cpu(queue), ndt_conn_wq_lat, &queue->io_work);
