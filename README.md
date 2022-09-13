@@ -83,6 +83,7 @@ We need to install prerequisites to compile the kernel. On Ubuntu 20.04, this ca
    CPU(s):                32
    On-line CPU(s) list:   0-31
    ```
+   In case, the image is too large, instead of using `make modules_install`, you can use `make INSTALL_MOD_STRIP=1 modules_install`. More details can be found here: https://01.org/linuxgraphics/gfx-docs/drm/kbuild/kbuild.html#install-mod-strip. 
 
 5. Edit `/etc/default/grub` to boot with your new kernel by default. For example:  
 
